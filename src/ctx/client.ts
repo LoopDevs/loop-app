@@ -41,7 +41,7 @@ export type Merchant = {
   id: string;
   name: string;
   currency: string;
-  denominationType: 'min-max' | 'fixed';
+  denominationType: 'min-max' | 'min-max-major' | 'fixed';
   denominations: string[];
   logoUrl?: string;
   userDiscount: number;
@@ -82,6 +82,18 @@ export class CtxError extends Error {
     readonly body: string,
   ) {
     super(`CTX ${status}: ${body}`);
+  }
+
+  errorName(): string | undefined {
+    try {
+      const parsed: unknown = JSON.parse(this.body);
+      if (parsed && typeof parsed === 'object' && 'error' in parsed && typeof parsed.error === 'string') {
+        return parsed.error;
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
   }
 }
 
