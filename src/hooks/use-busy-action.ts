@@ -7,11 +7,11 @@ export function errorMessage(error: unknown): string {
 }
 
 export function useBusyAction() {
-  const [busy, setBusy] = useState(false);
+  const [inFlight, setInFlight] = useState(0);
   const [message, setMessage] = useState('');
 
   const run = useCallback(async (action: () => Promise<void>) => {
-    setBusy(true);
+    setInFlight((count) => count + 1);
     setMessage('');
     try {
       await action();
@@ -19,9 +19,9 @@ export function useBusyAction() {
       haptics.error();
       setMessage(errorMessage(error));
     } finally {
-      setBusy(false);
+      setInFlight((count) => count - 1);
     }
   }, []);
 
-  return { busy, message, setMessage, run };
+  return { busy: inFlight > 0, message, setMessage, run };
 }

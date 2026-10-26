@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,6 +14,7 @@ import {
   type BlockingServiceState,
   type RecoveryChecks,
 } from '@/ctx/service-state';
+import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
 
 const stillUnavailableMessage = 'Still unavailable. Try again later.';
@@ -25,14 +27,18 @@ type Props = {
 export function ServiceUnavailable({ state, onRecovered }: Props) {
   const { busy, message, setMessage, run } = useBusyAction();
 
-  const tryAgain = () =>
-    run(async () => {
-      if (await hasRecovered(state, recoveryChecks)) {
-        onRecovered();
-        return;
-      }
-      setMessage(stillUnavailableMessage);
-    });
+  const tryAgain = useCallback(
+    () =>
+      run(async () => {
+        if (await hasRecovered(state, recoveryChecks)) {
+          onRecovered();
+          return;
+        }
+        setMessage(stillUnavailableMessage);
+      }),
+    [run, setMessage, state, onRecovered],
+  );
+  useAppRefresh(tryAgain);
 
   return (
     <ThemedView style={styles.container}>

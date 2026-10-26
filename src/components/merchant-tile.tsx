@@ -15,7 +15,11 @@ type TileProps = {
 
 export function MerchantTile({ merchant, onPress }: TileProps) {
   return (
-    <Pressable style={({ pressed }) => [styles.tile, pressed && styles.pressed]} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}>
       <ThemedView type="backgroundElement" style={styles.card}>
         <MerchantLogo merchant={merchant} />
         <ThemedText type="smallBold" numberOfLines={1}>

@@ -25,9 +25,10 @@ type ButtonProps = {
   onPress: () => void;
   disabled?: boolean;
   selected?: boolean;
+  accessibilityLabel?: string;
 };
 
-export function Button({ label, onPress, disabled = false, selected = false }: ButtonProps) {
+export function Button({ label, onPress, disabled = false, selected = false, accessibilityLabel }: ButtonProps) {
   const theme = useTheme();
   const press = () => {
     haptics.tap();
@@ -38,7 +39,7 @@ export function Button({ label, onPress, disabled = false, selected = false }: B
       onPress={press}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled, selected }}
       style={{ opacity: disabled ? 0.4 : 1 }}>
       <ThemedView

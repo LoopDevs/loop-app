@@ -27,7 +27,7 @@ export function HoldingsSummary({ view }: { view: HoldingsView }) {
           </ThemedText>
         ))}
         <ThemedText type="small">
-          Savings: {money.token(holdings.savings(), Savings.currency)}
+          Savings (at least, after a 1% withdrawal margin): {money.token(holdings.savings(), Savings.currency)}
         </ThemedText>
       </Figure>
       {holdings.onTheWay ? (
