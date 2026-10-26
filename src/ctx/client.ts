@@ -1,6 +1,12 @@
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
 import { Profile } from '@/ctx/profile';
+import {
+  blockingServiceState,
+  serviceState,
+  serviceStateMessages,
+  type BlockingServiceState,
+} from '@/ctx/service-state';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -155,7 +161,13 @@ export type MeJson = {
   };
 };
 
-export type UserUpdate = { country: string } | { stableCurrency: string };
+export type ServiceStatus = {
+  maintenance: boolean;
+};
+
+type ServiceStateListener = (state: BlockingServiceState) => void;
+
+export type UserUpdate ={ country: string } | { stableCurrency: string };
 
 export type SponsoredResult = {
   hash: string;
@@ -168,7 +180,7 @@ export class CtxError extends Error {
     readonly status: number,
     readonly body: string,
   ) {
-    super(status === 429 ? rateLimitedMessage : `CTX ${status}: ${body}`);
+    super(CtxError.displayMessage(status, body));
   }
 
   errorName(): string | undefined {
@@ -176,8 +188,20 @@ export class CtxError extends Error {
   }
 
   bodyField(name: string): string | undefined {
+    return CtxError.field(this.body, name);
+  }
+
+  private static displayMessage(status: number, body: string): string {
+    if (status === 429) {
+      return rateLimitedMessage;
+    }
+    const state = serviceState(CtxError.field(body, 'error'));
+    return state ? serviceStateMessages[state] : `CTX ${status}: ${body}`;
+  }
+
+  private static field(body: string, name: string): string | undefined {
     try {
-      const parsed: unknown = JSON.parse(this.body);
+      const parsed: unknown = JSON.parse(body);
       if (parsed && typeof parsed === 'object') {
         const value = (parsed as Record<string, unknown>)[name];
         return typeof value === 'string' ? value : undefined;
@@ -192,11 +216,30 @@ export class CtxError extends Error {
 class CtxClient {
   private accessToken: string | null = null;
   private refreshInFlight: Promise<string | null> | null = null;
+  private serviceStateListener: ServiceStateListener | null = null;
 
   constructor(
     private readonly baseUrl: string,
     private readonly clientId: string,
   ) {}
+
+  onServiceState(listener: ServiceStateListener): () => void {
+    this.serviceStateListener = listener;
+    return () => {
+      if (this.serviceStateListener === listener) {
+        this.serviceStateListener = null;
+      }
+    };
+  }
+
+  async status(): Promise<ServiceStatus> {
+    const { maintenance } = await this.send<{ maintenance?: boolean }>('GET', '/status');
+    return { maintenance: maintenance === true };
+  }
+
+  async hasSession(): Promise<boolean> {
+    return this.accessToken !== null || (await tokenStore.readRefreshToken()) !== null;
+  }
 
   async requestCode(email: string): Promise<void> {
     await this.send('POST', '/login', { email });
@@ -415,7 +458,12 @@ class CtxClient {
     });
     const text = await response.text();
     if (!response.ok) {
-      throw new CtxError(response.status, text);
+      const error = new CtxError(response.status, text);
+      const blocking = blockingServiceState(error.errorName());
+      if (blocking) {
+        this.serviceStateListener?.(blocking);
+      }
+      throw error;
     }
     return (text ? JSON.parse(text) : {}) as T;
   }
