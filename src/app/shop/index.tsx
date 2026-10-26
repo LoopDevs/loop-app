@@ -9,7 +9,7 @@ import { CountryMenu } from '@/components/country-menu';
 import { CountryPicker } from '@/components/country-picker';
 import { Button, Field, Notice } from '@/components/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
-import { MerchantStrip, MerchantTile } from '@/components/merchant-tile';
+import { CategoryTiles, MerchantCard, MerchantCardStrip } from '@/components/merchant-card';
 import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/press-scale';
 import { useOnSignIn } from '@/components/sign-in';
@@ -25,16 +25,7 @@ import {
 } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import {
-  BottomTabInset,
-  Brand,
-  FontFamily,
-  Layout,
-  MaxContentWidth,
-  Motion,
-  Radius,
-  Spacing,
-} from '@/constants/theme';
+import { BottomTabInset, Brand, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
 import type { CountryChoice } from '@/ctx/profile';
@@ -97,7 +88,11 @@ export default function ShopScreen() {
   const [pages, setPages] = useState(0);
   const [recentlyBought, setRecentlyBought] = useState<Merchant[]>([]);
   const [favouriteMerchants, setFavouriteMerchants] = useState<Merchant[]>([]);
-  const { favourites } = useFavourites();
+  const { favourites, toggle: toggleFavourite } = useFavourites();
+  const [pickedCategory, setPickedCategory] = useState<{ country?: string; category: string | null }>({
+    category: null,
+  });
+  const cardColumns = columns > 4 ? 4 : columns > 2 ? columns - 1 : columns;
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
   const listedCountry = useRef<string | undefined>(undefined);
@@ -143,6 +138,8 @@ export default function ShopScreen() {
   const country = profile && !profile.needsSetup() ? profile.country : undefined;
   const catalog = useCatalog(country);
   const topCashback = catalog?.top.slice(0, stripSize) ?? [];
+  const category = pickedCategory.country === country ? pickedCategory.category : null;
+  const setCategory = (picked: string | null) => setPickedCategory({ country, category: picked });
 
   const loadMerchants = useCallback(
     (next: number) =>
@@ -156,7 +153,13 @@ export default function ShopScreen() {
         }
         const request = ++latestRequest.current;
         retryPage.current = next;
-        const merchantQuery = { country, name: query, page: next, perPage: merchantsPerPage };
+        const merchantQuery = {
+          country,
+          name: query,
+          category: query === '' ? (category ?? undefined) : undefined,
+          page: next,
+          perPage: merchantsPerPage,
+        };
         const cached = next === 1 ? cachedMerchantPage(merchantQuery) : null;
         if (cached) {
           setMerchants(cached.result);
@@ -173,7 +176,7 @@ export default function ShopScreen() {
         setPage(next);
         setPages(pagination.pages);
       }),
-    [runListing, country, query],
+    [runListing, country, query, category],
   );
 
   useEffect(() => {
@@ -215,6 +218,10 @@ export default function ShopScreen() {
   }, [country, favourites]);
 
   const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
+  const favouriteOf = (merchant: Merchant) => ({
+    saved: favourites.has(merchant.id),
+    onToggle: () => toggleFavourite(merchant.id),
+  });
   const knownFavourites =
     favouriteMerchants.length > 0 || !country ? favouriteMerchants : cachedByIds(country, favourites.ids);
   const shownFavourites = Merchant.inOrder(knownFavourites, favourites.ids);
@@ -241,11 +248,7 @@ export default function ShopScreen() {
   }
 
   if (!profile) {
-    return (
-      <SimplePage title="Shop">
-        {account.message === '' ? <MerchantGridSkeleton /> : accountError}
-      </SimplePage>
-    );
+    return <SimplePage title="Shop">{account.message === '' ? <MerchantGridSkeleton /> : accountError}</SimplePage>;
   }
 
   if (profile.needsSetup() || changingCountry) {
@@ -263,6 +266,7 @@ export default function ShopScreen() {
   }
 
   const searching = query !== '';
+  const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
 
   return (
     <ThemedView style={styles.container}>
@@ -271,12 +275,12 @@ export default function ShopScreen() {
       <Animated.FlatList
         ref={scrollRef}
         data={merchants}
-        key={columns}
+        key={cardColumns}
         keyExtractor={(merchant) => merchant.id}
-        numColumns={columns}
+        numColumns={cardColumns}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        columnWrapperStyle={[styles.columns, wide && { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter }]}
+        columnWrapperStyle={[styles.columns, pageWidth]}
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -289,11 +293,7 @@ export default function ShopScreen() {
               width={wide ? 'page' : 'content'}
               accessory={
                 profile.country ? (
-                  <CountryButton
-                    country={profile.country}
-                    disabled={busy}
-                    onPress={() => setChangingCountry(true)}
-                  />
+                  <CountryButton country={profile.country} disabled={busy} onPress={() => setChangingCountry(true)} />
                 ) : null
               }>
               <Field
@@ -305,7 +305,7 @@ export default function ShopScreen() {
                 clearButtonMode="while-editing"
               />
             </PageHeader>
-            <View style={[styles.body, styles.header]}>
+            <View style={[styles.body, styles.header, pageWidth]}>
               {activeOrder && (
                 <ActiveOrderCard
                   merchantName={activeOrder.merchantName}
@@ -314,20 +314,38 @@ export default function ShopScreen() {
               )}
               {accountError}
               {!searching && (
+                <CategoryTiles categories={catalog?.categories ?? []} selected={category} onSelect={setCategory} />
+              )}
+              {!searching && category === null && (
                 <>
-                  <MerchantStrip title="Favourites" merchants={shownFavourites} onOpen={openMerchant} />
-                  <MerchantStrip title="Bought recently" merchants={recentlyBought} onOpen={openMerchant} />
-                  <MerchantStrip title="Top cashback" merchants={topCashback} onOpen={openMerchant} />
+                  <MerchantCardStrip
+                    title="Top cashback"
+                    merchants={topCashback}
+                    onOpen={openMerchant}
+                    favouriteOf={favouriteOf}
+                  />
+                  <MerchantCardStrip
+                    title="Favourites"
+                    merchants={shownFavourites}
+                    onOpen={openMerchant}
+                    favouriteOf={favouriteOf}
+                  />
+                  <MerchantCardStrip
+                    title="Bought recently"
+                    merchants={recentlyBought}
+                    onOpen={openMerchant}
+                    favouriteOf={favouriteOf}
+                  />
                 </>
               )}
               <ThemedText type="heading" accessibilityRole="header">
-                {searching ? `Results for “${query}”` : 'All gift cards'}
+                {searching ? `Results for “${query}”` : category ? Merchant.categoryLabel(category) : 'All gift cards'}
               </ThemedText>
             </View>
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.body}>
+          <View style={[styles.body, pageWidth]}>
             {busy ? (
               <MerchantGridSkeleton />
             ) : listing.message === '' ? (
@@ -336,7 +354,7 @@ export default function ShopScreen() {
           </View>
         }
         ListFooterComponent={
-          <View style={[styles.body, styles.footer]}>
+          <View style={[styles.body, styles.footer, pageWidth]}>
             {listing.message !== '' && (
               <Notice
                 message={listing.message}
@@ -361,8 +379,8 @@ export default function ShopScreen() {
                     .delay((index % merchantsPerPage < staggeredTiles ? index % merchantsPerPage : 0) * Motion.stagger)
                     .easing(Motion.easeOut)
             }
-            style={[styles.cell, { maxWidth: `${100 / columns}%` }]}>
-            <MerchantTile merchant={item} onPress={() => openMerchant(item)} />
+            style={[styles.cell, { maxWidth: `${100 / cardColumns}%` }]}>
+            <MerchantCard merchant={item} onPress={() => openMerchant(item)} favourite={favouriteOf(item)} />
           </Animated.View>
         )}
       />
@@ -425,15 +443,7 @@ function SimplePage({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-function CountryButton({
-  country,
-  disabled,
-  onPress,
-}: {
-  country: string;
-  disabled: boolean;
-  onPress: () => void;
-}) {
+function CountryButton({ country, disabled, onPress }: { country: string; disabled: boolean; onPress: () => void }) {
   return (
     <PressScale
       onPress={onPress}
@@ -509,7 +519,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: Spacing.four,
-    gap: Spacing.four,
+    gap: Spacing.five,
   },
   footer: {
     gap: Spacing.three,
@@ -520,6 +530,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
     gap: Spacing.three,
+    paddingBottom: Spacing.two,
   },
   cell: {
     flex: 1,

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
@@ -7,7 +7,6 @@ import { Brand, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import type { Merchant } from '@/ctx/merchant';
 import { useTheme } from '@/hooks/use-theme';
 
-const stripTileWidth = 148;
 const coverAspect = 1.586;
 
 type TileProps = {
@@ -42,36 +41,6 @@ export function CashbackPill({ merchant }: { merchant: Merchant }) {
       <Text maxFontSizeMultiplier={1.3} style={styles.pillText}>
         {merchant.rateFigure()}
       </Text>
-    </View>
-  );
-}
-
-type StripProps = {
-  title: string;
-  merchants: Merchant[];
-  onOpen: (merchant: Merchant) => void;
-};
-
-export function MerchantStrip({ title, merchants, onOpen }: StripProps) {
-  if (merchants.length === 0) {
-    return null;
-  }
-  return (
-    <View style={styles.strip}>
-      <ThemedText type="heading" accessibilityRole="header">
-        {title}
-      </ThemedText>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.stripRow}
-        style={styles.stripScroll}>
-        {merchants.map((merchant) => (
-          <View key={merchant.id} style={styles.stripTile}>
-            <MerchantTile merchant={merchant} onPress={() => onOpen(merchant)} />
-          </View>
-        ))}
-      </ScrollView>
     </View>
   );
 }
@@ -126,19 +95,6 @@ const styles = StyleSheet.create({
   name: {
     paddingRight: Spacing.one,
   },
-  stripTile: {
-    width: stripTileWidth,
-  },
-  strip: {
-    gap: Spacing.three,
-  },
-  stripScroll: {
-    marginHorizontal: -Spacing.three,
-  },
-  stripRow: {
-    gap: Spacing.three,
-    paddingHorizontal: Spacing.three,
-  },
   cover: {
     aspectRatio: coverAspect,
     borderRadius: Radius.tile,
@@ -182,8 +138,9 @@ const styles = StyleSheet.create({
   },
   pillText: {
     color: Brand.pillText,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 16,
+    fontVariant: ['tabular-nums'],
     fontFamily: FontFamily.bold,
   },
 });
