@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { AppLockProvider } from '@/components/app-lock';
 import AppTabs from '@/components/app-tabs';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceUnavailable } from '@/components/service-unavailable';
@@ -21,10 +22,12 @@ export default function TabLayout() {
   useEffect(() => ctx.onServiceState(setBlocked), []);
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <ToastProvider>
-        {blocked ? <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} /> : <AppTabs />}
-        <OfflineBanner />
-      </ToastProvider>
+      <AppLockProvider>
+        <ToastProvider>
+          {blocked ? <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} /> : <AppTabs />}
+          <OfflineBanner />
+        </ToastProvider>
+      </AppLockProvider>
     </ThemeProvider>
   );
 }

@@ -94,9 +94,10 @@
       [
         "expo-secure-store",
         {
-          "faceIDPermission": "Loop uses Face ID to approve payments from your wallet on this device."
+          "faceIDPermission": "Loop uses Face ID to unlock the app and to approve payments from your wallet on this device."
         }
-      ]
+      ],
+      "expo-local-authentication"
     ],
     "experiments": {
       "typedRoutes": true,
