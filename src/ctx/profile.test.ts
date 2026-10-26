@@ -97,6 +97,12 @@ test('an unknown provider is not shown', () => {
   assert.equal(profile.signInProviderLabel(), null);
 });
 
+test('the passkey is labelled with the account email', () => {
+  const relay = { id: 'u1', email: 'abc123@privaterelay.appleid.com' };
+  assert.equal(Profile.fromMe({ user: relay, company }).passkeyLabel(), 'abc123@privaterelay.appleid.com');
+  assert.equal(Profile.fromMe(newUser).passkeyLabel(), 'Loop wallet');
+});
+
 test('a stable currency is labelled by its asset code', () => {
   assert.equal(Profile.currencyLabel('XLM.GBPLOOP'), 'GBPLOOP');
   assert.equal(Profile.currencyLabel('XLM'), 'XLM');
