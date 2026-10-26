@@ -31,7 +31,7 @@ const SAFE_BREADCRUMB_KEYS = new Set(['method', 'status_code', 'url', 'from', 't
 const SENSITIVE_FIELDS =
   'access_?token|refresh_?token|id_?token|identity_?token|token|authorization|password|secret|seed|mnemonic|private_?key|pin|number|redeem_?url|barcode_?url|code|otp|email|signature|xdr|transaction';
 
-const FIELD_PAIR = new RegExp(`(["']?\\b(?:${SENSITIVE_FIELDS})["']?\\s*[:=]\\s*)("[^"]*"|'[^']*'|[^\\s,;&}]+)`, 'gi');
+const FIELD_PAIR = new RegExp(`(["']?(?:\\b|(?<=[a-z]))(?:${SENSITIVE_FIELDS})["']?\\s*[:=]\\s*)("[^"]*"|'[^']*'|[^\\s,;&}]+)`, 'gi');
 
 const PATTERNS: RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi,
@@ -43,15 +43,11 @@ const PATTERNS: RegExp[] = [
   /[A-Za-z0-9+/_-]{40,}={0,2}/g,
 ];
 
-const CTX_ERROR_MESSAGE = /^CTX (\d{3}):/;
+const CTX_ERROR_MESSAGE = /CTX (\d{3}):[\s\S]*$/;
 
 export class SentryScrubber {
   static scrubString(value: string): string {
-    const ctxError = CTX_ERROR_MESSAGE.exec(value);
-    if (ctxError) {
-      return `CTX ${ctxError[1]}`;
-    }
-    let scrubbed = value;
+    let scrubbed = value.replace(CTX_ERROR_MESSAGE, 'CTX $1');
     for (const pattern of PATTERNS) {
       scrubbed = scrubbed.replace(pattern, FILTERED);
     }

@@ -29,6 +29,17 @@ test('a CTX error body is cut down to its status', () => {
   assert.equal(scrubbed.exception?.values?.[0]?.value, 'CTX 500');
 });
 
+test('a CTX error body inside a wrapped message is cut down to its status', () => {
+  const scrubbed = SentryScrubber.scrubString('Failed to pay: CTX 400: {"cardNumber":"4111111111111111"}');
+  assert.equal(scrubbed, 'Failed to pay: CTX 400');
+});
+
+test('camelCase sensitive keys are redacted', () => {
+  const scrubbed = SentryScrubber.scrubString('{"cardNumber":"4111111111111111","apiToken":"abc123"}');
+  assert.ok(!scrubbed.includes('4111'));
+  assert.ok(!scrubbed.includes('abc123'));
+});
+
 test('free text loses every sensitive class', () => {
   const text = [
     `jwt ${jwt}`,

@@ -7,7 +7,7 @@ export function currencyRefusalMessage(errorName: string | undefined, symbol: st
     case 'ErrCashbackNotStable':
       return `Can't earn cashback paying in ${symbol}. Pick another currency.`;
     case 'ErrRateUnavailable':
-      return `Can't price this card in ${symbol}`;
+      return `Pricing in ${symbol} is unavailable right now. Try again shortly.`;
     default:
       return null;
   }

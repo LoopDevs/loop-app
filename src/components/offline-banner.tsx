@@ -1,20 +1,29 @@
 import { useNetInfo } from '@react-native-community/netinfo';
-import { StyleSheet } from 'react-native';
+import { useEffect } from 'react';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 
+const offlineMessage = "You're offline. Loop will refresh when you're back online.";
+
 export function OfflineBanner() {
   const { isConnected } = useNetInfo();
-  if (isConnected !== false) {
+  const offline = isConnected === false;
+  useEffect(() => {
+    if (offline) {
+      AccessibilityInfo.announceForAccessibility(offlineMessage);
+    }
+  }, [offline]);
+  if (!offline) {
     return null;
   }
   return (
     <SafeAreaView edges={['top']} pointerEvents="none" style={styles.host}>
       <ThemedView type="backgroundElement" style={styles.banner} accessibilityLiveRegion="polite">
-        <ThemedText type="small">You&apos;re offline. Loop will refresh when you&apos;re back online.</ThemedText>
+        <ThemedText type="small">{offlineMessage}</ThemedText>
       </ThemedView>
     </SafeAreaView>
   );

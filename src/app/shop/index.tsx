@@ -47,7 +47,11 @@ async function loadByIds(country: string, ids: readonly string[]): Promise<Merch
 
 export default function ShopScreen() {
   const router = useRouter();
-  const { busy, message, run } = useBusyAction();
+  const account = useBusyAction();
+  const listing = useBusyAction();
+  const busy = account.busy || listing.busy;
+  const runAccount = account.run;
+  const runListing = listing.run;
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
@@ -63,10 +67,11 @@ export default function ShopScreen() {
   const { favourites } = useFavourites();
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
+  const listedCountry = useRef<string | undefined>(undefined);
 
   const loadAccount = useCallback(
     () =>
-      run(async () => {
+      runAccount(async () => {
         const isSignedIn = await ctx.isSignedIn();
         setSignedIn(isSignedIn);
         if (!isSignedIn) {
@@ -76,7 +81,7 @@ export default function ShopScreen() {
         setProfile(loadedProfile);
         setActiveOrder(loadedOrder);
       }),
-    [run, setProfile],
+    [runAccount, setProfile],
   );
 
   useFocusEffect(
@@ -95,9 +100,13 @@ export default function ShopScreen() {
 
   const loadMerchants = useCallback(
     (next: number) =>
-      run(async () => {
+      runListing(async () => {
         if (!country) {
           return;
+        }
+        if (listedCountry.current !== country) {
+          listedCountry.current = country;
+          setMerchants([]);
         }
         const request = ++latestRequest.current;
         retryPage.current = next;
@@ -117,7 +126,7 @@ export default function ShopScreen() {
         setPage(next);
         setPages(pagination.pages);
       }),
-    [run, country, query],
+    [runListing, country, query],
   );
 
   useEffect(() => {
@@ -164,7 +173,7 @@ export default function ShopScreen() {
   const shownFavourites = Merchant.inOrder(favouriteMerchants, favourites.ids);
 
   const chooseCountry = (choice: CountryChoice) =>
-    run(async () => {
+    runAccount(async () => {
       await applyCountryChoice(choice);
       setChangingCountry(false);
       setSearch('');
@@ -176,9 +185,9 @@ export default function ShopScreen() {
     }
   };
 
-  const errorText = message !== '' && (
+  const errorText = account.message !== '' && (
     <ThemedText type="small" selectable>
-      {message}
+      {account.message}
     </ThemedText>
   );
 
@@ -269,15 +278,21 @@ export default function ShopScreen() {
         ListEmptyComponent={
           busy ? (
             <OrderRowsSkeleton />
-          ) : message === '' ? (
+          ) : listing.message === '' ? (
             <ThemedText type="small">No gift cards found.</ThemedText>
           ) : undefined
         }
         ListFooterComponent={
           <>
             {errorText}
-            {message !== '' && (
-              <Button label="Retry" onPress={() => loadMerchants(retryPage.current)} disabled={busy} />
+            {account.message !== '' && <Button label="Retry" onPress={loadAccount} disabled={busy} />}
+            {listing.message !== '' && (
+              <>
+                <ThemedText type="small" selectable>
+                  {listing.message}
+                </ThemedText>
+                <Button label="Retry" onPress={() => loadMerchants(retryPage.current)} disabled={busy} />
+              </>
             )}
           </>
         }
