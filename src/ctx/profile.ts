@@ -1,4 +1,5 @@
-import type { MeJson, UserJson, UserUpdate } from './client.ts';
+import { Savings } from '../wallet/savings.ts';
+import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client.ts';
 
 const regionalIndicatorOffset = 0x1f1e6 - 'A'.charCodeAt(0);
 
@@ -16,6 +17,7 @@ export class Profile {
   readonly email?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
+  readonly cashbackDestination: CashbackDestination;
   readonly signInProviders: string[];
   readonly countries: string[];
   readonly stableCurrencies: string[];
@@ -24,6 +26,7 @@ export class Profile {
     this.email = user.email;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
+    this.cashbackDestination = user.cashbackDestination ?? 'account';
     this.signInProviders = (user.oauthIdentities ?? []).map((identity) => identity.provider);
     this.countries = company?.countries ?? [];
     this.stableCurrencies = company?.stableCurrencies ?? [];
@@ -61,6 +64,21 @@ export class Profile {
 
   passkeyLabel(): string {
     return this.email?.trim() || 'Loop wallet';
+  }
+
+  savesCashback(): boolean {
+    return this.cashbackDestination === 'savings';
+  }
+
+  cashbackDestinations(): CashbackDestination[] {
+    return Savings.takes(this.stableCurrency) || this.savesCashback() ? ['account', 'savings'] : ['account'];
+  }
+
+  destinationUpdate(destination: CashbackDestination): UserUpdate | null {
+    if (destination === this.cashbackDestination || !this.cashbackDestinations().includes(destination)) {
+      return null;
+    }
+    return { cashbackDestination: destination };
   }
 
   signInProviderLabel(): string | null {

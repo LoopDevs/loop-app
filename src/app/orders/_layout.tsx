@@ -9,6 +9,7 @@ export default function OrdersLayout() {
     <Stack>
       <Stack.Screen name="index" options={{ title: 'Orders' }} />
       <Stack.Screen name="[id]" options={{ title: 'Gift card' }} />
+      <Stack.Screen name="cashback" options={{ title: 'Cashback' }} />
     </Stack>
   );
 }

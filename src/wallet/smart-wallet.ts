@@ -9,6 +9,7 @@ import { base64 } from '@/wallet/base64';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
+import { Savings } from '@/wallet/savings';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 
 export type TokenBalance = {
@@ -31,7 +32,6 @@ type ContextRule = {
 export class SmartWallet {
   static readonly passkeyRuleId = 0;
   static readonly deviceRuleId = 1;
-  static readonly vaultCurrency = Holdings.savingsCurrency;
 
   private constructor(
     readonly id: string,
@@ -126,7 +126,7 @@ export class SmartWallet {
   async withdraw(shares: bigint): Promise<SponsoredResult> {
     const intent: SmartWalletIntent = {
       intent: 'vault_withdraw',
-      currency: SmartWallet.vaultCurrency,
+      currency: Savings.currency,
       shares: shares.toString(),
     };
     const built = await ctx.buildTransaction(this.id, intent);
