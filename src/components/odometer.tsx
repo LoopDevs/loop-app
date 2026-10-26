@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, type TextStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -21,29 +21,72 @@ type OdometerProps = {
 };
 
 export function Odometer({ value, style, accessibilityLabel }: OdometerProps) {
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const [naturalWidth, setNaturalWidth] = useState(0);
+  const scale = fitScale(availableWidth, naturalWidth);
+  const fitted = {
+    ...style,
+    fontSize: style.fontSize * scale,
+    lineHeight: style.lineHeight * scale,
+    letterSpacing: style.letterSpacing === undefined ? undefined : style.letterSpacing * scale,
+  };
+  const keys = columnKeys(value);
   const decimalIndex = value.search(/[.,]\d{1,2}\D*$/);
   let digitOrder = 0;
   return (
     <View
-      style={styles.row}
+      style={styles.frame}
+      onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)}
       accessible
       accessibilityRole="text"
       accessibilityLabel={accessibilityLabel ?? value}>
-      {[...value].map((character, index) => {
-        if (!/\d/.test(character)) {
-          return (
-            <Text key={`${index}-${character}`} style={style} allowFontScaling={false}>
-              {character}
-            </Text>
-          );
-        }
-        const isPence = decimalIndex >= 0 && index > decimalIndex;
-        const delay = digitOrder * Motion.stagger + (isPence ? penceDelay : 0);
-        digitOrder += 1;
-        return <DigitColumn key={index} digit={Number(character)} delay={delay} style={style} />;
-      })}
+      <View
+        style={styles.row}
+        onLayout={(event) => setNaturalWidth(event.nativeEvent.layout.width / scale)}>
+        {[...value].map((character, index) => {
+          if (!/\d/.test(character)) {
+            return (
+              <Text key={keys[index]} style={fitted} allowFontScaling={false}>
+                {character}
+              </Text>
+            );
+          }
+          const isPence = decimalIndex >= 0 && index > decimalIndex;
+          const delay = digitOrder * Motion.stagger + (isPence ? penceDelay : 0);
+          digitOrder += 1;
+          return <DigitColumn key={keys[index]} digit={Number(character)} delay={delay} style={fitted} />;
+        })}
+      </View>
     </View>
   );
+}
+
+function fitScale(availableWidth: number, naturalWidth: number): number {
+  if (availableWidth <= 0 || naturalWidth <= availableWidth) {
+    return 1;
+  }
+  return Math.floor((availableWidth / naturalWidth) * 100) / 100;
+}
+
+function columnKeys(value: string): string[] {
+  const characters = [...value];
+  const decimalIndex = value.search(/[.,]\d{1,2}\D*$/);
+  const integerEnd = decimalIndex >= 0 ? decimalIndex : characters.length;
+  return characters.map((character, index) => {
+    if (index === decimalIndex) {
+      return 'point';
+    }
+    if (index > integerEnd) {
+      const fromPoint = characters.slice(integerEnd + 1, index).filter(isDigit).length;
+      return isDigit(character) ? `frac-${fromPoint}` : `frac-${index - integerEnd}-${character}`;
+    }
+    const toPoint = characters.slice(index + 1, integerEnd).filter(isDigit).length;
+    return isDigit(character) ? `int-${toPoint}` : `int-${toPoint}-${index}-${character}`;
+  });
+}
+
+function isDigit(character: string): boolean {
+  return /\d/.test(character);
 }
 
 type DigitColumnProps = {
@@ -85,6 +128,10 @@ function DigitColumn({ digit, delay, style }: DigitColumnProps) {
 }
 
 const styles = StyleSheet.create({
+  frame: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
