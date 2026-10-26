@@ -10,6 +10,12 @@ import {
   type BlockingServiceState,
 } from '@/ctx/service-state';
 import { errorReporting } from '@/ops/error-reporting';
+import {
+  oauthLoginBody,
+  signInRefusalMessage,
+  type SignInMethod,
+  type SocialProvider,
+} from '@/session/social-sign-in';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -270,13 +276,17 @@ class CtxClient {
   }
 
   async requestCode(email: string): Promise<void> {
-    await this.send('POST', '/login', { email });
+    await this.signInRequest('email', '/login', { email });
   }
 
   async verifyCode(email: string, code: string): Promise<void> {
-    const tokens = await this.send<TokenPair>('POST', '/verify-email', { email, code });
-    this.sessionGeneration += 1;
-    await this.storeTokens(tokens);
+    await this.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+  }
+
+  async signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
+    await this.startSession(
+      await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
+    );
   }
 
   async isSignedIn(): Promise<boolean> {
@@ -494,6 +504,20 @@ class CtxClient {
     this.sessionGeneration += 1;
     this.accessToken = null;
     await tokenStore.clear();
+  }
+
+  private async startSession(tokens: TokenPair): Promise<void> {
+    this.sessionGeneration += 1;
+    await this.storeTokens(tokens);
+  }
+
+  private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {
+    try {
+      return await this.send<T>('POST', path, body);
+    } catch (error) {
+      const refusal = error instanceof CtxError ? signInRefusalMessage(method, error.errorName()) : null;
+      throw refusal ? new Error(refusal, { cause: error }) : error;
+    }
   }
 
   private async storeTokens(tokens: TokenPair): Promise<void> {

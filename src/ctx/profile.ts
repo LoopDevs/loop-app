@@ -59,6 +59,10 @@ export class Profile {
     return null;
   }
 
+  passkeyLabel(): string {
+    return this.email?.trim() || 'Loop wallet';
+  }
+
   signInProviderLabel(): string | null {
     const names = [...new Set(this.signInProviders)]
       .map((provider) => signInProviderNames[provider])
