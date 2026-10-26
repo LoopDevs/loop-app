@@ -28,6 +28,7 @@ import { dates, money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
+import { holdCriticalReload } from '@/updates/update-checker';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
 type Props = {
@@ -197,7 +198,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     try {
       await run(async () => {
         setPayment({ kind: 'sending' });
-        const next = await sendPayment(order);
+        const next = await holdCriticalReload(() => sendPayment(order));
         if (next.kind === 'confirming' && next.txId) {
           sentPayments.set(order.paymentId, next.txId);
         }

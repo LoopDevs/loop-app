@@ -99,6 +99,15 @@
       ],
       "expo-local-authentication"
     ],
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "checkAutomatically": "NEVER"
+    },
+    "extra": {
+      "criticalIndex": 0
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
