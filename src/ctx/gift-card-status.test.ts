@@ -129,10 +129,24 @@ test('fulfilled orders are shown in history', () => {
   assert.equal(isHiddenFromHistory(card({ status: 'fulfilled' })), false);
 });
 
-test('open and fulfilled cards have no outcome text', () => {
+test('unpaid and fulfilled cards have no outcome text', () => {
   assert.equal(outcomeText(card({ status: 'fulfilled' })), null);
-  assert.equal(outcomeText(card({ status: 'paid' })), null);
   assert.equal(outcomeText(card({ status: 'unpaid', paymentStatus: 'unpaid' })), null);
+});
+
+test('a processing card says the card is also emailed', () => {
+  assert.equal(outcomeText(card({ status: 'paid' })), "We'll also email your card when it's ready.");
+});
+
+test('a processing card with a cancelled or failed payment keeps the payment outcome', () => {
+  assert.equal(
+    outcomeText(card({ status: 'paid', paymentStatus: 'cancelled' })),
+    `This order was cancelled. If you were charged, ${refundLine}`,
+  );
+  assert.equal(
+    outcomeText(card({ status: 'paid', paymentStatus: 'error' })),
+    "This order didn't go through. You weren't charged.",
+  );
 });
 
 test('a card CTX marks paid is never described as not charged or possibly charged', () => {
