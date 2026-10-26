@@ -13,7 +13,6 @@ import { ctx, type GiftCard } from '@/ctx/client';
 import {
   cashbackState,
   cashbackStateLabel,
-  emailNotice,
   giftCardStatusLabel,
   outcomeText,
   pollIntervalMs,
@@ -76,7 +75,6 @@ export default function GiftCardScreen() {
 function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
   const cashback = cashbackState(giftCard);
   const outcome = outcomeText(giftCard);
-  const notice = emailNotice(giftCard);
   return (
     <>
       <ThemedText type="smallBold">
@@ -84,7 +82,6 @@ function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
       </ThemedText>
       <ThemedText type="small">{giftCardStatusLabel(giftCard.status)}</ThemedText>
       {outcome && <ThemedText type="small">{outcome}</ThemedText>}
-      {notice && <ThemedText type="small">{notice}</ThemedText>}
       {giftCard.paymentCryptoAmount && (
         <ThemedText type="small">
           Paid: {money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}

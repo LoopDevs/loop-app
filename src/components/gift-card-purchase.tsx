@@ -9,7 +9,6 @@ import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import {
-  emailNotice,
   giftCardStatusLabel,
   historyHiddenStatuses,
   outcomeText,
@@ -316,7 +315,6 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
   const price = money.payment(order.paymentCryptoAmount ?? '', order.paymentCryptoCurrency ?? '');
   const payable = canPay(order, payment);
   const outcome = outcomeText(order);
-  const notice = emailNotice(order);
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">{card}</ThemedText>
@@ -326,7 +324,6 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
       )}
       <ThemedText type="small">{orderStatus(order, payment)}</ThemedText>
       {outcome && <ThemedText type="small">{outcome}</ThemedText>}
-      {notice && <ThemedText type="small">{notice}</ThemedText>}
       {payment.kind === 'notSent' && payment.detail !== '' && <ThemedText type="small">{payment.detail}</ThemedText>}
       {payable && <Button label={`Pay ${price}`} onPress={onPay} disabled={busy} />}
       {needsNewPrice(order, payment) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}

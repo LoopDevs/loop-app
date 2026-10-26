@@ -52,10 +52,6 @@ export function outcomeText(card: GiftCard): string | null {
   return null;
 }
 
-export function emailNotice(card: GiftCard): string | null {
-  return card.status === 'paid' ? "We'll also email your card when it's ready." : null;
-}
-
 export function cashbackState(card: GiftCard): CashbackState {
   if (!card.cashbackAmount) {
     return 'none';

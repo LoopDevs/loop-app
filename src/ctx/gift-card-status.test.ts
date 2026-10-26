@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { GiftCard } from './client.ts';
-import { cashbackState, emailNotice, giftCardStatusLabel, outcomeText } from './gift-card-status.ts';
+import { cashbackState, giftCardStatusLabel, outcomeText } from './gift-card-status.ts';
 
 test('every gift card status has a plain label', () => {
   assert.equal(giftCardStatusLabel('unpaid'), 'Waiting for payment');
@@ -109,12 +109,5 @@ test('a card CTX marks paid is never described as not charged or possibly charge
     const text = outcomeText(card({ status, paymentStatus: 'paid' })) ?? '';
     assert.ok(!text.includes("weren't charged"));
     assert.ok(!text.includes('If you were charged'));
-  }
-});
-
-test('the email notice shows only while the card is processing', () => {
-  assert.equal(emailNotice(card({ status: 'paid' })), "We'll also email your card when it's ready.");
-  for (const status of ['unpaid', 'fulfilled', 'rejected', 'refunded', 'expired'] as const) {
-    assert.equal(emailNotice(card({ status })), null);
   }
 });
