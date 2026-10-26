@@ -23,28 +23,9 @@ export const Colors = {
     onInverse: '#FFFFFF',
     onInverseMuted: '#C3CAD5',
   },
-  dark: {
-    text: '#F2F4F7',
-    background: '#0D0F12',
-    backgroundElement: '#16191D',
-    backgroundSubtle: '#1B1E23',
-    backgroundSelected: '#262A31',
-    textSecondary: '#A3AAB6',
-    border: '#272B32',
-    borderStrong: '#373C45',
-    accent: '#7BA4FF',
-    accentSoft: '#1B2539',
-    onAccent: '#0D0F12',
-    danger: '#FF8A80',
-    success: '#5DD6A0',
-    chrome: 'rgba(13, 15, 18, 0.92)',
-    inverse: '#F2F4F7',
-    onInverse: '#0F1B2D',
-    onInverseMuted: '#4A5466',
-  },
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColor = keyof typeof Colors.light;
 
 export const FontFamily = {
   regular: 'FiraSans-Regular',

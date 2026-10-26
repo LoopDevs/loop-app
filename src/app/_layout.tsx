@@ -2,7 +2,7 @@ import 'react-native-get-random-values';
 
 import { ErrorBoundary } from '@sentry/react-native';
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 
@@ -17,7 +17,6 @@ import { FontAssets } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { BlockingServiceState } from '@/ctx/service-state';
 import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { MarketProvider } from '@/hooks/use-market';
 import { useAppSwitcherProtection } from '@/native/screen-privacy';
 import { errorReporting } from '@/ops/error-reporting';
@@ -27,7 +26,6 @@ errorReporting.init();
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
   const [blocked, setBlocked] = useState<BlockingServiceState | null>(null);
   const [fontsLoaded, fontError] = useFonts(FontAssets);
   const fontsSettled = fontsLoaded || fontError !== null;
@@ -44,7 +42,7 @@ export default function TabLayout() {
     return null;
   }
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <ErrorBoundary fallback={({ resetError }) => <CrashFallback onRetry={resetError} />}>
         <AppLockProvider>
           <ToastProvider>

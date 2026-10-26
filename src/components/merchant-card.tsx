@@ -6,7 +6,6 @@ import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
 import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Merchant } from '@/ctx/merchant';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
@@ -63,9 +62,8 @@ type CoverProps = {
 
 export function MerchantCover({ merchant, size }: CoverProps) {
   const theme = useTheme();
-  const dark = useColorScheme() === 'dark';
   const badgeSize = badgeSizes[size];
-  const tint = dark ? `hsl(${merchant.tileHue()}, 22%, 20%)` : `hsl(${merchant.tileHue()}, 45%, 92%)`;
+  const tint = `hsl(${merchant.tileHue()}, 45%, 92%)`;
   return (
     <View>
       <View

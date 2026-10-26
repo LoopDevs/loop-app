@@ -4,7 +4,6 @@ import { StyleSheet, View } from 'react-native';
 import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Radius } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SocialProvider } from '@/session/social-sign-in';
 
 type SocialSignInButtonsProps = {
@@ -14,7 +13,6 @@ type SocialSignInButtonsProps = {
 };
 
 export function SocialSignInButtons({ providers, disabled, onPress }: SocialSignInButtonsProps) {
-  const scheme = useColorScheme();
   if (providers.length === 0) {
     return null;
   }
@@ -24,11 +22,7 @@ export function SocialSignInButtons({ providers, disabled, onPress }: SocialSign
         <View pointerEvents={disabled ? 'none' : 'auto'} style={{ opacity: disabled ? 0.4 : 1 }}>
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-            buttonStyle={
-              scheme === 'dark'
-                ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-            }
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
             cornerRadius={Radius.control}
             style={styles.appleButton}
             onPress={() => onPress('apple')}
