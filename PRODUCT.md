@@ -23,7 +23,7 @@ The cashback, the wallet and the savings live in one place the user owns: a pass
 ## Operating Context
 
 - Sign-in by email code (proxied CTX auth), then wallet creation with a passkey.
-- Home, top to bottom: a full-width balance hero with earnings (cashback earned, savings yield) and pill actions, then an activity card of recent gift cards, then the gift card shop further down the scroll. Founder reference: the Monzo home screen (bold coloured balance card, white rounded activity card with merchant rows, soft tinted page ground, bottom tabs).
+- Home, top to bottom: a full-width blue panel with the total balance and round actions, a next-step card, Spending balance and Savings cards, recent gift cards, then a Top cashback strip. Shop is a discovery feed: category tiles, strips of photo cards, then every gift card. Founder references: a Revolut-style money overview and the Too Good To Go Discover feed.
 - Gift card purchase: search merchant, pick amount, pick pay-with token, see price, pay, wait for fulfilment.
 - Orders: list of purchased gift cards; detail with barcode, number, PIN, redeem link.
 - Savings: savings (vault) value, yield earned, withdraw.
