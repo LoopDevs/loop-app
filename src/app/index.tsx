@@ -6,11 +6,10 @@ import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native'
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
-import { Button, Field } from '@/components/form';
+import { Button, Field, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
 import { HomeGiftCards } from '@/components/home-gift-cards';
 import { HomePanel, useScrimScroll } from '@/components/home-panel';
-import { BalanceSkeleton } from '@/components/skeleton';
 import { SocialSignInButtons } from '@/components/social-sign-in-buttons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -201,10 +200,11 @@ export default function HomeScreen() {
         return;
       }
       const result = await wallet.withdraw(vaultShares);
-      const outcome = result.error
-        ? `${result.status}: ${result.error}`
-        : `${result.status} ${result.hash}`;
-      setMessage(outcome);
+      if (result.error) {
+        setMessage(result.error);
+      } else {
+        toast('Savings withdrawn');
+      }
       await refresh();
     });
 
@@ -224,7 +224,7 @@ export default function HomeScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={theme.accent} />
           ) : undefined
         }>
-        <HomePanel view={screen === 'wallet' ? view : null} signedIn={signedIn}>
+        <HomePanel view={screen === 'wallet' ? view : null} signedIn={signedIn || screen === 'loading'}>
           {screen === 'wallet' && wallet && (
             <HomeActions
               depositOpen={depositOpen}
@@ -238,8 +238,6 @@ export default function HomeScreen() {
         </HomePanel>
 
         <View style={styles.content}>
-          {screen === 'loading' && <BalanceSkeleton />}
-
           {screen === 'wallet' && wallet && depositOpen && (
             <Animated.View
               entering={FadeInDown.duration(Motion.state)}
@@ -351,11 +349,7 @@ export default function HomeScreen() {
             </ThemedText>
           )}
 
-          {message !== '' && (
-            <ThemedText type="small" selectable accessibilityLiveRegion="polite">
-              {message}
-            </ThemedText>
-          )}
+          {message !== '' && <Notice message={message} />}
         </View>
       </Animated.ScrollView>
       <Animated.View pointerEvents="none" style={scrim} />

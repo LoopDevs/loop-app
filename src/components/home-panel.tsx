@@ -69,10 +69,15 @@ function Balance({ view }: { view: HoldingsView | null }) {
   const stable = view?.stable;
   const total = view && stable ? view.holdings.totalIn(stable) : null;
   const formatted = total !== null && stable ? money.ctx(units.format(total, units.decimals), stable) : null;
+  const unavailable = view !== null && !stable;
   return (
     <View style={styles.balanceBlock}>
       {formatted ? (
         <Odometer value={formatted} style={balanceStyle} />
+      ) : unavailable ? (
+        <Text style={styles.unavailable} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+          Balance unavailable
+        </Text>
       ) : (
         <View style={styles.balancePlaceholder} accessibilityLabel="Loading your money" />
       )}
@@ -136,6 +141,13 @@ const styles = StyleSheet.create({
     width: '55%',
     borderRadius: 2,
     backgroundColor: 'rgba(255, 255, 255, 0.16)',
+  },
+  unavailable: {
+    color: Brand.onRoyal,
+    fontFamily: FontFamily.semibold,
+    fontSize: 32,
+    lineHeight: balanceStyle.lineHeight,
+    letterSpacing: -0.8,
   },
   rule: {
     height: 2,
