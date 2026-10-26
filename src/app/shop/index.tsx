@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type FlatList } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { CountryMenu } from '@/components/country-menu';
@@ -93,7 +93,7 @@ export default function ShopScreen() {
   const retryPage = useRef(1);
   const listedCountry = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
-  const { onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll<FlatList<Merchant>>();
 
   const loadAccount = useCallback(
     () =>
@@ -257,6 +257,7 @@ export default function ShopScreen() {
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.FlatList
+        ref={scrollRef}
         data={merchants}
         key={columns}
         keyExtractor={(merchant) => merchant.id}
@@ -363,12 +364,13 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
   const { wide } = usePageLayout();
   const catalog = useCatalog(country);
   const [search, setSearch] = useState(initialSearch);
-  const { onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.ScrollView
+        ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.simpleContent}
@@ -392,12 +394,13 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
 }
 
 function SimplePage({ title, children }: { title: string; children: React.ReactNode }) {
-  const { onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.ScrollView
+        ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.simpleContent}

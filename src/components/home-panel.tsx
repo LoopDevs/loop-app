@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useScrollToTop } from 'expo-router';
+import { useRef, type ReactNode } from 'react';
+import { Platform, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import {
   interpolate,
   useAnimatedScrollHandler,
@@ -26,8 +27,12 @@ const balanceStyle = {
   color: Brand.onRoyal,
 };
 
-export function useScrimScroll() {
+type Scrollable = NonNullable<Parameters<typeof useScrollToTop>[0]['current']>;
+
+export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<T>(null);
+  useScrollToTop(scrollRef);
   const offset = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
     offset.value = event.contentOffset.y;
@@ -40,7 +45,7 @@ export function useScrimScroll() {
   }));
   const scrim = [styles.scrim, { height: insets.top }, webBlur, fade];
   const backdrop = [styles.backdrop, overscroll];
-  return { onScroll, scrim, backdrop };
+  return { scrollRef, onScroll, scrim, backdrop };
 }
 
 const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(16px)' } as object) : null;

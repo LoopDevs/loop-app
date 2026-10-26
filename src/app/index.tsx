@@ -142,7 +142,7 @@ export default function HomeScreen() {
   };
 
   const [depositOpen, setDepositOpen] = useState(false);
-  const { onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
 
   const confirmWithdraw = () => {
     const prompt = 'Move your savings back to your account balance?';
@@ -180,6 +180,7 @@ export default function HomeScreen() {
         <StatusBar style="light" />
         <Animated.View pointerEvents="none" style={backdrop} />
         <Animated.ScrollView
+          ref={scrollRef}
           onScroll={onScroll}
           scrollEventThrottle={16}
           contentContainerStyle={styles.storeScroll}
@@ -196,6 +197,7 @@ export default function HomeScreen() {
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.ScrollView
+        ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.scrollContent}
