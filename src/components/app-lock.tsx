@@ -149,7 +149,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const covered = lock.covers();
   useEffect(() => {
     if (covered) {
-      WebBrowser.dismissBrowser().catch(() => undefined);
+      Promise.resolve(WebBrowser.dismissBrowser()).catch(() => undefined);
     }
   }, [covered]);
 
