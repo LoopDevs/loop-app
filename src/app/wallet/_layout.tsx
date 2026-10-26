@@ -7,7 +7,7 @@ export const unstable_settings = {
   anchor: 'index',
 };
 
-export default function OrdersLayout() {
+export default function WalletLayout() {
   const theme = useTheme();
   const detailHeader = {
     title: '',
@@ -20,9 +20,10 @@ export default function OrdersLayout() {
 
   return (
     <Stack>
-      <Stack.Screen name="index" options={{ title: 'Orders', headerShown: false }} />
+      <Stack.Screen name="index" options={{ title: 'Wallet', headerShown: false }} />
       <Stack.Screen name="[id]" options={detailHeader} />
       <Stack.Screen name="cashback" options={detailHeader} />
+      <Stack.Screen name="cash-out" options={detailHeader} />
     </Stack>
   );
 }

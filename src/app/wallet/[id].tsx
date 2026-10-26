@@ -116,7 +116,7 @@ export default function GiftCardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}

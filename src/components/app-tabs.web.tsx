@@ -31,11 +31,14 @@ export default function AppTabs() {
           <TabTrigger name="shop" href="/shop" resetOnFocus asChild>
             <TabButton>Shop</TabButton>
           </TabTrigger>
-          <TabTrigger name="orders" href="/orders" resetOnFocus asChild>
-            <TabButton>Orders</TabButton>
+          <TabTrigger name="savings" href="/savings" resetOnFocus asChild>
+            <TabButton>Savings</TabButton>
           </TabTrigger>
-          <TabTrigger name="settings" href="/settings" resetOnFocus asChild>
-            <TabButton>Settings</TabButton>
+          <TabTrigger name="wallet" href="/wallet" resetOnFocus asChild>
+            <TabButton>Wallet</TabButton>
+          </TabTrigger>
+          <TabTrigger name="profile" href="/profile" resetOnFocus asChild>
+            <TabButton>Profile</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -84,8 +87,8 @@ export function CustomTabList(props: TabListProps) {
     <View {...props} style={[styles.header, { backgroundColor: theme.chrome, borderBottomColor: theme.border }]}>
       <View style={[styles.headerInner, { paddingHorizontal: gutter }]}>
         <HomeLink />
-        <View style={styles.nav}>{props.children}</View>
         <HeaderSearch />
+        <View style={styles.nav}>{props.children}</View>
         <AccountActions />
       </View>
     </View>
@@ -161,11 +164,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
+    marginLeft: 'auto',
   },
   search: {
     flex: 1,
     maxWidth: 420,
-    marginLeft: 'auto',
   },
   actions: {
     flexDirection: 'row',

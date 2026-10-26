@@ -1,18 +1,19 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useRef, useState } from 'react';
-import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { Platform, RefreshControl, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
-import { AddMoney } from '@/components/add-money';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
-import { NextStep, RecentGiftCards, SavingsCard, SpendingBalances } from '@/components/home-overview';
+import { NextStep, RecentGiftCards } from '@/components/home-overview';
 import { BalanceHeader, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { MerchantCardStrip } from '@/components/merchant-card';
+import { PressScale } from '@/components/press-scale';
 import { SignInButton, useOnSignIn } from '@/components/sign-in';
 import {
   HowLoopWorks,
@@ -25,8 +26,7 @@ import {
 } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useToast } from '@/components/toast';
-import { BottomTabInset, Layout, MaxContentWidth, Motion, Spacing } from '@/constants/theme';
+import { BottomTabInset, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -35,6 +35,7 @@ import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { Savings } from '@/wallet/savings';
 import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'wallet';
@@ -51,10 +52,8 @@ export default function HomeScreen() {
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const { view, refresh } = useHoldings(wallet);
   const { busy, message, setMessage, run } = useBusyAction();
-  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const [giftCardsRefreshKey, setGiftCardsRefreshKey] = useState(0);
-  const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
   const walletLoadStarted = useRef(false);
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
@@ -156,42 +155,8 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const [depositOpen, setDepositOpen] = useState(false);
   const { scrollRef, onScroll, scrim } = useScrimScroll();
-
-  const confirmWithdraw = () => {
-    const prompt = 'Move your savings back to your account balance?';
-    if (Platform.OS === 'web') {
-      if (globalThis.confirm?.(prompt)) {
-        withdraw();
-      }
-      return;
-    }
-    Alert.alert('Withdraw savings', prompt, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Withdraw', onPress: withdraw },
-    ]);
-  };
-
-  const withdraw = () =>
-    run(async () => {
-      if (!wallet || vaultShares === 0n) {
-        return;
-      }
-      const result = await wallet.withdraw(vaultShares).catch((error: unknown) => {
-        if (error instanceof UnlinkedDevice) {
-          setUnlinkedWallet(error.wallet);
-          setScreen('unlinked-device');
-        }
-        throw error;
-      });
-      if (result.error) {
-        setMessage(result.error);
-      } else {
-        toast('Savings withdrawn');
-      }
-      await refresh();
-    });
+  const addMoney = () => router.navigate({ pathname: '/wallet', params: { add: '1' } });
 
   const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
   const topMerchant = catalog?.top[0] ?? null;
@@ -236,30 +201,17 @@ export default function HomeScreen() {
         <BalanceHeader view={screen === 'wallet' ? view : null}>
           {screen === 'wallet' && wallet && (
             <HomeActions
-              depositOpen={depositOpen}
-              onAddMoney={() => setDepositOpen((open) => !open)}
+              onAddMoney={addMoney}
               onShop={() => router.navigate('/shop')}
-              onCashback={() => router.navigate('/orders/cashback')}
-              onWithdraw={confirmWithdraw}
-              withdrawDisabled={busy || vaultShares === 0n}
+              onSavings={() => router.navigate('/savings')}
+              onCashOut={() => router.push('/wallet/cash-out')}
             />
           )}
         </BalanceHeader>
 
         <View style={[styles.content, wide && styles.contentWide]}>
           {!wide && screen === 'wallet' && (
-            <NextStep
-              view={view}
-              topMerchant={topMerchant}
-              onAddMoney={() => setDepositOpen(true)}
-              onOpenMerchant={openMerchant}
-            />
-          )}
-
-          {screen === 'wallet' && wallet && depositOpen && (
-            <Animated.View entering={FadeInDown.duration(Motion.state)}>
-              <AddMoney wallet={wallet} view={view} refresh={refresh} onClose={() => setDepositOpen(false)} />
-            </Animated.View>
+            <NextStep view={view} topMerchant={topMerchant} onAddMoney={addMoney} onOpenMerchant={openMerchant} />
           )}
 
           {screen === 'no-wallet' && (
@@ -287,27 +239,16 @@ export default function HomeScreen() {
           {screen === 'wallet' && wallet && (
             <View style={[styles.overview, wide && styles.overviewWide]}>
               <View style={[styles.column, wide && styles.columnWide]}>
-                <SpendingBalances view={view} />
-                <SavingsCard
-                  view={view}
-                  onWithdraw={confirmWithdraw}
-                  withdrawDisabled={busy || vaultShares === 0n}
-                  onCashback={() => router.navigate('/orders/cashback')}
-                />
+                {wide && (
+                  <NextStep view={view} topMerchant={topMerchant} onAddMoney={addMoney} onOpenMerchant={openMerchant} />
+                )}
+                <SavingsNudge onPress={() => router.navigate('/savings')} />
               </View>
               <View style={[styles.column, wide && styles.columnWide]}>
-                {wide && (
-                  <NextStep
-                    view={view}
-                    topMerchant={topMerchant}
-                    onAddMoney={() => setDepositOpen(true)}
-                    onOpenMerchant={openMerchant}
-                  />
-                )}
                 <RecentGiftCards
                   refreshKey={giftCardsRefreshKey}
-                  onOpenOrder={(id) => router.push(`/orders/${id}`)}
-                  onSeeAll={() => router.navigate('/orders')}
+                  onOpenOrder={(id) => router.push(`/wallet/${id}`)}
+                  onSeeAll={() => router.navigate('/wallet')}
                   onShop={() => router.navigate('/shop')}
                 />
               </View>
@@ -327,6 +268,32 @@ export default function HomeScreen() {
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>
+  );
+}
+
+function SavingsNudge({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <PressScale
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Savings. ${Savings.rateHeadline}`}
+      style={[styles.nudge, { backgroundColor: theme.accentSoft }]}>
+      <View style={[styles.nudgeIcon, { backgroundColor: theme.accent }]}>
+        <SymbolView name={{ ios: 'leaf', android: 'savings', web: 'savings' }} size={20} tintColor={theme.onAccent} />
+      </View>
+      <View style={styles.nudgeText}>
+        <ThemedText type="smallBold">{Savings.rateHeadline}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Let your cashback grow in savings.
+        </ThemedText>
+      </View>
+      <SymbolView
+        name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+        size={16}
+        tintColor={theme.textSecondary}
+      />
+    </PressScale>
   );
 }
 
@@ -426,6 +393,25 @@ const styles = StyleSheet.create({
   },
   sheet: {
     gap: Spacing.three,
+  },
+  nudge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.three,
+    minHeight: 72,
+    borderRadius: Radius.card,
+  },
+  nudgeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nudgeText: {
+    flex: 1,
+    gap: Spacing.half,
   },
   form: {
     maxWidth: Layout.formMaxWidth,

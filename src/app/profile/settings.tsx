@@ -126,14 +126,14 @@ export default function SettingsScreen() {
   if (!wide && profile && changingCountry) {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="auto" />
+        <StatusBar style="dark" />
         <Animated.ScrollView
           ref={scrollRef}
           onScroll={onScroll}
           scrollEventThrottle={16}
           contentContainerStyle={styles.scroll}
         >
-          <PageHeader title="Change country" />
+          <PageHeader title="Change country" belowNavigationHeader />
           <View style={styles.body}>{countryPicker}</View>
         </Animated.ScrollView>
         <Animated.View pointerEvents="none" style={scrim} />
@@ -214,7 +214,7 @@ export default function SettingsScreen() {
         <ListRow
           label="Cashback"
           detail="Where it goes and what's on the way"
-          onPress={() => router.push("/orders/cashback")}
+          onPress={() => router.push("/wallet/cashback")}
         />
       </ListGroup>
     </>
@@ -317,13 +317,14 @@ export default function SettingsScreen() {
     }[section];
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="auto" />
+        <StatusBar style="dark" />
         <Animated.ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.wideScroll}
         >
           <PageHeader
-            title="Settings"
+            title="Account settings"
+            belowNavigationHeader
             detail={profile?.email ?? undefined}
             width="page"
           />
@@ -361,14 +362,18 @@ export default function SettingsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.scroll}
       >
-        <PageHeader title="Settings" detail={profile?.email ?? undefined} />
+        <PageHeader
+          title="Account settings"
+          detail={profile?.email ?? undefined}
+          belowNavigationHeader
+        />
         <View style={styles.body}>
           {accountStatus}
           {accountGroups}

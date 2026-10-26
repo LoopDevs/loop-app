@@ -153,7 +153,7 @@ export default function CashbackScreen() {
           items.map((item) => <OnTheWayRow key={item.key} item={item} onShowDestination={showDestination} />)
         )}
       </ListGroup>
-      <Pressable onPress={() => router.navigate('/orders')} accessibilityRole="link" style={[styles.note, styles.link]}>
+      <Pressable onPress={() => router.navigate('/wallet')} accessibilityRole="link" style={[styles.note, styles.link]}>
         <ThemedText type="linkPrimary">Cashback still settling is shown on each order</ThemedText>
       </Pressable>
     </>
@@ -161,7 +161,7 @@ export default function CashbackScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.ScrollView
         ref={scroll}
         onScroll={onScroll}

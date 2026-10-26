@@ -7,29 +7,19 @@ import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
 type HomeActionsProps = {
-  depositOpen: boolean;
   onAddMoney: () => void;
   onShop: () => void;
-  onCashback: () => void;
-  onWithdraw: () => void;
-  withdrawDisabled: boolean;
+  onSavings: () => void;
+  onCashOut: () => void;
 };
 
-export function HomeActions({
-  depositOpen,
-  onAddMoney,
-  onShop,
-  onCashback,
-  onWithdraw,
-  withdrawDisabled,
-}: HomeActionsProps) {
+export function HomeActions({ onAddMoney, onShop, onSavings, onCashOut }: HomeActionsProps) {
   return (
     <View style={styles.row}>
       <Action
         label="Add money"
         icon={{ ios: 'plus', android: 'add', web: 'add' }}
         onPress={onAddMoney}
-        selected={depositOpen}
       />
       <Action
         label="Gift cards"
@@ -38,16 +28,15 @@ export function HomeActions({
         onPress={onShop}
       />
       <Action
-        label="Cashback"
-        icon={{ ios: 'arrow.uturn.backward', android: 'replay', web: 'replay' }}
-        onPress={onCashback}
+        label="Savings"
+        icon={{ ios: 'leaf', android: 'savings', web: 'savings' }}
+        onPress={onSavings}
       />
       <Action
-        label="Withdraw"
-        accessibilityLabel="Withdraw savings"
-        icon={{ ios: 'arrow.down.to.line', android: 'savings', web: 'savings' }}
-        onPress={onWithdraw}
-        disabled={withdrawDisabled}
+        label="Cash out"
+        accessibilityLabel="Cash out to your bank"
+        icon={{ ios: 'building.columns', android: 'account_balance', web: 'account_balance' }}
+        onPress={onCashOut}
       />
     </View>
   );

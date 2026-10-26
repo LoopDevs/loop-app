@@ -7,7 +7,6 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
-  Text,
   View,
   type FlatList,
   type ScrollViewInstance,
@@ -28,10 +27,10 @@ import { SplitLayout } from "@/components/split-layout";
 import { PageWidth } from "@/components/storefront";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { WalletSummary } from "@/components/wallet-summary";
 import { loopLinks } from "@/constants/loop-links";
 import {
   BottomTabInset,
-  FontFamily,
   MaxContentWidth,
   Motion,
   Radius,
@@ -53,7 +52,7 @@ import { dates, money } from "@/money";
 const ordersPerPage = 20;
 const staggeredRows = 8;
 
-export default function OrdersScreen() {
+export default function WalletScreen() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { wide } = usePageLayout();
@@ -133,17 +132,16 @@ export default function OrdersScreen() {
 
   const canLoadMore = page > 0 && page < pages;
   const openOrder = (giftCard: GiftCard) =>
-    router.push(`/orders/${giftCard.id}`);
-  const openCashback = () => router.push("/orders/cashback");
+    router.push(`/wallet/${giftCard.id}`);
 
   const emptyState = failure ? null : !signedIn ? (
     <EmptyState
       icon="lock"
-      title="Sign in to see your orders"
-      detail="Gift cards you buy show here with their codes."
+      title="Sign in to see your wallet"
+      detail="Your dollars, gift cards and cashback show here."
       action="Sign in"
       onAction={() =>
-        openSignIn("Sign in to see your orders and gift card codes.")
+        openSignIn("Sign in to see your dollars, gift cards and cashback.")
       }
     />
   ) : loading ? (
@@ -151,12 +149,18 @@ export default function OrdersScreen() {
   ) : (
     <EmptyState
       icon="cart"
-      title="No orders yet"
+      title="No gift cards yet"
       detail="Gift cards you buy show here, ready to use."
       action="Shop gift cards"
       onAction={() => router.navigate("/shop")}
     />
   );
+
+  const giftCardsTitle = signedIn ? (
+    <ThemedText type="heading" accessibilityRole="header">
+      Your gift cards
+    </ThemedText>
+  ) : null;
 
   const footer = (
     <>
@@ -181,18 +185,25 @@ export default function OrdersScreen() {
   if (wide) {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="auto" />
+        <StatusBar style="dark" />
         <Animated.ScrollView
           ref={wideScrollRef}
           contentContainerStyle={styles.wideContent}
+          keyboardShouldPersistTaps="handled"
         >
-          <PageHeader title="Orders" width="page" />
+          <PageHeader title="Wallet" width="page" />
           <PageWidth style={styles.wideBody}>
             <SplitLayout
               aside={
-                signedIn ? <OrdersAside onOpenCashback={openCashback} /> : null
+                signedIn ? (
+                  <>
+                    <WalletSummary />
+                    <WalletHelp />
+                  </>
+                ) : null
               }
             >
+              {giftCardsTitle}
               {giftCards.length > 0 ? (
                 <OrdersTable giftCards={giftCards} onOpen={openOrder} />
               ) : (
@@ -208,13 +219,14 @@ export default function OrdersScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.FlatList
         data={giftCards}
         ref={scrollRef}
         keyExtractor={(giftCard) => giftCard.id}
         onScroll={onScroll}
         scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -224,36 +236,15 @@ export default function OrdersScreen() {
           />
         }
         ListHeaderComponent={
-          <PageHeader
-            title="Orders"
-            accessory={
-              signedIn ? (
-                <PressScale
-                  onPress={openCashback}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cashback"
-                  style={[
-                    styles.cashbackButton,
-                    { backgroundColor: theme.backgroundSubtle },
-                  ]}
-                >
-                  <SymbolView
-                    name={{
-                      ios: "percent",
-                      android: "percent",
-                      web: "percent",
-                    }}
-                    size={18}
-                    tintColor={theme.text}
-                  />
-                  <Text
-                    style={[styles.cashbackText, { color: theme.text }]} maxFontSizeMultiplier={1.3}>
-                    Cashback
-                  </Text>
-                </PressScale>
-              ) : null
-            }
-          />
+          <>
+            <PageHeader title="Wallet" />
+            {signedIn && (
+              <View style={[styles.body, styles.summary]}>
+                <WalletSummary />
+                {giftCardsTitle}
+              </View>
+            )}
+          </>
         }
         ListEmptyComponent={<View style={styles.body}>{emptyState}</View>}
         ListFooterComponent={
@@ -416,46 +407,25 @@ function OrderTableRow({
   );
 }
 
-function OrdersAside({ onOpenCashback }: { onOpenCashback: () => void }) {
+function WalletHelp() {
   const theme = useTheme();
-  const card = [
-    styles.asideCard,
-    { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-  ];
   return (
-    <>
-      <View style={card}>
-        <View
-          style={[styles.asideIcon, { backgroundColor: theme.backgroundSubtle }]}
-        >
-          <SymbolView
-            name={{ ios: "percent", android: "percent", web: "percent" }}
-            size={18}
-            tintColor={theme.text}
-          />
-        </View>
-        <ThemedText type="heading">Cashback</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          Choose where your cashback goes and see what&apos;s on the way.
-        </ThemedText>
-        <Button
-          label="View cashback"
-          variant="primary"
-          onPress={onOpenCashback}
-        />
-      </View>
-      <View style={card}>
-        <ThemedText type="smallBold">Need help with an order?</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          Open the order for its code and how to use it. For anything else,
-          email Loop support with the shop name and date.
-        </ThemedText>
-        <Button
-          label="Contact support"
-          onPress={() => Linking.openURL(loopLinks.supportMail())}
-        />
-      </View>
-    </>
+    <View
+      style={[
+        styles.asideCard,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+      ]}
+    >
+      <ThemedText type="smallBold">Need help with a gift card?</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Open the gift card for its code and how to use it. For anything else,
+        email Loop support with the shop name and date.
+      </ThemedText>
+      <Button
+        label="Contact support"
+        onPress={() => Linking.openURL(loopLinks.supportMail())}
+      />
+    </View>
   );
 }
 
@@ -575,6 +545,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: Spacing.three,
   },
+  summary: {
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.two,
+    gap: Spacing.five,
+  },
   footer: {
     paddingTop: Spacing.two,
     gap: Spacing.three,
@@ -587,18 +562,6 @@ const styles = StyleSheet.create({
   },
   wideEmpty: {
     alignItems: "flex-start",
-  },
-  cashbackButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.two,
-    minHeight: 44,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
-  },
-  cashbackText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 15,
   },
   table: {
     borderWidth: 1,
@@ -652,14 +615,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.control,
     padding: Spacing.four,
     gap: Spacing.two,
-  },
-  asideIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.control,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.one,
   },
   row: {
     flexDirection: "row",

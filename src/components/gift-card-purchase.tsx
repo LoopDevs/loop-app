@@ -44,7 +44,7 @@ import { useHoldings } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
-import { network, type PaymentCurrency, type Token } from '@/stellar/network';
+import { network, offeredTokens, type PaymentCurrency, type Token } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
@@ -124,7 +124,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const { view, refresh } = useHoldings(wallet);
   const toast = useToast();
 
-  const currencies = network.tokens.map((token) => token.currency);
+  const currencies = offeredTokens.map((token) => token.currency);
   const stable = view?.stable ?? Rates.usd;
   const currency =
     chosenCurrency ?? view?.holdings.preferredCurrency(currencies, stable, refusedCurrencies) ?? null;
@@ -400,7 +400,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const finish = () => {
     if (order && !isHiddenFromHistory(order)) {
-      router.push(`/orders/${order.id}`, { withAnchor: true });
+      router.push(`/wallet/${order.id}`, { withAnchor: true });
     }
     startOver();
   };
@@ -464,7 +464,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           Pay with
         </ThemedText>
         <View style={styles.grid} accessibilityRole="radiogroup">
-          {network.tokens.map((token) => (
+          {offeredTokens.map((token) => (
             <View key={token.currency} style={styles.token}>
               <Button
                 label={tokenLabel(token, view?.holdings ?? null)}
