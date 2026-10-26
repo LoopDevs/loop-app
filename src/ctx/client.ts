@@ -71,7 +71,42 @@ export type GiftCard = {
   number?: string;
   pin?: string;
   redeemUrl?: string;
+  redeemUrlChallenge?: string;
+  redeemType?: 'barcode' | 'url';
   barcodeUrl?: string;
+  barcodeType?: string;
+  info?: GiftCardInfo;
+  cashbackAmount?: string;
+  cashbackCurrency?: string;
+  cashbackCredited?: boolean;
+  cashbackReversed?: boolean;
+};
+
+export type GiftCardInfo = {
+  intro?: string;
+  description?: string;
+  instructions?: string;
+  terms?: string;
+};
+
+export type Pagination = {
+  page: number;
+  pages: number;
+  perPage: number;
+  total: number;
+};
+
+export type GiftCardPage = {
+  result: GiftCard[];
+  pagination: Pagination;
+};
+
+export type GiftCardQuery = {
+  status?: GiftCard['status'][];
+  notStatus?: GiftCard['status'][];
+  order?: string;
+  page?: number;
+  perPage?: number;
 };
 
 export type SponsoredResult = {
@@ -150,22 +185,33 @@ class CtxClient {
     return this.sessionRequest('GET', `/gift-cards/${id}`);
   }
 
-  async giftCards(): Promise<GiftCard[]> {
-    const query = new URLSearchParams({ perPage: '50', order: '-created' });
-    const { result } = await this.sessionRequest<{ result: GiftCard[] | null }>(
-      'GET',
-      `/gift-cards?${query}`,
-    );
-    return result ?? [];
+  async giftCards({ status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
+    const query = new URLSearchParams();
+    if (status) {
+      query.set('status', status.join(','));
+    }
+    if (notStatus) {
+      query.set('status!', notStatus.join(','));
+    }
+    if (order) {
+      query.set('order', order);
+    }
+    if (page) {
+      query.set('page', String(page));
+    }
+    if (perPage) {
+      query.set('perPage', String(perPage));
+    }
+    const { result, pagination } = await this.sessionRequest<{
+      result: GiftCard[] | null;
+      pagination: Pagination;
+    }>('GET', `/gift-cards?${query}`);
+    return { result: result ?? [], pagination };
   }
 
   async activeGiftCard(): Promise<GiftCard | null> {
-    const query = new URLSearchParams({ status: 'unpaid,paid', perPage: '5', order: '-created' });
-    const { result } = await this.sessionRequest<{ result: GiftCard[] | null }>(
-      'GET',
-      `/gift-cards?${query}`,
-    );
-    const newest = result?.[0];
+    const { result } = await this.giftCards({ status: ['unpaid', 'paid'], perPage: 5 });
+    const newest = result[0];
     return newest ? this.giftCard(newest.id) : null;
   }
 

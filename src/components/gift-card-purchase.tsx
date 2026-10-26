@@ -3,12 +3,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Field } from '@/components/form';
-import { GiftCardDetails } from '@/components/gift-card-details';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { ctx, CtxError, type GiftCard, type Merchant } from '@/ctx/client';
-import { giftCardStatusLabel } from '@/ctx/gift-card-status';
+import {
+  giftCardStatusLabel,
+  historyHiddenStatuses,
+  pollIntervalMs,
+  settledStatuses,
+} from '@/ctx/gift-card-status';
 import {
   canPay,
   needsNewPrice,
@@ -20,9 +24,6 @@ import { dates, money } from '@/money';
 import { network, type PaymentCurrency } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
 import type { SmartWallet } from '@/wallet/smart-wallet';
-
-const pollIntervalMs = 3000;
-const settledStatuses: GiftCard['status'][] = ['fulfilled', 'rejected', 'refunded', 'expired'];
 
 type Props = {
   wallet: SmartWallet;
@@ -75,7 +76,8 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
         continue;
       }
       if (isCurrent()) {
-        setOrder(current);
+        const { status } = current;
+        setOrder((held) => held && { ...held, status });
       }
     }
   }, []);
@@ -219,8 +221,8 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   };
 
   const finish = () => {
-    if (order?.status === 'fulfilled') {
-      router.push(`/orders/${order.id}`);
+    if (order && !historyHiddenStatuses.includes(order.status)) {
+      router.push(`/orders/${order.id}`, { withAnchor: true });
     }
     startOver();
   };
@@ -326,7 +328,6 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
       {payment.kind === 'notSent' && payment.detail !== '' && <ThemedText type="small">{payment.detail}</ThemedText>}
       {payable && <Button label={`Pay ${price}`} onPress={onPay} disabled={busy} />}
       {needsNewPrice(order, payment) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}
-      <GiftCardDetails giftCard={order} />
       <Button label={payable ? 'Cancel' : 'Done'} onPress={onDone} disabled={busy} />
     </View>
   );
