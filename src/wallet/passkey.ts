@@ -3,10 +3,9 @@ import { Platform } from 'react-native';
 import * as Passkeys from 'react-native-passkeys';
 
 import { base64 } from '@/wallet/base64';
+import { PasskeyPublicKey } from '@/wallet/passkey-public-key';
 
 const nativeRpId = 'loopfinance.io';
-const uncompressedPointLength = 65;
-const uncompressedPointPrefix = 0x04;
 
 export type Passkey = {
   credentialId: string;
@@ -28,10 +27,7 @@ export const passkey = {
     if (!created || !spki) {
       throw new Error('Passkey creation was cancelled or returned no public key');
     }
-    const publicKey = base64.decode(spki).slice(-uncompressedPointLength);
-    if (publicKey.length !== uncompressedPointLength || publicKey[0] !== uncompressedPointPrefix) {
-      throw new Error('The passkey is not a P-256 key');
-    }
+    const publicKey = PasskeyPublicKey.uncompressedPoint(base64.decode(spki));
     return { credentialId: created.id, publicKey };
   },
 };
