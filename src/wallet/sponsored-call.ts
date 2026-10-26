@@ -8,18 +8,30 @@ import {
   xdr,
 } from '@stellar/stellar-sdk';
 
-import type { BuiltTransaction } from '@/ctx/client';
-import { network } from '@/stellar/network';
+import type { BuiltTransaction } from '../ctx/client.ts';
+import { network } from '../stellar/network.ts';
 
 export class SponsoredCall {
-  private constructor(
-    readonly contract: string,
-    readonly method: string,
-    readonly args: xdr.ScVal[],
-    readonly digest: Uint8Array,
-  ) {}
+  readonly contract: string;
+  readonly method: string;
+  readonly args: xdr.ScVal[];
+  readonly digest: Uint8Array;
 
-  static verify(built: BuiltTransaction, wallet: string, ruleIds: number[]): SponsoredCall {
+  private constructor(contract: string, method: string, args: xdr.ScVal[], digest: Uint8Array) {
+    this.contract = contract;
+    this.method = method;
+    this.args = args;
+    this.digest = digest;
+  }
+
+  static readonly maxExpiryLedgers = 120;
+
+  static verify(
+    built: BuiltTransaction,
+    wallet: string,
+    ruleIds: number[],
+    latestLedger: number,
+  ): SponsoredCall {
     const transaction = TransactionBuilder.fromXDR(built.transaction, network.passphrase);
     if (!(transaction instanceof Transaction) || transaction.operations.length !== 1) {
       throw new Error('The sponsored transaction must hold exactly one operation');
@@ -57,6 +69,9 @@ export class SponsoredCall {
     const expiration = credentials.address.signatureExpirationLedger;
     if (expiration !== built.expiryLedger) {
       throw new Error('The authorization expiry does not match');
+    }
+    if (expiration <= latestLedger || expiration > latestLedger + SponsoredCall.maxExpiryLedgers) {
+      throw new Error('The authorization expiry is outside the signing window');
     }
     if (built.contextRuleIds.join() !== ruleIds.join()) {
       throw new Error('The authorization names unexpected wallet rules');

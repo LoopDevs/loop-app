@@ -2,8 +2,8 @@ export type PaymentState =
   | { kind: 'ready' }
   | { kind: 'movingSavings' }
   | { kind: 'sending' }
-  | { kind: 'confirming'; txId?: string }
-  | { kind: 'failed' }
+  | { kind: 'confirming'; txId?: string; expiryLedger?: number }
+  | { kind: 'failed'; contactSupport?: boolean }
   | { kind: 'priceExpired' }
   | { kind: 'notSent'; detail: string };
 
@@ -12,7 +12,7 @@ type GiftCardPayment = {
   paymentCryptoTxId?: string;
 };
 
-type PayRejection = {
+export type PayRejection = {
   status: number;
   errorName?: string;
   message?: string;
@@ -23,15 +23,95 @@ const paymentClosedMessage = 'payment is no longer open';
 
 export const rateLimitedMessage = 'Too many requests. Wait a few minutes and try again.';
 
-export function resumedPaymentState(giftCard: GiftCardPayment): PaymentState {
-  if (giftCard.status === 'unpaid' && giftCard.paymentCryptoTxId) {
+export type SignedTransfer = {
+  amount: bigint;
+  muxedId?: bigint;
+};
+
+type SentRecord = {
+  expiryLedger?: number;
+  txId?: string;
+};
+
+type ChainTransaction = {
+  status: string;
+  latestLedger: number;
+};
+
+export const landingGraceLedgers = 12;
+
+export function resumedPaymentState(giftCard: GiftCardPayment, sent?: SentRecord | null): PaymentState {
+  if (giftCard.status !== 'unpaid') {
+    return { kind: 'ready' };
+  }
+  if (giftCard.paymentCryptoTxId) {
     return { kind: 'confirming', txId: giftCard.paymentCryptoTxId };
+  }
+  if (sent) {
+    return { kind: 'confirming', txId: sent.txId, expiryLedger: sent.expiryLedger };
   }
   return { kind: 'ready' };
 }
 
+export function sentTransactionOutcome(
+  transaction: ChainTransaction,
+  expiryLedger?: number,
+): 'pending' | 'success' | 'failed' {
+  if (
+    transaction.status === 'NOT_FOUND' &&
+    expiryLedger !== undefined &&
+    landingClosed(transaction.latestLedger, expiryLedger)
+  ) {
+    return 'failed';
+  }
+  return chainOutcome(transaction.status);
+}
+
+export function landingClosed(latestLedger: number, expiryLedger: number): boolean {
+  return latestLedger > expiryLedger + landingGraceLedgers;
+}
+
+export function transferAmount(value: unknown): bigint | null {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+  if (value && typeof value === 'object' && 'amount' in value) {
+    const { amount } = value as { amount: unknown };
+    return typeof amount === 'bigint' ? amount : null;
+  }
+  return null;
+}
+
+export function transferMuxedId(value: unknown): bigint | null {
+  if (value && typeof value === 'object' && 'to_muxed_id' in value) {
+    const { to_muxed_id: muxedId } = value as { to_muxed_id: unknown };
+    return typeof muxedId === 'bigint' ? muxedId : null;
+  }
+  return null;
+}
+
+export function transferLanded(values: readonly unknown[], expected: SignedTransfer | null): boolean {
+  return values.some((value) => {
+    const amount = transferAmount(value);
+    if (amount === null) {
+      return false;
+    }
+    if (!expected) {
+      return true;
+    }
+    return (
+      amount === expected.amount &&
+      (expected.muxedId === undefined || transferMuxedId(value) === expected.muxedId)
+    );
+  });
+}
+
+export function isAlreadySubmitted(rejection: PayRejection): boolean {
+  return rejection.status === 409 && rejection.errorName === 'ErrPaymentAlreadySubmitted';
+}
+
 export function rejectedPaymentState(rejection: PayRejection): PaymentState | null {
-  if (rejection.status === 409 && rejection.errorName === 'ErrPaymentAlreadySubmitted') {
+  if (isAlreadySubmitted(rejection)) {
     return { kind: 'confirming', txId: rejection.txId };
   }
   if (rejection.status === 429) {
@@ -76,5 +156,11 @@ export function needsNewPrice(giftCard: GiftCardPayment, state: PaymentState): b
   if (giftCard.status === 'expired') {
     return true;
   }
-  return giftCard.status === 'unpaid' && (state.kind === 'failed' || state.kind === 'priceExpired');
+  if (giftCard.status !== 'unpaid') {
+    return false;
+  }
+  if (state.kind === 'failed') {
+    return !state.contactSupport;
+  }
+  return state.kind === 'priceExpired';
 }
