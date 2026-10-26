@@ -44,7 +44,7 @@ export function Skeleton({ width, height, aspectRatio, color }: SkeletonProps) {
     <Animated.View
       style={[
         styles.block,
-        { width, height, aspectRatio, backgroundColor: color ?? theme.backgroundElement },
+        { width, height, aspectRatio, backgroundColor: color ?? theme.backgroundSelected },
         animated,
       ]}
     />

@@ -3,6 +3,9 @@ import '@/global.css';
 import { Platform } from 'react-native';
 import { Easing } from 'react-native-reanimated';
 
+import { SymbolFont } from '@/components/symbol-codepoints';
+import { PageMetrics } from '@/hooks/page-layout';
+
 export const Colors = {
   light: {
     text: '#0F1B2D',
@@ -34,12 +37,20 @@ export const FontFamily = {
   bold: 'FiraSans-Bold',
 } as const;
 
-export const FontAssets = {
+const nativeFontAssets = {
   [FontFamily.regular]: require('@/assets/fonts/FiraSans-Regular.ttf'),
   [FontFamily.medium]: require('@/assets/fonts/FiraSans-Medium.ttf'),
   [FontFamily.semibold]: require('@/assets/fonts/FiraSans-SemiBold.ttf'),
   [FontFamily.bold]: require('@/assets/fonts/FiraSans-Bold.ttf'),
 };
+
+export const FontAssets =
+  Platform.OS === 'web'
+    ? {
+        ...nativeFontAssets,
+        [SymbolFont.family]: require('@/assets/fonts/MaterialSymbols-Loop.ttf'),
+      }
+    : nativeFontAssets;
 
 export const Fonts = Platform.select({
   ios: {
@@ -107,10 +118,7 @@ export const ScrollEndInset = Platform.OS === 'web' ? 0 : BottomTabInset + Spaci
 export const MaxContentWidth = 800;
 
 export const Layout = {
-  wideMinWidth: 960,
-  pageMaxWidth: 1240,
-  narrowGutter: Spacing.three,
-  wideGutter: Spacing.five,
+  ...PageMetrics,
   headerHeight: 72,
   formMaxWidth: 420,
   sheetWidth: 440,
