@@ -3,8 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Radius } from '@/constants/theme';
 import type { SocialProvider } from '@/session/social-sign-in';
 
 type SocialSignInButtonsProps = {
@@ -14,7 +13,6 @@ type SocialSignInButtonsProps = {
 };
 
 export function SocialSignInButtons({ providers, disabled, onPress }: SocialSignInButtonsProps) {
-  const scheme = useColorScheme();
   if (providers.length === 0) {
     return null;
   }
@@ -24,19 +22,20 @@ export function SocialSignInButtons({ providers, disabled, onPress }: SocialSign
         <View pointerEvents={disabled ? 'none' : 'auto'} style={{ opacity: disabled ? 0.4 : 1 }}>
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-            buttonStyle={
-              scheme === 'dark'
-                ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-            }
-            cornerRadius={Spacing.two}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={Radius.control}
             style={styles.appleButton}
             onPress={() => onPress('apple')}
           />
         </View>
       )}
       {providers.includes('google') && (
-        <Button label="Continue with Google" onPress={() => onPress('google')} disabled={disabled} />
+        <Button
+          label="Continue with Google"
+          variant="secondary"
+          onPress={() => onPress('google')}
+          disabled={disabled}
+        />
       )}
       <ThemedText type="small" themeColor="textSecondary">
         Signed up with email before? Use the same email.
@@ -52,6 +51,6 @@ export function SocialSignInButtons({ providers, disabled, onPress }: SocialSign
 
 const styles = StyleSheet.create({
   appleButton: {
-    height: 48,
+    height: 50,
   },
 });

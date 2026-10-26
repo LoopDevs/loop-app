@@ -1,17 +1,29 @@
 import { NativeTabs } from 'expo-router/native-tabs';
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors, FontFamily } from '@/constants/theme';
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const colors = Colors.light;
 
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      backgroundColor={colors.backgroundElement}
+      indicatorColor={colors.backgroundSelected}
+      rippleColor={colors.backgroundSelected}
+      tintColor={colors.accent}
+      iconColor={{ default: colors.textSecondary, selected: colors.accent }}
+      labelStyle={{
+        default: {
+          color: colors.textSecondary,
+          fontFamily: FontFamily.medium,
+          fontSize: 11,
+        },
+        selected: {
+          color: colors.accent,
+          fontFamily: FontFamily.semibold,
+          fontSize: 11,
+        },
+      }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
@@ -28,18 +40,22 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="orders">
-        <NativeTabs.Trigger.Label>Orders</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/orders.png')}
-          renderingMode="template"
-        />
+      <NativeTabs.Trigger name="savings">
+        <NativeTabs.Trigger.Label>Savings</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="leaf" md="savings" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="settings">
-        <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="gearshape" md="settings" />
+      <NativeTabs.Trigger name="wallet">
+        <NativeTabs.Trigger.Label>Wallet</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="wallet.pass" md="account_balance_wallet" />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="profile">
+        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="person.crop.circle" md="account_circle" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="(site)" hidden />
     </NativeTabs>
   );
 }

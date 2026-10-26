@@ -1,3 +1,4 @@
+import { offeredCurrencies, stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { Savings } from '../wallet/savings.ts';
 import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client.ts';
 
@@ -29,7 +30,7 @@ export class Profile {
     this.cashbackDestination = user.cashbackDestination ?? 'account';
     this.signInProviders = (user.oauthIdentities ?? []).map((identity) => identity.provider);
     this.countries = company?.countries ?? [];
-    this.stableCurrencies = company?.stableCurrencies ?? [];
+    this.stableCurrencies = (company?.stableCurrencies ?? []).filter((currency) => offeredCurrencies.has(currency));
   }
 
   static fromMe(me: MeJson): Profile {
@@ -89,7 +90,15 @@ export class Profile {
   }
 
   static currencyLabel(currency: string): string {
-    return currency.slice(currency.lastIndexOf('.') + 1);
+    const code = Object.hasOwn(stablePeg, currency) ? stablePeg[currency as PaymentCurrency] : currency;
+    if (!code) {
+      return currency;
+    }
+    try {
+      return new Intl.DisplayNames(['en'], { type: 'currency' }).of(code) ?? code;
+    } catch {
+      return code;
+    }
   }
 
   static countryFlag(country: string): string {

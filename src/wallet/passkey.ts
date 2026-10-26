@@ -4,6 +4,7 @@ import * as Passkeys from 'react-native-passkeys';
 
 import { loopEnvironment } from '@/environment';
 import { base64 } from '@/wallet/base64';
+import { PasskeyAssertion } from '@/wallet/passkey-assertion';
 import { PasskeyPublicKey } from '@/wallet/passkey-public-key';
 
 const nativeRpId = 'loopfinance.io';
@@ -31,6 +32,18 @@ export const passkey = {
     }
     const publicKey = PasskeyPublicKey.uncompressedPoint(base64.decode(spki));
     return { credentialId: created.id, publicKey };
+  },
+
+  async sign(challenge: Uint8Array): Promise<PasskeyAssertion> {
+    const signed = await Passkeys.get({
+      challenge: PasskeyAssertion.challengeOf(challenge),
+      rpId: rpId(),
+      userVerification: 'required',
+    });
+    if (!signed) {
+      throw new Error('The confirmation was cancelled');
+    }
+    return PasskeyAssertion.fromResponse(signed.response);
   },
 };
 

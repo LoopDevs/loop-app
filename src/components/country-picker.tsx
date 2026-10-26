@@ -5,7 +5,6 @@ import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { type CountryChoice, Profile } from '@/ctx/profile';
-import { network } from '@/stellar/network';
 
 type Props = {
   profile: Profile;
@@ -34,67 +33,81 @@ export function CountryPicker({ profile, busy, onChoose, onCancel }: Props) {
   if (country && profile.needsCurrencyChoice()) {
     return (
       <View style={styles.section}>
-        <ThemedText type="smallBold">Choose your cashback currency</ThemedText>
-        <ThemedText type="small">{currencyStepCopy()}</ThemedText>
-        <View style={styles.row}>
+        <View style={styles.intro}>
+          <ThemedText type="heading" accessibilityRole="header">
+            Choose your cashback currency
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {currencyStepCopy()}
+          </ThemedText>
+        </View>
+        <View style={styles.grid} accessibilityRole="radiogroup">
           {profile.stableCurrencies.map((currency) => (
-            <Button
-              key={currency}
-              label={Profile.currencyLabel(currency)}
-              onPress={() => setStableCurrency(currency)}
-              selected={stableCurrency === currency}
-              disabled={busy}
-            />
+            <View key={currency} style={styles.gridItem}>
+              <Button
+                label={Profile.currencyLabel(currency)}
+                onPress={() => setStableCurrency(currency)}
+                selected={stableCurrency === currency}
+                disabled={busy}
+              />
+            </View>
           ))}
         </View>
         <Button
-          label="Confirm"
+          label={busy ? 'Saving…' : `Shop in ${country}`}
+          variant="primary"
           onPress={() => stableCurrency && onChoose({ country, stableCurrency })}
           disabled={busy || !stableCurrency}
         />
-        <Button label="Cancel" onPress={backToCountries} disabled={busy} />
+        <Button label="Back" variant="quiet" onPress={backToCountries} disabled={busy} />
       </View>
     );
   }
 
   return (
     <View style={styles.section}>
-      <ThemedText type="smallBold">Choose your country</ThemedText>
-      <View style={styles.row}>
+      <ThemedText type="small" themeColor="textSecondary">
+        Gift cards and prices depend on your country.
+      </ThemedText>
+      <View style={styles.grid} accessibilityRole="radiogroup">
         {profile.countries.map((code) => (
-          <Button
-            key={code}
-            label={`${Profile.countryFlag(code)} ${code}`}
-            onPress={() => pickCountry(code)}
-            selected={profile.country === code}
-            disabled={busy}
-          />
+          <View key={code} style={styles.gridItem}>
+            <Button
+              label={code}
+              accessibilityLabel={`Shop in ${code}`}
+              onPress={() => pickCountry(code)}
+              selected={profile.country === code}
+              disabled={busy}
+            />
+          </View>
         ))}
       </View>
-      {onCancel && <Button label="Cancel" onPress={onCancel} disabled={busy} />}
+      {onCancel && <Button label="Cancel" variant="quiet" onPress={onCancel} disabled={busy} />}
     </View>
   );
 }
 
 function currencyStepCopy(): string {
-  const stableSymbols = network.tokens
-    .filter((token) => token.currency !== 'XLM')
-    .map((token) => token.symbol)
-    .join(', ');
   return (
-    'Cashback from payments in XLM is converted to this currency. ' +
-    `Cashback from ${stableSymbols} payments stays in that currency. ` +
-    "This can't be changed later."
+    'Cashback is paid in this currency unless you pay in another one, ' +
+    "in which case it stays in the currency you paid with. This can't be changed later."
   );
 }
 
 const styles = StyleSheet.create({
   section: {
+    gap: Spacing.three,
+  },
+  intro: {
     gap: Spacing.two,
   },
-  row: {
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
+  },
+  gridItem: {
+    flexBasis: '30%',
+    flexGrow: 1,
   },
 });

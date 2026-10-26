@@ -1,14 +1,14 @@
 import { useFocusEffect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Switch, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { ListGroup, ListRow } from '@/components/list-row';
+import { Wordmark } from '@/components/wordmark';
+import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useBusyAction } from '@/hooks/use-busy-action';
+import { useTheme } from '@/hooks/use-theme';
 import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
 import { useRecentsProtection } from '@/native/screen-privacy';
@@ -33,6 +33,7 @@ export function AppLockToggle() {
   const { isOn, turnOn, turnOff } = useContext(AppLockContext);
   const { busy, message, run } = useBusyAction();
   const [enrolled, setEnrolled] = useState(false);
+  const theme = useTheme();
 
   useFocusEffect(
     useCallback(() => {
@@ -58,19 +59,17 @@ export function AppLockToggle() {
   const toggle = (next: boolean) => run(next ? turnOn : turnOff);
 
   return (
-    <View style={styles.section}>
-      <ThemedText type="smallBold">Security</ThemedText>
-      <View style={styles.toggleRow}>
-        <ThemedText style={styles.toggleLabel}>Lock Loop with Face ID / fingerprint</ThemedText>
+    <ListGroup title="Security" footer={message}>
+      <ListRow label="Lock Loop with Face ID / fingerprint">
         <Switch
           value={isOn}
           onValueChange={toggle}
           disabled={busy}
+          trackColor={{ true: theme.accent }}
           accessibilityLabel="Lock Loop with Face ID / fingerprint"
         />
-      </View>
-      {message !== '' && <ThemedText type="small">{message}</ThemedText>}
-    </View>
+      </ListRow>
+    </ListGroup>
   );
 }
 
@@ -205,34 +204,44 @@ type LockViewProps = {
 };
 
 function LockView({ showUnlock, message, onUnlock }: LockViewProps) {
+  const theme = useTheme();
   return (
-    <ThemedView style={[StyleSheet.absoluteFill, styles.lock]}>
+    <View style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safeArea}>
-        {showUnlock && (
-          <View style={styles.content} accessibilityLiveRegion="polite">
-            <ThemedText type="subtitle">Loop is locked</ThemedText>
-            <Button label="Unlock" onPress={onUnlock} />
-            {message !== '' && <ThemedText type="small">{message}</ThemedText>}
-          </View>
-        )}
+        <View style={styles.content} accessibilityLiveRegion="polite">
+          <Wordmark height={32} />
+          {showUnlock && (
+            <>
+              <Text style={[styles.lockTitle, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.6}>
+                Loop is locked
+              </Text>
+              <Pressable
+                onPress={onUnlock}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.unlock,
+                  { backgroundColor: theme.accent },
+                  pressed && styles.unlockPressed,
+                ]}>
+                <Text style={[styles.unlockLabel, { color: theme.onAccent }]} maxFontSizeMultiplier={1.6}>
+                  Unlock
+                </Text>
+              </Pressable>
+              {message !== '' && (
+                <Text style={[styles.lockMessage, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
+                  {message}
+                </Text>
+              )}
+            </>
+          )}
+        </View>
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   fill: {
-    flex: 1,
-  },
-  section: {
-    gap: Spacing.two,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-  },
-  toggleLabel: {
     flex: 1,
   },
   lock: {
@@ -247,6 +256,31 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
-    gap: Spacing.three,
+    gap: Spacing.four,
+  },
+  lockTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 30,
+    lineHeight: 36,
+  },
+  unlock: {
+    minHeight: 50,
+    borderRadius: Radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+  },
+  unlockPressed: {
+    opacity: 0.85,
+  },
+  unlockLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  lockMessage: {
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    lineHeight: 20,
   },
 });
