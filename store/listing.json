@@ -1,0 +1,90 @@
+{
+  "custodySentence": "The wallet is controlled by the user's passkey and device. Loop can recover a wallet only after 90 days in which the owner has not approved any transaction, and the owner can cancel that recovery during a 7-day window.",
+  "urls": {
+    "privacy": "https://loopfinance.io/privacy",
+    "terms": "https://loopfinance.io/terms",
+    "support": "https://loopfinance.io",
+    "marketing": "https://loopfinance.io"
+  },
+  "contact": "support@loopfinance.io",
+  "ios": {
+    "name": "Loop",
+    "subtitle": "Gift card cashback wallet",
+    "bundleId": "io.loopfinance.app",
+    "sku": "loop-ios-1",
+    "primaryCategory": "Finance",
+    "secondaryCategory": "Shopping",
+    "ageRating": "4+",
+    "promotionalText": "Buy gift cards from big-name retailers at face value and earn cashback on every one. Pay from a wallet you control and save what's left to earn yield.",
+    "keywords": "gift cards,cashback,wallet,USDC,EURC,Stellar,savings,yield,passkey,rewards,shopping,retail",
+    "whatsNew": "Welcome to Loop. Buy gift cards at face value, earn cashback, and keep your balance in a passkey-secured wallet.",
+    "description": "Loop is a cashback and savings wallet for gift cards.\n\nBuy gift cards from big-name retailers in the US, UK, Europe and Canada. Every card is sold at face value and earns cashback. Pay from your own wallet in USDC, EURC, GBPLOOP or XLM, and see your balance and what you have earned on the home screen.\n\nWHAT YOU CAN DO\n- Shop gift cards and see the cashback rate on each one before you buy.\n- Pay from your wallet and get your card in the app: barcode, card number, PIN and redeem link.\n- Keep your balances in USDC, EURC, GBPLOOP and XLM.\n- Put money into savings that earn yield, and withdraw when you want.\n- Follow every order and every cashback payment in one place.\n\nA WALLET THE USER OWNS\nYour wallet is secured by a passkey and a key held on your phone. Approving a payment takes Face ID or your fingerprint. There is no seed phrase to write down.\n\nThe wallet is controlled by the user's passkey and device. Loop can recover a wallet only after 90 days in which the owner has not approved any transaction, and the owner can cancel that recovery during a 7-day window.\n\nSIGN IN\nSign in with your email address and a one-time code. Your wallet opens on the phone where you created it.\n\nWHAT YOU NEED\n- A phone with Face ID, Touch ID or a fingerprint set up.\n- A passkey provider: iCloud Keychain on iPhone, or Google Password Manager on Android.\n\nPrivacy policy: https://loopfinance.io/privacy\nTerms of service: https://loopfinance.io/terms\nSupport: support@loopfinance.io"
+  },
+  "play": {
+    "title": "Loop: Gift Card Cashback",
+    "shortDescription": "Buy gift cards at face value, earn cashback, and save with a wallet you control.",
+    "category": "Finance",
+    "contentRating": "Everyone",
+    "fullDescription": "Loop is a cashback and savings wallet for gift cards.\n\nBuy gift cards from big-name retailers in the US, UK, Europe and Canada. Every card is sold at face value and earns cashback. Pay from your own wallet in USDC, EURC, GBPLOOP or XLM, and see your balance and what you have earned on the home screen.\n\nWHAT YOU CAN DO\n- Shop gift cards and see the cashback rate on each one before you buy.\n- Pay from your wallet and get your card in the app: barcode, card number, PIN and redeem link.\n- Keep your balances in USDC, EURC, GBPLOOP and XLM.\n- Put money into savings that earn yield, and withdraw when you want.\n- Follow every order and every cashback payment in one place.\n\nA WALLET THE USER OWNS\nYour wallet is secured by a passkey and a key held on your phone. Approving a payment takes your fingerprint. There is no seed phrase to write down.\n\nThe wallet is controlled by the user's passkey and device. Loop can recover a wallet only after 90 days in which the owner has not approved any transaction, and the owner can cancel that recovery during a 7-day window.\n\nSIGN IN\nSign in with your email address and a one-time code. Your wallet opens on the phone where you created it.\n\nWHAT YOU NEED\n- A phone with a fingerprint set up.\n- A Google account with Google Password Manager turned on, or another passkey provider.\n\nPrivacy policy: https://loopfinance.io/privacy\nTerms of service: https://loopfinance.io/terms\nSupport: support@loopfinance.io"
+  },
+  "privacy": {
+    "tracking": false,
+    "sold": false,
+    "encryptedInTransit": true,
+    "collected": [
+      {
+        "type": "Email address",
+        "ios": "NSPrivacyCollectedDataTypeEmailAddress",
+        "play": "Personal info > Email address",
+        "purpose": "App functionality",
+        "linkedToUser": true
+      },
+      {
+        "type": "User ID",
+        "ios": "NSPrivacyCollectedDataTypeUserID",
+        "play": "Personal info > User IDs",
+        "purpose": "App functionality",
+        "linkedToUser": true
+      },
+      {
+        "type": "Purchase history",
+        "ios": "NSPrivacyCollectedDataTypePurchaseHistory",
+        "play": "Financial info > Purchase history",
+        "purpose": "App functionality",
+        "linkedToUser": true
+      },
+      {
+        "type": "Other financial info",
+        "ios": "NSPrivacyCollectedDataTypeOtherFinancialInfo",
+        "play": "Financial info > Other financial info",
+        "purpose": "App functionality",
+        "linkedToUser": true
+      }
+    ],
+    "notCollected": [
+      "Location",
+      "Contacts",
+      "Photos and files",
+      "Advertising identifiers",
+      "Analytics"
+    ],
+    "deletionUrl": null
+  },
+  "review": {
+    "signInRequired": true,
+    "demoAccountNote": "Sign in with the submission's reviewer address, reviewer+<n>@<reviewer mailbox>, where <n> is the submission number. The emailed code arrives in the reviewer mailbox webmail. That account has never had a wallet.",
+    "notes": "Sign in with the reviewer address in the demo account field. Enter the emailed code, then create the wallet on first launch.\n\nThe review device needs a passcode and enrolled biometrics. iPhone: Face ID or Touch ID enrolled, signed in to iCloud with iCloud Keychain on. Android: fingerprint enrolled, Google account with Google Password Manager on.\n\nCustody: The wallet is controlled by the user's passkey and device. Loop can recover a wallet only after 90 days in which the owner has not approved any transaction, and the owner can cancel that recovery during a 7-day window.\n\nFunding: once the build shows as in review, we send 10 USDC to this reviewer account's wallet address. To request the top-up, write to support@loopfinance.io.\n\nScreen recording of the full flow (sign in, create wallet, buy a gift card, order detail, savings deposit): <recording link>.\n\nTracking: none. No advertising. No data sold. Encryption: standard TLS only."
+  },
+  "encryption": { "usesNonExemptEncryption": false },
+  "screenshots": {
+    "ios": {
+      "sizes": ["6.9-inch", "6.7-inch"],
+      "screens": ["home", "shop", "purchase", "order detail", "savings"],
+      "ipad": false
+    },
+    "play": {
+      "sizes": ["phone"],
+      "screens": ["home", "shop", "purchase", "order detail", "savings"]
+    }
+  }
+}
