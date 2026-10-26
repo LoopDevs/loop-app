@@ -328,8 +328,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex: 1,
-    aspectRatio: 1,
-    minHeight: 140,
+    height: 140,
     justifyContent: 'space-between',
   },
   tileText: {
