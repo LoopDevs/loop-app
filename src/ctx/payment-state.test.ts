@@ -1,0 +1,93 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import {
+  canPay,
+  chainOutcome,
+  needsNewPrice,
+  rejectedPaymentState,
+  resumedPaymentState,
+  sendFailureState,
+} from './payment-state.ts';
+
+const unpaid = { status: 'unpaid' };
+const sent = { status: 'unpaid', paymentCryptoTxId: 'abc' };
+
+test('a resumed order with a sent payment is confirming', () => {
+  assert.deepEqual(resumedPaymentState(sent), { kind: 'confirming', txId: 'abc' });
+});
+
+test('a resumed order without a sent payment is ready', () => {
+  assert.deepEqual(resumedPaymentState(unpaid), { kind: 'ready' });
+  assert.deepEqual(resumedPaymentState({ status: 'paid' }), { kind: 'ready' });
+});
+
+test('an already submitted payment is confirming with its transaction', () => {
+  assert.deepEqual(rejectedPaymentState({ status: 409, errorName: 'ErrPaymentAlreadySubmitted', txId: 'abc' }), {
+    kind: 'confirming',
+    txId: 'abc',
+  });
+});
+
+test('a closed payment is an expired price', () => {
+  assert.deepEqual(rejectedPaymentState({ status: 400, message: 'payment is no longer open' }), {
+    kind: 'priceExpired',
+  });
+});
+
+test('another bad request keeps the order payable with the detail', () => {
+  assert.deepEqual(rejectedPaymentState({ status: 400, message: 'insufficient balance' }), {
+    kind: 'notSent',
+    detail: 'insufficient balance',
+  });
+});
+
+test('other rejections are not payment states', () => {
+  assert.equal(rejectedPaymentState({ status: 409, errorName: 'ErrConflict' }), null);
+  assert.equal(rejectedPaymentState({ status: 500 }), null);
+});
+
+test('a payment that reached the sponsor with an unknown outcome is confirming', () => {
+  assert.deepEqual(sendFailureState(true), { kind: 'confirming' });
+  assert.deepEqual(sendFailureState(true, { status: 500 }), { kind: 'confirming' });
+});
+
+test('a rejected payment takes its rejection state wherever it failed', () => {
+  assert.deepEqual(sendFailureState(true, { status: 400, message: 'payment is no longer open' }), {
+    kind: 'priceExpired',
+  });
+  assert.deepEqual(sendFailureState(false, { status: 400, message: 'bad amount' }), {
+    kind: 'notSent',
+    detail: 'bad amount',
+  });
+});
+
+test('a payment that failed before sending has no payment state', () => {
+  assert.equal(sendFailureState(false), null);
+  assert.equal(sendFailureState(false, { status: 500 }), null);
+});
+
+test('chain statuses map to payment outcomes', () => {
+  assert.equal(chainOutcome('SUCCESS'), 'success');
+  assert.equal(chainOutcome('FAILED'), 'failed');
+  assert.equal(chainOutcome('NOT_FOUND'), 'pending');
+});
+
+test('pay is only offered for an unpaid order with no sent payment', () => {
+  assert.equal(canPay(unpaid, { kind: 'ready' }), true);
+  assert.equal(canPay(unpaid, { kind: 'notSent', detail: '' }), true);
+  assert.equal(canPay(sent, { kind: 'ready' }), false);
+  assert.equal(canPay(unpaid, { kind: 'sending' }), false);
+  assert.equal(canPay(unpaid, { kind: 'confirming' }), false);
+  assert.equal(canPay(unpaid, { kind: 'failed' }), false);
+  assert.equal(canPay(unpaid, { kind: 'priceExpired' }), false);
+  assert.equal(canPay({ status: 'paid' }, { kind: 'ready' }), false);
+});
+
+test('a new price is offered for failed, closed and expired orders', () => {
+  assert.equal(needsNewPrice(unpaid, { kind: 'failed' }), true);
+  assert.equal(needsNewPrice(unpaid, { kind: 'priceExpired' }), true);
+  assert.equal(needsNewPrice({ status: 'expired' }, { kind: 'ready' }), true);
+  assert.equal(needsNewPrice(unpaid, { kind: 'ready' }), false);
+  assert.equal(needsNewPrice({ status: 'paid' }, { kind: 'failed' }), false);
+});

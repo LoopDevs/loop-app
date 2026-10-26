@@ -104,7 +104,7 @@ export class SmartWallet {
     }
   }
 
-  async pay(giftCard: GiftCard): Promise<SponsoredResult> {
+  async pay(giftCard: GiftCard, onSending: () => void): Promise<SponsoredResult> {
     const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
     if (!token || !giftCard.paymentCryptoAmount) {
       throw new Error('The order has no Stellar price this wallet can pay');
@@ -113,7 +113,7 @@ export class SmartWallet {
     const built = await ctx.buildTransaction(this.id, intent);
     const call = SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId]);
     this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
-    return this.signAndSponsor(intent, built.transaction, call);
+    return this.signAndSponsor(intent, built.transaction, call, onSending);
   }
 
   async withdraw(shares: bigint): Promise<SponsoredResult> {
@@ -132,12 +132,14 @@ export class SmartWallet {
     intent: SmartWalletIntent,
     transaction: string,
     call: SponsoredCall,
+    onSending?: () => void,
   ): Promise<SponsoredResult> {
     const devicePublicKey = await deviceSigner.publicKey();
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
     }
     const signature = await deviceSigner.sign(call.digest);
+    onSending?.();
     return ctx.sponsorTransaction(this.id, intent, {
       transaction,
       signature,

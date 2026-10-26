@@ -11,6 +11,7 @@ import {
   xdr,
 } from '@stellar/stellar-sdk';
 
+import { chainOutcome } from '@/ctx/payment-state';
 import { network } from '@/stellar/network';
 
 const simulationSource = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
@@ -35,6 +36,11 @@ class Soroban {
 
   async balance(contractId: string, owner: string): Promise<bigint> {
     return (await this.read(contractId, 'balance', [new Address(owner).toScVal()])) as bigint;
+  }
+
+  async transactionStatus(hash: string): Promise<'pending' | 'success' | 'failed'> {
+    const { status } = await this.server.getTransaction(hash);
+    return chainOutcome(status);
   }
 
   async wasmHash(contractId: string): Promise<string> {
