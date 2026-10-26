@@ -13,10 +13,11 @@ import { ListGroup } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/press-scale';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
+import { SiteFooter } from '@/components/site-footer';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, Layout, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Layout, MaxContentWidth, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
@@ -150,6 +151,7 @@ export default function ProfileScreen() {
             )}
           </View>
         </View>
+        <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>
@@ -274,7 +276,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   page: {
     width: '100%',

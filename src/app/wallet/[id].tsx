@@ -9,18 +9,19 @@ import { GiftCardDetails } from '@/components/gift-card-details';
 import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
+import { SiteFooter } from '@/components/site-footer';
 import { OrderDetailSkeleton } from '@/components/skeleton';
 import { SplitLayout } from '@/components/split-layout';
 import { PageWidth } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
-  BottomTabInset,
   FontFamily,
   Layout,
   MaxContentWidth,
   Motion,
   Radius,
+  ScrollEndInset,
   Spacing,
 } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
@@ -120,7 +121,7 @@ export default function GiftCardScreen() {
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={[styles.content, wide && styles.wideContent]}>
+        contentContainerStyle={styles.content}>
         {(!giftCard || message !== '') && (
           <View style={[styles.body, styles.status, wide && styles.wideStatus]}>
             {!giftCard && !message && <OrderDetailSkeleton />}
@@ -136,6 +137,7 @@ export default function GiftCardScreen() {
           </View>
         )}
         {giftCard && <GiftCardSummary giftCard={giftCard} wide={wide} />}
+        <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
   );
@@ -260,7 +262,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
     gap: Spacing.three,
   },
   body: {
@@ -271,9 +274,6 @@ const styles = StyleSheet.create({
   },
   status: {
     paddingTop: Spacing.three,
-  },
-  wideContent: {
-    paddingBottom: Spacing.six,
   },
   wideStatus: {
     maxWidth: 560,

@@ -10,10 +10,13 @@ import { useScrimScroll } from '@/components/home-panel';
 import { SavingsCard } from '@/components/home-overview';
 import { PageHeader } from '@/components/page-header';
 import { useSignIn } from '@/components/sign-in';
+import { SiteFooter } from '@/components/site-footer';
+import { SplitLayout } from '@/components/split-layout';
+import { PageWidth } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
-import { BottomTabInset, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { Layout, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -87,9 +90,10 @@ export default function SavingsScreen() {
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scroll}>
-        <PageHeader title="Savings" width={wide ? 'page' : 'content'} />
-        <View style={[styles.body, wide && styles.bodyWide]}>
-          <View style={[styles.hero, { backgroundColor: theme.accentSoft }]}>
+        <PageHeader title="Savings" width="page" />
+        <PageWidth style={[styles.page, wide && styles.pageWide]}>
+          <SplitLayout aside={wide ? <SavingsFacts /> : null} asideWidth={360}>
+          <View style={[styles.hero, wide && styles.heroWide, { backgroundColor: theme.accentSoft }]}>
             <View style={[styles.heroIcon, { backgroundColor: theme.accent }]}>
               <SymbolView
                 name={{ ios: 'leaf', android: 'savings', web: 'savings' }}
@@ -97,10 +101,10 @@ export default function SavingsScreen() {
                 tintColor={theme.onAccent}
               />
             </View>
-            <ThemedText type="subtitle" accessibilityRole="header">
+            <ThemedText type={wide ? 'title' : 'subtitle'} accessibilityRole="header" style={styles.heroTitle}>
               {Savings.rateHeadline}
             </ThemedText>
-            <ThemedText themeColor="textSecondary">
+            <ThemedText themeColor="textSecondary" style={styles.heroLine}>
               Your savings grow every day. Your cashback lands here too, and you can take it out whenever you like.
             </ThemedText>
             <View style={wide && styles.heroAction}>
@@ -139,10 +143,58 @@ export default function SavingsScreen() {
           )}
 
           {message !== '' && <Notice message={message} />}
-        </View>
+
+          {!wide && <SavingsFacts />}
+          </SplitLayout>
+        </PageWidth>
+        <SiteFooter />
       </Animated.ScrollView>
       <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
+  );
+}
+
+const savingsFacts = [
+  {
+    icon: { ios: 'arrow.down.circle', android: 'south', web: 'south' },
+    title: 'Cashback goes in by itself',
+    body: 'Cashback from every gift card lands in your savings once the card is delivered.',
+  },
+  {
+    icon: { ios: 'chart.line.uptrend.xyaxis', android: 'trending_up', web: 'trending_up' },
+    title: 'It grows every day',
+    body: 'Your savings earn every day. The rate can go up or down over time.',
+  },
+  {
+    icon: { ios: 'arrow.uturn.backward', android: 'replay', web: 'replay' },
+    title: 'Take it out any time',
+    body: 'Move your savings back to your balance whenever you like.',
+  },
+] as const;
+
+function SavingsFacts() {
+  const router = useRouter();
+  const theme = useTheme();
+  return (
+    <View style={[styles.card, styles.facts, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="heading" accessibilityRole="header">
+        How savings work
+      </ThemedText>
+      {savingsFacts.map((fact) => (
+        <View key={fact.title} style={styles.fact}>
+          <View style={[styles.factIcon, { backgroundColor: theme.accentSoft }]}>
+            <SymbolView name={fact.icon} size={18} tintColor={theme.accent} />
+          </View>
+          <View style={styles.factText}>
+            <ThemedText type="smallBold">{fact.title}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {fact.body}
+            </ThemedText>
+          </View>
+        </View>
+      ))}
+      <Button label="Read the FAQ" variant="quiet" onPress={() => router.navigate('/faq')} />
+    </View>
   );
 }
 
@@ -185,24 +237,49 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
-  body: {
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
-    paddingHorizontal: Spacing.three,
+  page: {
     paddingTop: Spacing.two,
-    gap: Spacing.four,
   },
-  bodyWide: {
-    maxWidth: Layout.formMaxWidth * 1.4,
-    paddingTop: Spacing.five,
+  pageWide: {
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.five,
   },
   hero: {
     padding: Spacing.four,
     gap: Spacing.two,
     borderRadius: Radius.card,
+  },
+  heroWide: {
+    padding: Spacing.five,
+    gap: Spacing.three,
+  },
+  heroTitle: {
+    maxWidth: 560,
+  },
+  heroLine: {
+    maxWidth: 520,
+  },
+  facts: {
+    gap: Spacing.four,
+  },
+  fact: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.three,
+  },
+  factIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  factText: {
+    flex: 1,
+    gap: Spacing.half,
   },
   heroIcon: {
     width: 44,

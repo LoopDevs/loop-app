@@ -293,7 +293,7 @@ export default function HomeScreen() {
           )}
         </PageWidth>
         {signedOut && <HowLoopWorks />}
-        {(signedOut || wide) && <SiteFooter />}
+        <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>

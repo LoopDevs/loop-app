@@ -25,7 +25,7 @@ import {
 } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
 import type { CountryChoice } from '@/ctx/profile';
@@ -346,7 +346,8 @@ export default function ShopScreen() {
           </View>
         }
         ListFooterComponent={
-          <View style={[styles.body, styles.footer, pageWidth]}>
+          <>
+            <View style={[styles.body, styles.footer, pageWidth]}>
             {listing.message !== '' && (
               <Notice
                 message={listing.message}
@@ -360,7 +361,9 @@ export default function ShopScreen() {
                 Loading more gift cards
               </ThemedText>
             )}
-          </View>
+            </View>
+            <SiteFooter />
+          </>
         }
         renderItem={({ item, index }) => (
           <Animated.View
@@ -427,6 +430,7 @@ function SimplePage({ title, children }: { title: string; children: React.ReactN
         keyboardShouldPersistTaps="handled">
         <PageHeader title={title} />
         <View style={[styles.body, styles.simpleBody]}>{children}</View>
+        <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>
@@ -527,11 +531,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    paddingBottom: ScrollEndInset,
     gap: Spacing.four,
   },
   simpleContent: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   body: {
     width: '100%',
