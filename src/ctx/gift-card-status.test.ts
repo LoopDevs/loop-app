@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { GiftCard } from './client.ts';
-import { cashbackState, giftCardStatusLabel, outcomeText } from './gift-card-status.ts';
+import { cashbackState, giftCardStatusLabel, isHiddenFromHistory, outcomeText } from './gift-card-status.ts';
 
 test('every gift card status has a plain label', () => {
   assert.equal(giftCardStatusLabel('unpaid'), 'Waiting for payment');
@@ -96,6 +96,37 @@ test('only a payment error or an unsent crypto expiry says the user was not char
   const expected = "This order didn't go through. You weren't charged.";
   assert.equal(outcomeText(card({ status: 'rejected', paymentStatus: 'error' })), expected);
   assert.equal(outcomeText(card({ status: 'expired', paymentStatus: 'expired' })), expected);
+});
+
+test('an order that expired after payment says to contact support', () => {
+  assert.equal(
+    outcomeText(card({ status: 'expired', paymentStatus: 'paid' })),
+    'This order expired after payment. Contact support about a refund.',
+  );
+});
+
+test('unpaid orders are hidden from history', () => {
+  assert.equal(isHiddenFromHistory(card({ status: 'unpaid', paymentStatus: 'unpaid' })), true);
+});
+
+test('an expired order that was never charged is hidden from history', () => {
+  assert.equal(isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'expired' })), true);
+});
+
+test('an expired order that was paid or sent is shown in history', () => {
+  assert.equal(isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'paid' })), false);
+  assert.equal(
+    isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'expired', paymentCryptoTxId: txId })),
+    false,
+  );
+  assert.equal(
+    isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'expired', paymentMethod: 'plaid-uk-eu' })),
+    false,
+  );
+});
+
+test('fulfilled orders are shown in history', () => {
+  assert.equal(isHiddenFromHistory(card({ status: 'fulfilled' })), false);
 });
 
 test('open and fulfilled cards have no outcome text', () => {

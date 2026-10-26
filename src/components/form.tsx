@@ -10,6 +10,7 @@ export function Field(props: React.ComponentProps<typeof TextInput>) {
   const theme = useTheme();
   return (
     <TextInput
+      accessibilityLabel={props.placeholder}
       autoCapitalize="none"
       autoCorrect={false}
       placeholderTextColor={theme.textSecondary}
@@ -33,7 +34,13 @@ export function Button({ label, onPress, disabled = false, selected = false }: B
     onPress();
   };
   return (
-    <Pressable onPress={press} disabled={disabled} style={{ opacity: disabled ? 0.4 : 1 }}>
+    <Pressable
+      onPress={press}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled, selected }}
+      style={{ opacity: disabled ? 0.4 : 1 }}>
       <ThemedView
         type="backgroundElement"
         style={[styles.button, selected && { borderColor: theme.text }]}>

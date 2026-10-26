@@ -10,6 +10,7 @@ import { BalanceSkeleton } from '@/components/skeleton';
 import { SocialSignInButtons } from '@/components/social-sign-in-buttons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useToast } from '@/components/toast';
 import { loopLinks } from '@/constants/loop-links';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
@@ -23,6 +24,8 @@ import { SmartWallet } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'email' | 'code' | 'no-wallet' | 'wallet';
 
+const preWalletScreens: Screen[] = ['loading', 'email', 'code'];
+
 export default function HomeScreen() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>('loading');
@@ -31,6 +34,7 @@ export default function HomeScreen() {
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const { view, refresh } = useHoldings(wallet);
   const { busy, message, setMessage, run } = useBusyAction();
+  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
   const walletLoadStarted = useRef(false);
@@ -49,15 +53,20 @@ export default function HomeScreen() {
   }, [router]);
 
   const loadWallet = useCallback(async () => {
-    const loaded = await SmartWallet.load();
-    await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
+    walletLoadStarted.current = true;
+    try {
+      const loaded = await SmartWallet.load();
+      await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
+    } catch (error) {
+      walletLoadStarted.current = false;
+      throw error;
+    }
   }, [showWallet, openActiveOrder]);
 
   const readSession = useCallback(async () => {
     try {
       if (await ctx.isSignedIn()) {
-        if (screen === 'loading' && !walletLoadStarted.current) {
-          walletLoadStarted.current = true;
+        if (preWalletScreens.includes(screen) && !walletLoadStarted.current) {
           await loadWallet();
         }
         return;
@@ -89,9 +98,23 @@ export default function HomeScreen() {
 
   const verifyCode = () =>
     run(async () => {
-      await ctx.verifyCode(email.trim(), code.trim());
+      if (!(await ctx.isSignedIn())) {
+        await ctx.verifyCode(email.trim(), code.trim());
+      }
       await loadWallet();
     });
+
+  const resendCode = () =>
+    run(async () => {
+      await ctx.requestCode(email.trim());
+      toast('Code sent');
+    });
+
+  const changeEmail = () => {
+    setCode('');
+    setMessage('');
+    setScreen('email');
+  };
 
   const signInWith = (provider: SocialProvider) =>
     run(async () => {
@@ -191,6 +214,8 @@ export default function HomeScreen() {
               <ThemedText type="small">We sent a code to {email.trim()}</ThemedText>
               <Field value={code} onChangeText={setCode} placeholder="Code" keyboardType="number-pad" />
               <Button label="Sign in" onPress={verifyCode} disabled={busy || !code.trim()} />
+              <Button label="Resend code" onPress={resendCode} disabled={busy} />
+              <Button label="Use a different email" onPress={changeEmail} disabled={busy} />
             </>
           )}
 

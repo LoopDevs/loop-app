@@ -63,6 +63,10 @@ export class Payout {
     return !this.isTerminal() && Boolean(this.reservationTransferId) && !this.reversalTransferId;
   }
 
+  netAmount(): string {
+    return this.sentAmount ?? this.amount;
+  }
+
   statusLabel(): string {
     switch (this.status) {
       case 'queued':

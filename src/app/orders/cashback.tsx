@@ -19,6 +19,7 @@ import { ctx, type CashbackDestination } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useProfile } from '@/hooks/use-profile';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { money } from '@/money';
 import { Savings } from '@/wallet/savings';
 
@@ -42,12 +43,22 @@ export default function CashbackScreen() {
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState('');
   const { busy, message, run } = useBusyAction();
+  const readSession = useSessionOwner();
 
   const load = useCallback(async () => {
     setLoading(true);
     setFailure('');
     const writesAtStart = destinationWrites.current;
     try {
+      const { userId, changed } = await readSession();
+      if (changed || !userId) {
+        setProfile(null);
+        setAccount(null);
+      }
+      if (!userId) {
+        setFailure('Sign in to see your cashback.');
+        return;
+      }
       const [me, loaded] = await Promise.all([ctx.me(), ctx.account()]);
       if (writesAtStart === destinationWrites.current) {
         setProfile(me);
@@ -58,7 +69,7 @@ export default function CashbackScreen() {
     } finally {
       setLoading(false);
     }
-  }, [setProfile]);
+  }, [setProfile, readSession]);
 
   useFocusEffect(
     useCallback(() => {

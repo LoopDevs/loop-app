@@ -20,11 +20,12 @@ import { useProfile } from '@/hooks/use-profile';
 const merchantsPerPage = 20;
 const searchDelayMs = 300;
 const stripSize = 10;
+const cashbackScanSize = 500;
 const recentOrdersScanned = 50;
 
 async function loadTopCashback(country: string): Promise<Merchant[]> {
-  const { result } = await ctx.merchants({ country, order: '-discount', perPage: stripSize });
-  return Merchant.byCashback(result);
+  const { result } = await ctx.merchants({ country, perPage: cashbackScanSize });
+  return Merchant.byCashback(result).slice(0, stripSize);
 }
 
 async function loadRecentlyBought(country: string): Promise<Merchant[]> {
