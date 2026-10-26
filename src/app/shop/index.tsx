@@ -248,7 +248,7 @@ export default function ShopScreen() {
   }
 
   if (!profile) {
-    return <SimplePage title="Shop">{account.message === '' ? <MerchantGridSkeleton /> : accountError}</SimplePage>;
+    return <SimplePage title="Shop">{account.message === '' ? <MerchantGridSkeleton columns={cardColumns} /> : accountError}</SimplePage>;
   }
 
   if (profile.needsSetup() || changingCountry) {
@@ -339,7 +339,7 @@ export default function ShopScreen() {
         ListEmptyComponent={
           <View style={[styles.body, pageWidth]}>
             {busy ? (
-              <MerchantGridSkeleton />
+              <MerchantGridSkeleton columns={cardColumns} />
             ) : listing.message === '' ? (
               <EmptyResults searching={searching} onClear={() => setSearch('')} />
             ) : null}

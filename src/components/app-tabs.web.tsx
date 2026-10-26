@@ -15,16 +15,24 @@ import { SignInButton, useSignIn } from '@/components/sign-in';
 import { MerchantSearch } from '@/components/storefront';
 import { Wordmark } from '@/components/wordmark';
 import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { useHydrated } from '@/hooks/use-hydrated';
+import { PageLayout } from '@/hooks/page-layout';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useMarket } from '@/hooks/use-market';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   const { wide } = usePageLayout();
+  const hydrated = useHydrated();
   const pathname = usePathname();
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
+  useEffect(() => {
+    if (hydrated) {
+      PageLayout.reveal();
+    }
+  }, [hydrated]);
   return (
     <Tabs style={styles.shell}>
       {wide ? null : <TabSlot style={styles.slot} />}
@@ -137,7 +145,7 @@ function HeaderSearch() {
 
 function AccountActions() {
   const { signedIn } = useSignIn();
-  if (signedIn !== false) {
+  if (signedIn === true) {
     return null;
   }
   return (

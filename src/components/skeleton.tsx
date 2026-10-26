@@ -10,11 +10,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Radius, Spacing } from '@/constants/theme';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 
 const shimmerMs = 800;
 const orderRowCount = 6;
-const merchantTileCount = 6;
+const merchantSkeletonRows = 2;
+const merchantTileHeight = 230;
 const coverAspect = 1.586;
 
 type SkeletonProps = {
@@ -44,7 +46,7 @@ export function Skeleton({ width, height, aspectRatio, color }: SkeletonProps) {
     <Animated.View
       style={[
         styles.block,
-        { width, height, aspectRatio, backgroundColor: color ?? theme.backgroundElement },
+        { width, height, aspectRatio, backgroundColor: color ?? theme.backgroundSelected },
         animated,
       ]}
     />
@@ -72,13 +74,14 @@ export function OrderRowsSkeleton() {
   );
 }
 
-export function MerchantGridSkeleton() {
+export function MerchantGridSkeleton({ columns }: { columns?: number }) {
+  const layout = usePageLayout();
+  const count = columns ?? layout.columns;
   return (
     <View style={styles.grid} accessible accessibilityLabel="Loading gift cards">
-      {Array.from({ length: merchantTileCount }, (_, index) => (
-        <View key={index} style={styles.gridCell}>
-          <Skeleton width="100%" aspectRatio={coverAspect} />
-          <Skeleton width="60%" height={14} />
+      {Array.from({ length: count * merchantSkeletonRows }, (_, index) => (
+        <View key={index} style={[styles.gridCell, { width: `${100 / count}%` }]}>
+          <Skeleton width="100%" height={merchantTileHeight} />
         </View>
       ))}
     </View>
@@ -107,11 +110,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     rowGap: Spacing.four,
-    marginHorizontal: -Spacing.three / 2,
+    marginHorizontal: -Spacing.two,
   },
   gridCell: {
-    width: '50%',
-    paddingHorizontal: Spacing.three / 2,
-    gap: Spacing.two,
+    paddingHorizontal: Spacing.two,
   },
 });

@@ -160,7 +160,11 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
     <View style={styles.hero}>
       <PageWidth style={[styles.heroInner, wide && styles.heroInnerWide]}>
         <Animated.View
-          entering={reduceMotion ? undefined : FadeInDown.duration(Motion.transition).easing(Motion.easeOut)}
+          entering={
+            reduceMotion || Platform.OS === 'web'
+              ? undefined
+              : FadeInDown.duration(Motion.transition).easing(Motion.easeOut)
+          }
           style={[styles.heroCopy, wide && styles.heroCopyWide]}>
           {!wide && (
             <View style={styles.heroTopRow}>
@@ -197,7 +201,11 @@ function HeroPhoto({ best, onOpen }: { best: Merchant | null; onOpen: (merchant:
   const theme = useTheme();
   return (
     <Animated.View
-      entering={reduceMotion ? undefined : FadeIn.duration(Motion.transition).delay(Motion.stagger * 2)}
+      entering={
+        reduceMotion || Platform.OS === 'web'
+          ? undefined
+          : FadeIn.duration(Motion.transition).delay(Motion.stagger * 2)
+      }
       style={[styles.heroPhotoWrap, wide && styles.heroPhotoWrapWide]}>
       <View style={[styles.heroPhoto, wide && styles.heroPhotoWide, Elevation.raised]}>
         <Image
