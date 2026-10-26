@@ -3,11 +3,13 @@ import { useCallback, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/form';
+import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { giftCardStatusLabel, historyHiddenStatuses } from '@/ctx/gift-card-status';
+import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { dates, money } from '@/money';
 
 const ordersPerPage = 20;
@@ -43,13 +45,14 @@ export default function OrdersScreen() {
 
   const reload = useCallback(() => load(1), [load]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (loadedPages.current <= 1) {
-        reload();
-      }
-    }, [reload]),
-  );
+  const reloadUnlessPaged = useCallback(() => {
+    if (loadedPages.current <= 1) {
+      reload();
+    }
+  }, [reload]);
+
+  useFocusEffect(reloadUnlessPaged);
+  useAppRefresh(reloadUnlessPaged);
 
   const canLoadMore = page > 0 && page < pages;
 
@@ -61,7 +64,9 @@ export default function OrdersScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading && page <= 1} onRefresh={reload} />}
         ListEmptyComponent={
-          failure || loading ? undefined : (
+          failure ? undefined : loading ? (
+            <OrderRowsSkeleton />
+          ) : (
             <>
               <ThemedText type="small">No orders yet.</ThemedText>
               <Button label="Buy a gift card" onPress={() => router.navigate('/')} />
