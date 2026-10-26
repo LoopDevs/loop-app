@@ -117,7 +117,7 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
               : { ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' }
           }
           size={20}
-          tintColor={Brand.onRoyal}
+          tintColor={Brand.navy}
         />
       </PressScale>
     </View>
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: Radius.control,
-    backgroundColor: Brand.royal,
+    backgroundColor: Brand.onRoyal,
     alignItems: 'center',
     justifyContent: 'center',
   },

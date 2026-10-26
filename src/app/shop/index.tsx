@@ -272,6 +272,7 @@ export default function ShopScreen() {
                 ) : null
               }>
               <Field
+                onPanel
                 value={search}
                 onChangeText={setSearch}
                 placeholder="Search gift cards"

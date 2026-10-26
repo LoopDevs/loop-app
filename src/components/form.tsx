@@ -7,9 +7,16 @@ import { Brand, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
-export function Field(props: React.ComponentProps<typeof TextInput>) {
+type FieldProps = React.ComponentProps<typeof TextInput> & {
+  onPanel?: boolean;
+};
+
+export function Field({ onPanel = false, ...props }: FieldProps) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
+  const focusBorder = onPanel
+    ? { borderColor: Brand.onRoyal, borderWidth: 2 }
+    : { borderColor: theme.accent };
   return (
     <TextInput
       accessibilityLabel={props.placeholder}
@@ -24,8 +31,9 @@ export function Field(props: React.ComponentProps<typeof TextInput>) {
         {
           color: theme.text,
           backgroundColor: theme.backgroundElement,
-          borderColor: focused ? theme.accent : theme.border,
+          borderColor: theme.border,
         },
+        focused && focusBorder,
       ]}
       {...props}
     />
