@@ -1,5 +1,6 @@
 import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
+import { Deadline } from './deadline.ts';
 
 export class Rates {
   static readonly source = 'https://rates.ctx.com/rates';
@@ -43,11 +44,10 @@ export class Rates {
   private static async fetchUsdPrice(currency: PaymentCurrency): Promise<string | null> {
     const market = stablePeg[currency] ?? currency;
     try {
-      const response = await fetch(`${Rates.source}?source=ctx&symbol=${market}${Rates.usd}`);
-      if (!response.ok) {
-        return null;
-      }
-      const quotes: unknown = await response.json();
+      const quotes = await Deadline.run(Deadline.requestMs, async (signal) => {
+        const response = await fetch(`${Rates.source}?source=ctx&symbol=${market}${Rates.usd}`, { signal });
+        return response.ok ? ((await response.json()) as unknown) : null;
+      });
       const price = Array.isArray(quotes) ? (quotes[0] as { price?: unknown } | undefined)?.price : undefined;
       return typeof price === 'string' ? price : null;
     } catch {

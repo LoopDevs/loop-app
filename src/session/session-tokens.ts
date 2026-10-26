@@ -1,6 +1,25 @@
+type Refreshing = {
+  generation: number;
+  accessToken: Promise<string | null>;
+};
+
 export class SessionTokens {
   private generation = 0;
   private accessToken: string | null = null;
+  private refreshing: Refreshing | null = null;
+
+  refreshOnce(generation: number, rotate: () => Promise<string | null>): Promise<string | null> {
+    if (this.refreshing?.generation === generation) {
+      return this.refreshing.accessToken;
+    }
+    const accessToken: Promise<string | null> = rotate().finally(() => {
+      if (this.refreshing?.accessToken === accessToken) {
+        this.refreshing = null;
+      }
+    });
+    this.refreshing = { generation, accessToken };
+    return accessToken;
+  }
 
   current(): number {
     return this.generation;

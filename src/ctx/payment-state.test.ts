@@ -4,11 +4,13 @@ import { test } from 'node:test';
 import {
   canPay,
   chainOutcome,
+  landingGraceLedgers,
   needsNewPrice,
   rateLimitedMessage,
   rejectedPaymentState,
   resumedPaymentState,
   sendFailureState,
+  sentTransactionOutcome,
 } from './payment-state.ts';
 
 const unpaid = { status: 'unpaid' };
@@ -16,6 +18,36 @@ const sent = { status: 'unpaid', paymentCryptoTxId: 'abc' };
 
 test('a resumed order with a sent payment is confirming', () => {
   assert.deepEqual(resumedPaymentState(sent), { kind: 'confirming', txId: 'abc' });
+});
+
+test('a resumed order this phone sent is confirming even before CTX shows the transaction', () => {
+  assert.deepEqual(resumedPaymentState(unpaid, { expiryLedger: 500 }), {
+    kind: 'confirming',
+    txId: undefined,
+    expiryLedger: 500,
+  });
+  assert.deepEqual(resumedPaymentState(unpaid, { expiryLedger: 500, txId: 'tx' }), {
+    kind: 'confirming',
+    txId: 'tx',
+    expiryLedger: 500,
+  });
+  assert.equal(canPay(unpaid, resumedPaymentState(unpaid, { expiryLedger: 500 })), false);
+});
+
+test('the transaction CTX recorded wins over the one this phone recorded', () => {
+  assert.deepEqual(resumedPaymentState(sent, { expiryLedger: 500, txId: 'other' }), { kind: 'confirming', txId: 'abc' });
+});
+
+test('a resumed order that is no longer unpaid is not confirming', () => {
+  assert.deepEqual(resumedPaymentState({ status: 'paid' }, { expiryLedger: 500 }), { kind: 'ready' });
+});
+
+test('a sent transaction fails only once it can no longer land', () => {
+  assert.equal(sentTransactionOutcome({ status: 'NOT_FOUND', latestLedger: 500 + landingGraceLedgers }, 500), 'pending');
+  assert.equal(sentTransactionOutcome({ status: 'NOT_FOUND', latestLedger: 501 + landingGraceLedgers }, 500), 'failed');
+  assert.equal(sentTransactionOutcome({ status: 'NOT_FOUND', latestLedger: 10_000 }), 'pending');
+  assert.equal(sentTransactionOutcome({ status: 'FAILED', latestLedger: 400 }, 500), 'failed');
+  assert.equal(sentTransactionOutcome({ status: 'SUCCESS', latestLedger: 10_000 }, 500), 'success');
 });
 
 test('a resumed order without a sent payment is ready', () => {

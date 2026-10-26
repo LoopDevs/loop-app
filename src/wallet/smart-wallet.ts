@@ -1,7 +1,15 @@
 import { bytesToHex } from '@noble/hashes/utils';
 import { MuxedAccount, scValToNative, StrKey, xdr } from '@stellar/stellar-sdk';
 
-import { ctx, type GiftCard, type SmartWalletIntent, type SponsoredResult } from '@/ctx/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import {
+  ctx,
+  type BuiltTransaction,
+  type GiftCard,
+  type SmartWalletIntent,
+  type SponsoredResult,
+} from '@/ctx/client';
 import { network, type Token } from '@/stellar/network';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
@@ -12,6 +20,7 @@ import { passkey } from '@/wallet/passkey';
 import { Savings } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
+import { WalletPin } from '@/wallet/wallet-pin';
 
 export type TokenBalance = {
   token: Token;
@@ -42,15 +51,17 @@ export class SmartWallet {
 
   static async load(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
-    const links = await ctx.wallets();
-    const link = links.find(
-      (candidate) => candidate.sponsored && candidate.chain === 'XLM' && candidate.status === 'active',
-    );
+    const pin = new WalletPin(AsyncStorage, userId);
+    const [links, pinned] = await Promise.all([ctx.wallets(), pin.read()]);
+    const link = WalletPin.choose(links, pinned);
     if (!link) {
       return null;
     }
     const wallet = new SmartWallet(link.id, link.address, userId);
-    await wallet.verify();
+    const passkeyPublicKey = await wallet.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
+    if (!pinned) {
+      await pin.write({ address: wallet.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
+    }
     return wallet;
   }
 
@@ -69,10 +80,14 @@ export class SmartWallet {
     });
     const wallet = new SmartWallet(link.id, link.address, userId);
     await wallet.verify(created.publicKey);
+    await new WalletPin(AsyncStorage, userId).write({
+      address: wallet.address,
+      passkeyPublicKey: base64.encode(created.publicKey),
+    });
     return wallet;
   }
 
-  async verify(passkeyPublicKey?: Uint8Array): Promise<void> {
+  async verify(passkeyPublicKey?: Uint8Array): Promise<Uint8Array> {
     const devicePublicKey = await deviceSigner.publicKey(this.userId);
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
@@ -89,8 +104,9 @@ export class SmartWallet {
     if (ruleCount !== 2) {
       throw new Error('The wallet has unexpected rules');
     }
-    this.requireSigner(passkeyRule, network.webauthnVerifier, passkeyPublicKey);
+    const passkeyKey = this.requireSigner(passkeyRule, network.webauthnVerifier, passkeyPublicKey);
     this.requireSigner(deviceRule, network.ed25519Verifier, base64.decode(devicePublicKey));
+    return passkeyKey;
   }
 
   async balances(): Promise<Balances> {
@@ -112,16 +128,19 @@ export class SmartWallet {
     }
   }
 
-  async pay(giftCard: GiftCard, onSending: () => void): Promise<SponsoredResult> {
+  async pay(
+    giftCard: GiftCard,
+    onSending: (expiryLedger: number) => Promise<void>,
+  ): Promise<SponsoredResult> {
     const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
     if (!token || !giftCard.paymentCryptoAmount) {
       throw new Error('The order has no Stellar price this wallet can pay');
     }
     const intent: SmartWalletIntent = { intent: 'pay', paymentId: giftCard.paymentId };
     const built = await ctx.buildTransaction(this.id, intent);
-    const call = SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId]);
+    const call = await this.verifiedCall(built);
     this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
-    return this.signAndSponsor(intent, built.transaction, call, onSending);
+    return this.signAndSponsor(intent, built.transaction, call, () => onSending(built.expiryLedger));
   }
 
   async withdraw(shares: bigint): Promise<SentWithdrawal> {
@@ -131,7 +150,7 @@ export class SmartWallet {
       shares: shares.toString(),
     };
     const built = await ctx.buildTransaction(this.id, intent);
-    const call = SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId]);
+    const call = await this.verifiedCall(built);
     await this.requireWithdraw(call, shares);
     const result = await this.signAndSponsor(intent, built.transaction, call);
     return { ...result, expiryLedger: built.expiryLedger };
@@ -148,18 +167,22 @@ export class SmartWallet {
     });
   }
 
+  private async verifiedCall(built: BuiltTransaction): Promise<SponsoredCall> {
+    return SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId], await soroban.latestLedger());
+  }
+
   private async signAndSponsor(
     intent: SmartWalletIntent,
     transaction: string,
     call: SponsoredCall,
-    onSending?: () => void,
+    onSending?: () => Promise<void>,
   ): Promise<SponsoredResult> {
     const devicePublicKey = await deviceSigner.publicKey(this.userId);
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
     }
     const signature = await deviceSigner.sign(this.userId, call.digest);
-    onSending?.();
+    await onSending?.();
     return ctx.sponsorTransaction(this.id, intent, {
       transaction,
       signature,
@@ -195,7 +218,7 @@ export class SmartWallet {
     return (await soroban.read(this.address, 'get_context_rule', [xdr.ScVal.scvU32(id)])) as ContextRule;
   }
 
-  private requireSigner(rule: ContextRule, verifier: string, publicKey?: Uint8Array): void {
+  private requireSigner(rule: ContextRule, verifier: string, publicKey?: Uint8Array): Uint8Array {
     if (rule.signers.length !== 1 || rule.valid_until != null) {
       throw new Error(`Wallet rule ${rule.id} is not a single permanent signer`);
     }
@@ -206,6 +229,7 @@ export class SmartWallet {
     if (publicKey && bytesToHex(keyData) !== bytesToHex(publicKey)) {
       throw new Error(`Wallet rule ${rule.id} holds a different key`);
     }
+    return keyData;
   }
 
   private async requireWithdraw(call: SponsoredCall, shares: bigint): Promise<void> {

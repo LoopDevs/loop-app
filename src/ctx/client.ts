@@ -1,5 +1,6 @@
 import { Account } from '@/ctx/account';
 import { ctxReportMessage } from '@/ctx/ctx-report';
+import { Deadline, RequestTimeoutError } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
 import type { PayoutJson } from '@/ctx/payout';
@@ -205,6 +206,12 @@ export type ServiceStatus = {
 
 type ServiceStateListener = (state: BlockingServiceState) => void;
 
+type SendOptions = {
+  headers?: Record<string, string>;
+  reportServiceState?: boolean;
+  timeoutMs?: number;
+};
+
 export type SponsoredResult = {
   hash: string;
   status: string;
@@ -251,7 +258,6 @@ export class CtxError extends Error {
 
 class CtxClient {
   private readonly session = new SessionTokens();
-  private refreshInFlight: { generation: number; accessToken: Promise<string | null> } | null = null;
   private serviceStateListener: ServiceStateListener | null = null;
 
   constructor(
@@ -455,27 +461,17 @@ class CtxClient {
     body: unknown,
     reportServiceState: boolean,
   ): Promise<T> {
-    return this.send<T>(
-      method,
-      path,
-      body,
-      { Authorization: `Bearer ${accessToken}` },
+    return this.send<T>(method, path, body, {
+      headers: { Authorization: `Bearer ${accessToken}` },
       reportServiceState,
-    );
+    });
   }
 
   private refresh(): Promise<string | null> {
     const generation = this.session.current();
-    if (this.refreshInFlight?.generation === generation) {
-      return this.refreshInFlight.accessToken;
-    }
-    const accessToken = this.rotateRefreshToken(generation).finally(() => {
-      if (this.refreshInFlight?.accessToken === accessToken) {
-        this.refreshInFlight = null;
-      }
-    });
-    this.refreshInFlight = { generation, accessToken };
-    return accessToken;
+    return this.session.refreshOnce(generation, () =>
+      tokenStore.exclusive(() => this.rotateRefreshToken(generation)),
+    );
   }
 
   private async rotateRefreshToken(generation: number): Promise<string | null> {
@@ -484,7 +480,7 @@ class CtxClient {
       return null;
     }
     try {
-      const tokens = await this.send<TokenPair>('POST', '/refresh-token', { refreshToken });
+      const tokens = await this.sendRefreshToken(refreshToken);
       return (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null;
     } catch (error) {
       if (!this.session.isCurrent(generation)) {
@@ -503,8 +499,24 @@ class CtxClient {
     await tokenStore.clear();
   }
 
+  private async sendRefreshToken(refreshToken: string): Promise<TokenPair> {
+    const request = () =>
+      this.send<TokenPair>('POST', '/refresh-token', { refreshToken }, { timeoutMs: Deadline.refreshMs });
+    try {
+      return await request();
+    } catch (error) {
+      if (!(error instanceof RequestTimeoutError)) {
+        throw error;
+      }
+      return request();
+    }
+  }
+
   private async startSession(tokens: TokenPair): Promise<void> {
-    await this.storeTokens(this.session.begin(), tokens);
+    const generation = this.session.begin();
+    await this.session.refreshOnce(generation, async () =>
+      (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null,
+    );
   }
 
   private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {
@@ -533,19 +545,22 @@ class CtxClient {
     method: string,
     path: string,
     body?: unknown,
-    headers: Record<string, string> = {},
-    reportServiceState = true,
+    { headers = {}, reportServiceState = true, timeoutMs = Deadline.requestMs }: SendOptions = {},
   ): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Client-Id': this.clientId,
-        ...headers,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
+    const response = await Deadline.run(timeoutMs, async (signal) => {
+      const answer = await fetch(`${this.baseUrl}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-Id': this.clientId,
+          ...headers,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal,
+      });
+      return { ok: answer.ok, status: answer.status, text: await answer.text() };
     });
-    const text = await response.text();
+    const { text } = response;
     if (!response.ok) {
       const error = new CtxError(response.status, text);
       const blocking = blockingServiceState(error.errorName());

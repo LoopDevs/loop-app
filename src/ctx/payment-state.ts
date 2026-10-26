@@ -2,7 +2,7 @@ export type PaymentState =
   | { kind: 'ready' }
   | { kind: 'movingSavings' }
   | { kind: 'sending' }
-  | { kind: 'confirming'; txId?: string }
+  | { kind: 'confirming'; txId?: string; expiryLedger?: number }
   | { kind: 'failed' }
   | { kind: 'priceExpired' }
   | { kind: 'notSent'; detail: string };
@@ -23,11 +23,43 @@ const paymentClosedMessage = 'payment is no longer open';
 
 export const rateLimitedMessage = 'Too many requests. Wait a few minutes and try again.';
 
-export function resumedPaymentState(giftCard: GiftCardPayment): PaymentState {
-  if (giftCard.status === 'unpaid' && giftCard.paymentCryptoTxId) {
+type SentRecord = {
+  expiryLedger: number;
+  txId?: string;
+};
+
+type ChainTransaction = {
+  status: string;
+  latestLedger: number;
+};
+
+export const landingGraceLedgers = 12;
+
+export function resumedPaymentState(giftCard: GiftCardPayment, sent?: SentRecord | null): PaymentState {
+  if (giftCard.status !== 'unpaid') {
+    return { kind: 'ready' };
+  }
+  if (giftCard.paymentCryptoTxId) {
     return { kind: 'confirming', txId: giftCard.paymentCryptoTxId };
   }
+  if (sent) {
+    return { kind: 'confirming', txId: sent.txId, expiryLedger: sent.expiryLedger };
+  }
   return { kind: 'ready' };
+}
+
+export function sentTransactionOutcome(
+  transaction: ChainTransaction,
+  expiryLedger?: number,
+): 'pending' | 'success' | 'failed' {
+  if (
+    transaction.status === 'NOT_FOUND' &&
+    expiryLedger !== undefined &&
+    transaction.latestLedger > expiryLedger + landingGraceLedgers
+  ) {
+    return 'failed';
+  }
+  return chainOutcome(transaction.status);
 }
 
 export function rejectedPaymentState(rejection: PayRejection): PaymentState | null {
