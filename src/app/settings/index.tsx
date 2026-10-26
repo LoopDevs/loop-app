@@ -1,18 +1,21 @@
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useCallback, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppLockToggle } from '@/components/app-lock';
 import { CountryPicker } from '@/components/country-picker';
-import { Button } from '@/components/form';
+import { Button, Notice } from '@/components/form';
+import { ListGroup, ListRow } from '@/components/list-row';
+import { PageHeader } from '@/components/page-header';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { type CountryChoice, Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -65,23 +68,37 @@ export default function SettingsScreen() {
       router.navigate('/');
     });
 
-  const errorText = message !== '' && (
-    <ThemedText type="small" selectable>
-      {message}
-    </ThemedText>
-  );
+  const confirmSignOut = () => {
+    const prompt = 'You can sign back in any time with your email.';
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm?.(`Sign out of Loop? ${prompt}`)) {
+        signOut();
+      }
+      return;
+    }
+    Alert.alert('Sign out of Loop?', prompt, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: signOut },
+    ]);
+  };
+
+  const errorText = message !== '' && <Notice message={message} />;
 
   if (profile && changingCountry) {
     return (
       <ThemedView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
-          <CountryPicker
-            profile={profile}
-            busy={busy}
-            onChoose={chooseCountry}
-            onCancel={() => setChangingCountry(false)}
-          />
-          {errorText}
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <PageHeader title="Change country" />
+          <View style={styles.body}>
+            <CountryPicker
+              profile={profile}
+              busy={busy}
+              onChoose={chooseCountry}
+              onCancel={() => setChangingCountry(false)}
+            />
+            {errorText}
+          </View>
         </ScrollView>
       </ThemedView>
     );
@@ -91,95 +108,117 @@ export default function SettingsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {signedIn === null && <OrderRowsSkeleton />}
+      <StatusBar style="light" />
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <PageHeader title="Settings" detail={profile?.email ?? undefined} />
+        <View style={styles.body}>
+          {signedIn === null && <OrderRowsSkeleton />}
 
-        {signedIn && !profile && busy && <OrderRowsSkeleton />}
-        {signedIn && !profile && !busy && <Button label="Retry" onPress={loadAccount} />}
+          {signedIn && !profile && busy && <OrderRowsSkeleton />}
+          {signedIn && !profile && !busy && message === '' && (
+            <Notice message="Your account details didn't load." actionLabel="Try again" onAction={loadAccount} />
+          )}
+          {signedIn && !profile && !busy && message !== '' && (
+            <Notice message={message} actionLabel="Try again" onAction={loadAccount} />
+          )}
 
-        {profile && (
-          <>
-            <Section title="Account">
-              {profile.email && <ThemedText>{profile.email}</ThemedText>}
-              {providerLabel && (
-                <ThemedText type="small" themeColor="textSecondary">
-                  {providerLabel}
-                </ThemedText>
-              )}
-            </Section>
+          {signedIn === false && (
+            <View style={styles.signedOut}>
+              <ThemedText type="heading">You&apos;re signed out</ThemedText>
+              <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
+            </View>
+          )}
 
-            <Section title="Region">
-              <Button
-                label={
-                  profile.country
-                    ? `Country: ${Profile.countryFlag(profile.country)} ${profile.country}`
-                    : 'Choose your country'
-                }
-                onPress={() => setChangingCountry(true)}
-                disabled={busy}
-              />
-              {profile.stableCurrency && (
-                <>
-                  <ThemedText>
-                    Cashback currency: {Profile.currencyLabel(profile.stableCurrency)}
-                  </ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Contact support to change
-                  </ThemedText>
-                </>
-              )}
-            </Section>
-          </>
-        )}
+          {profile && (
+            <>
+              <ListGroup title="Account">
+                <ListRow label="Email" value={profile.email ?? 'Not set'} />
+                {providerLabel && <ListRow label={providerLabel} />}
+              </ListGroup>
 
-        <AppLockToggle />
+              <ListGroup
+                title="Region"
+                footer={profile.stableCurrency ? 'Contact support to change your cashback currency.' : undefined}>
+                <ListRow
+                  label="Country"
+                  value={profile.country ?? 'Choose'}
+                  onPress={() => setChangingCountry(true)}
+                  disabled={busy}
+                />
+                {profile.stableCurrency && (
+                  <ListRow label="Cashback currency" value={Profile.currencyLabel(profile.stableCurrency)} />
+                )}
+                <ListRow label="Cashback" detail="Where it goes and what's on the way" onPress={() => router.push('/orders/cashback')} />
+              </ListGroup>
+            </>
+          )}
 
-        <Section title="Help and legal">
-          <Button label="Contact support" onPress={() => Linking.openURL(loopLinks.supportMail())} />
-          <Button label="Terms" onPress={() => openBrowserAsync(loopLinks.terms)} />
-          <Button label="Privacy Policy" onPress={() => openBrowserAsync(loopLinks.privacy)} />
-        </Section>
+          <AppLockToggle />
 
-        {profile && (
-          <>
-            <Section title="Your data">
-              <Button
-                label="Request my data"
-                onPress={() => Linking.openURL(loopLinks.supportMail('Data request'))}
-              />
-              <Button
-                label="Delete my account"
-                onPress={() =>
-                  Linking.openURL(
-                    loopLinks.supportMail(
-                      'Delete my account',
-                      `Please delete my Loop account.\n\nAccount email: ${profile.email ?? ''}`,
-                    ),
-                  )
-                }
-              />
-            </Section>
+          <ListGroup title="Help and legal">
+            <ListRow
+              label="Contact support"
+              trailing="external"
+              accessibilityRole="link"
+              onPress={() => Linking.openURL(loopLinks.supportMail())}
+            />
+            <ListRow
+              label="Terms"
+              trailing="external"
+              accessibilityRole="link"
+              onPress={() => openBrowserAsync(loopLinks.terms)}
+            />
+            <ListRow
+              label="Privacy Policy"
+              trailing="external"
+              accessibilityRole="link"
+              onPress={() => openBrowserAsync(loopLinks.privacy)}
+            />
+          </ListGroup>
 
-            <Button label="Sign out" onPress={signOut} disabled={busy} />
-          </>
-        )}
+          {profile && (
+            <>
+              <ListGroup title="Your data" footer="Both open an email to Loop support.">
+                <ListRow
+                  label="Request my data"
+                  trailing="external"
+                  onPress={() => Linking.openURL(loopLinks.supportMail('Data request'))}
+                />
+                <ListRow
+                  label="Delete my account"
+                  tone="danger"
+                  trailing="external"
+                  onPress={() =>
+                    Linking.openURL(
+                      loopLinks.supportMail(
+                        'Delete my account',
+                        `Please delete my Loop account.\n\nAccount email: ${profile.email ?? ''}`,
+                      ),
+                    )
+                  }
+                />
+              </ListGroup>
 
-        {errorText}
+              <ListGroup>
+                <ListRow
+                  label={busy ? 'Signing out…' : 'Sign out'}
+                  tone="danger"
+                  trailing="none"
+                  onPress={confirmSignOut}
+                  disabled={busy}
+                />
+              </ListGroup>
+            </>
+          )}
 
-        <ThemedText type="small" themeColor="textSecondary">
-          Version {Constants.expoConfig?.version}
-        </ThemedText>
+          {profile && errorText}
+
+          <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
+            Version {Constants.expoConfig?.version}
+          </ThemedText>
+        </View>
       </ScrollView>
     </ThemedView>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <ThemedText type="smallBold">{title}</ThemedText>
-      {children}
-    </View>
   );
 }
 
@@ -187,12 +226,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    padding: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
+  scroll: {
+    paddingBottom: BottomTabInset + Spacing.five,
+  },
+  body: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.four,
     gap: Spacing.four,
   },
-  section: {
-    gap: Spacing.two,
+  signedOut: {
+    gap: Spacing.three,
+  },
+  version: {
+    textAlign: 'center',
   },
 });

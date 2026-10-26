@@ -1,13 +1,12 @@
 import { useFocusEffect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Switch, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Wordmark } from '@/components/wordmark';
+import { Brand, FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
@@ -206,17 +205,33 @@ type LockViewProps = {
 
 function LockView({ showUnlock, message, onUnlock }: LockViewProps) {
   return (
-    <ThemedView style={[StyleSheet.absoluteFill, styles.lock]}>
+    <View style={[StyleSheet.absoluteFill, styles.lock]}>
       <SafeAreaView style={styles.safeArea}>
-        {showUnlock && (
-          <View style={styles.content} accessibilityLiveRegion="polite">
-            <ThemedText type="subtitle">Loop is locked</ThemedText>
-            <Button label="Unlock" onPress={onUnlock} />
-            {message !== '' && <ThemedText type="small">{message}</ThemedText>}
-          </View>
-        )}
+        <View style={styles.content} accessibilityLiveRegion="polite">
+          <Wordmark height={32} />
+          {showUnlock && (
+            <>
+              <Text style={styles.lockTitle} accessibilityRole="header" maxFontSizeMultiplier={1.6}>
+                Loop is locked
+              </Text>
+              <Pressable
+                onPress={onUnlock}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.unlock, pressed && styles.unlockPressed]}>
+                <Text style={styles.unlockLabel} maxFontSizeMultiplier={1.6}>
+                  Unlock
+                </Text>
+              </Pressable>
+              {message !== '' && (
+                <Text style={styles.lockMessage} maxFontSizeMultiplier={1.6}>
+                  {message}
+                </Text>
+              )}
+            </>
+          )}
+        </View>
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -238,6 +253,7 @@ const styles = StyleSheet.create({
   lock: {
     justifyContent: 'center',
     flexDirection: 'row',
+    backgroundColor: Brand.royal,
   },
   safeArea: {
     flex: 1,
@@ -247,6 +263,35 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
-    gap: Spacing.three,
+    gap: Spacing.four,
+  },
+  lockTitle: {
+    color: Brand.onRoyal,
+    fontFamily: FontFamily.bold,
+    fontSize: 30,
+    lineHeight: 36,
+  },
+  unlock: {
+    minHeight: 50,
+    borderRadius: Radius.control,
+    backgroundColor: Brand.onRoyal,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+  },
+  unlockPressed: {
+    opacity: 0.85,
+  },
+  unlockLabel: {
+    color: Brand.navy,
+    fontFamily: FontFamily.semibold,
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  lockMessage: {
+    color: Brand.onRoyalMuted,
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    lineHeight: 20,
   },
 });

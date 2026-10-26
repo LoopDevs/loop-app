@@ -7,7 +7,7 @@ export const unstable_settings = {
 export default function SettingsLayout() {
   return (
     <Stack>
-      <Stack.Screen name="index" options={{ title: 'Settings' }} />
+      <Stack.Screen name="index" options={{ title: 'Settings', headerShown: false }} />
     </Stack>
   );
 }
