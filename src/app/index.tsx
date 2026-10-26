@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Field } from '@/components/form';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
+import { BalanceSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network } from '@/stellar/network';
@@ -23,6 +25,7 @@ export default function HomeScreen() {
   const [balances, setBalances] = useState<Balances | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     setBusy(true);
@@ -71,9 +74,24 @@ export default function HomeScreen() {
       await showWallet(await SmartWallet.create(email.trim() || 'Loop wallet'));
     });
 
-  const refreshBalances = useCallback(() => {
-    wallet?.balances().then(setBalances, (error) => setMessage(errorMessage(error)));
+  const refreshBalances = useCallback(async () => {
+    if (!wallet) {
+      return;
+    }
+    try {
+      setBalances(await wallet.balances());
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
   }, [wallet]);
+
+  useAppRefresh(refreshBalances);
+
+  const pullToRefresh = async () => {
+    setRefreshing(true);
+    await refreshBalances();
+    setRefreshing(false);
+  };
 
   const fund = () =>
     run(async () => {
@@ -108,10 +126,16 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={
+            screen === 'wallet' ? (
+              <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} />
+            ) : undefined
+          }>
           <ThemedText type="subtitle">Loop</ThemedText>
 
-          {screen === 'loading' && <ThemedText>Loading…</ThemedText>}
+          {screen === 'loading' && <BalanceSkeleton />}
 
           {screen === 'email' && (
             <>
@@ -146,6 +170,7 @@ export default function HomeScreen() {
               <ThemedText type="code" selectable>
                 {wallet.address}
               </ThemedText>
+              {!balances && <BalanceSkeleton />}
               {balances?.tokens.map(({ token, amount }) => (
                 <ThemedText key={token.currency}>
                   {token.symbol}: {money.token(amount, token.currency)}

@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
+import { OrderDetailSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -56,7 +57,7 @@ export default function GiftCardScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        {!giftCard && !message && <ThemedText type="small">Loading…</ThemedText>}
+        {!giftCard && !message && <OrderDetailSkeleton />}
         {message !== '' && (
           <>
             <ThemedText type="small">{message}</ThemedText>
