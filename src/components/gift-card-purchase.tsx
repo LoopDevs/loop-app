@@ -2,10 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { Button, Field, Notice } from '@/components/form';
+import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Motion, Radius, Spacing } from '@/constants/theme';
@@ -36,6 +37,7 @@ import {
 } from '@/ctx/payment-state';
 import { SentPayments } from '@/ctx/sent-payments';
 import { PriceWindow } from '@/ctx/price-window';
+import { Profile } from '@/ctx/profile';
 import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
@@ -285,7 +287,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       }
       const token = network.tokens.find((candidate) => candidate.currency === order.paymentCryptoCurrency);
       if (!token) {
-        throw new Error('This order is priced in a currency this wallet cannot pay');
+        throw new Error('This order is priced in a currency your balance cannot pay');
       }
       stopFollowing();
       showNewOrder(
@@ -531,7 +533,8 @@ function tokenSymbol(currency: string): string {
 }
 
 function tokenLabel(token: Token, holdings: Holdings | null): string {
-  return holdings ? `${token.symbol} ${money.token(holdings.spendable(token.currency), token.currency)}` : token.symbol;
+  const name = Profile.currencyLabel(token.currency);
+  return holdings ? `${name} ${money.token(holdings.spendable(token.currency), token.currency)}` : name;
 }
 
 function orderPrice(order: GiftCard): bigint | null {
@@ -632,7 +635,7 @@ function OrderView({ order, coverage, topUpPending, payment, busy, onPay, onNewP
       {outcome && <Notice message={outcome} />}
       {shown.kind === 'notSent' && shown.detail !== '' && <Notice message={shown.detail} />}
       {order.status === 'unpaid' && needsSupport(shown) && (
-        <Notice message="This payment isn't on the network. Contact support about this order." />
+        <Notice message="We couldn't find this payment. Contact support about this order." />
       )}
       {expired && (
         <Notice tone="neutral" message="This price has expired. Get a new price to finish your order." />
@@ -685,6 +688,9 @@ function PaymentProgress({ step, label, failed }: { step: number; label: string;
       <View style={styles.progressBars}>
         {progressLabels.map((stepLabel, index) => (
           <View key={stepLabel} style={styles.progressStep}>
+            {index === step && working ? (
+              <Skeleton width="100%" height={styles.progressBar.height} color={theme.accent} />
+            ) : (
             <View
               style={[
                 styles.progressBar,
@@ -697,10 +703,10 @@ function PaymentProgress({ step, label, failed }: { step: number; label: string;
                           ? theme.danger
                           : theme.accent
                         : theme.backgroundSelected,
-                  opacity: index === step && working ? 0.6 : 1,
                 },
               ]}
             />
+            )}
             <ThemedText type="caption" themeColor={index <= step ? 'text' : 'textSecondary'}>
               {stepLabel}
             </ThemedText>
@@ -708,7 +714,6 @@ function PaymentProgress({ step, label, failed }: { step: number; label: string;
         ))}
       </View>
       <View style={styles.statusRow}>
-        {working && <ActivityIndicator size="small" color={theme.accent} />}
         <ThemedText type="smallBold" themeColor={failed ? 'danger' : 'text'}>
           {label}
         </ThemedText>

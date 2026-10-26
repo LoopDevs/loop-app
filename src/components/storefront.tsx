@@ -32,22 +32,44 @@ export type Catalog = {
   total: number;
 };
 
+const catalogRequests = new Map<string, Promise<Catalog>>();
+const loadedCatalogs = new Map<string, Catalog>();
+
+function loadCatalog(country: string): Promise<Catalog> {
+  const pending = catalogRequests.get(country);
+  if (pending) {
+    return pending;
+  }
+  const request = ctx
+    .merchants({ country, perPage: catalogScanSize })
+    .then(({ result, pagination }) => {
+      const catalog = {
+        top: Merchant.byCashback(result).filter((merchant) => merchant.cashbackBasisPoints() > 0),
+        categories: Merchant.categoriesOf(result),
+        total: pagination.total,
+      };
+      loadedCatalogs.set(country, catalog);
+      return catalog;
+    })
+    .catch(() => {
+      catalogRequests.delete(country);
+      return { top: [], categories: [], total: 0 };
+    });
+  catalogRequests.set(country, request);
+  return request;
+}
+
 export function useCatalog(country: string | undefined) {
-  const [loaded, setLoaded] = useState<{ country: string; catalog: Catalog } | null>(null);
+  const [loaded, setLoaded] = useState<{ country: string; catalog: Catalog } | null>(() => {
+    const cached = country ? loadedCatalogs.get(country) : undefined;
+    return country && cached ? { country, catalog: cached } : null;
+  });
   useEffect(() => {
     if (!country) {
       return;
     }
     let current = true;
-    ctx
-      .merchants({ country, perPage: catalogScanSize })
-      .then(({ result, pagination }) => ({
-        top: Merchant.byCashback(result).filter((merchant) => merchant.cashbackBasisPoints() > 0),
-        categories: Merchant.categoriesOf(result),
-        total: pagination.total,
-      }))
-      .catch(() => ({ top: [], categories: [], total: 0 }))
-      .then((catalog) => current && setLoaded({ country, catalog }));
+    loadCatalog(country).then((catalog) => current && setLoaded({ country, catalog }));
     return () => {
       current = false;
     };
@@ -91,8 +113,8 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
           </Text>
           <Text style={styles.heroLine} maxFontSizeMultiplier={1.6}>
             {best
-              ? `Buy gift cards for the shops you already use and earn up to ${best.rateFigure()} cashback in ${Market.countryName(country)}, paid into a wallet only you control.`
-              : 'Buy gift cards for the shops you already use and earn cashback on every card, paid into a wallet only you control.'}
+              ? `Buy gift cards for the shops you already use and earn up to ${best.rateFigure()} cashback in ${Market.countryName(country)}.`
+              : 'Buy gift cards for the shops you already use and earn cashback on every card.'}
           </Text>
           <SearchBar value={search} onChangeText={onSearch} onSubmit={onSubmitSearch} large />
         </Animated.View>
@@ -429,19 +451,19 @@ const steps: Step[] = [
   },
   {
     icon: { ios: 'wallet.pass', android: 'account_balance_wallet', web: 'account_balance_wallet' },
-    title: 'Pay from your wallet',
-    body: 'Pay from your Loop wallet. Your card number and PIN appear in Loop when it is ready.',
+    title: 'Pay from your balance',
+    body: 'Pay from your Loop balance. Your card number and PIN appear in Loop when it is ready.',
   },
   {
     icon: { ios: 'arrow.uturn.backward', android: 'replay', web: 'replay' },
     title: 'Earn cashback',
-    body: 'Cashback from every card goes back into your wallet, where savings earn yield.',
+    body: 'Cashback from every card goes straight into your balance, where your savings grow.',
   },
 ];
 
 const trust = [
-  'A passkey on your device secures your wallet',
-  'Your money sits in a wallet you own, not a points scheme',
+  'Sign in with Face ID or your fingerprint, with no password to remember',
+  'Cashback is real money in your balance, not points',
   'Exact prices and cashback shown before you pay',
 ];
 
@@ -484,12 +506,7 @@ export function SiteFooter() {
   return (
     <Animated.View entering={FadeIn} style={[styles.footer, { borderTopColor: theme.border }]}>
       <PageWidth style={[styles.footerInner, wide && styles.footerInnerWide]}>
-        <View style={styles.footerBrand}>
-          <Wordmark height={18} color={theme.text} />
-          <ThemedText type="small" themeColor="textSecondary">
-            Gift card cashback, paid into a wallet you own.
-          </ThemedText>
-        </View>
+        <Wordmark height={18} color={theme.text} />
         <View style={styles.footerLinks}>
           <ExternalLink href={loopLinks.terms}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.footerLink}>
@@ -795,9 +812,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  footerBrand: {
-    gap: Spacing.two,
   },
   footerLinks: {
     flexDirection: 'row',

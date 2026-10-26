@@ -21,9 +21,10 @@ type SkeletonProps = {
   width: DimensionValue;
   height?: number;
   aspectRatio?: number;
+  color?: string;
 };
 
-export function Skeleton({ width, height, aspectRatio }: SkeletonProps) {
+export function Skeleton({ width, height, aspectRatio, color }: SkeletonProps) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const opacity = useSharedValue(1);
@@ -43,7 +44,7 @@ export function Skeleton({ width, height, aspectRatio }: SkeletonProps) {
     <Animated.View
       style={[
         styles.block,
-        { width, height, aspectRatio, backgroundColor: theme.backgroundElement },
+        { width, height, aspectRatio, backgroundColor: color ?? theme.backgroundElement },
         animated,
       ]}
     />

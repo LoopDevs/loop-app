@@ -37,7 +37,7 @@ export function HomeActions({
       />
       <Action
         label="Cashback"
-        icon={{ ios: 'percent', android: 'percent', web: 'percent' }}
+        icon={{ ios: 'arrow.uturn.backward', android: 'replay', web: 'replay' }}
         onPress={onCashback}
       />
       <Action

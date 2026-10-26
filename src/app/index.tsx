@@ -1,10 +1,10 @@
-import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useRef, useState } from 'react';
 import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
+import { AddMoney } from '@/components/add-money';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
@@ -23,7 +23,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
-import { BottomTabInset, Brand, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset, Brand, Layout, MaxContentWidth, Motion, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -31,8 +31,6 @@ import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
-import { useTheme } from '@/hooks/use-theme';
-import { network } from '@/stellar/network';
 import { SmartWallet } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'wallet';
@@ -41,7 +39,7 @@ const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [screen, setScreen] = useState<Screen>('loading');
+  const [screen, setScreen] = useState<Screen>(Platform.OS === 'web' ? 'signed-out' : 'loading');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const { view, refresh } = useHoldings(wallet);
@@ -86,6 +84,7 @@ export default function HomeScreen() {
     try {
       if (await ctx.isSignedIn()) {
         if (preWalletScreens.includes(screen) && !walletLoadStarted.current) {
+          setScreen('loading');
           loadProfileCountry();
           await loadWallet();
         }
@@ -142,25 +141,8 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const fund = () =>
-    run(async () => {
-      if (!wallet) {
-        return;
-      }
-      await wallet.fundWithFriendbot();
-      await refresh();
-    });
-
   const [depositOpen, setDepositOpen] = useState(false);
   const { onScroll, scrim, backdrop } = useScrimScroll();
-
-  const copyAddress = async () => {
-    if (!wallet) {
-      return;
-    }
-    await Clipboard.setStringAsync(wallet.address);
-    toast('Address copied');
-  };
 
   const confirmWithdraw = () => {
     const prompt = 'Move your savings back to your account balance?';
@@ -190,7 +172,6 @@ export default function HomeScreen() {
       await refresh();
     });
 
-  const theme = useTheme();
   const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
 
   if (screen === 'signed-out') {
@@ -239,32 +220,20 @@ export default function HomeScreen() {
 
         <View style={[styles.content, wide && styles.contentWide]}>
           {screen === 'wallet' && wallet && depositOpen && (
-            <Animated.View
-              entering={FadeInDown.duration(Motion.state)}
-              style={[styles.sheet, styles.deposit, { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText type="heading">Add money</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Send money on the Stellar network to this address. It shows here once it arrives.
-              </ThemedText>
-              <ThemedText type="code" selectable>
-                {wallet.address}
-              </ThemedText>
-              <Button label="Copy address" variant="primary" onPress={copyAddress} />
-              {network.friendbotUrl && (
-                <Button label="Fund with testnet XLM" onPress={fund} disabled={busy} />
-              )}
+            <Animated.View entering={FadeInDown.duration(Motion.state)}>
+              <AddMoney wallet={wallet} view={view} refresh={refresh} onClose={() => setDepositOpen(false)} />
             </Animated.View>
           )}
 
           {screen === 'no-wallet' && (
             <Animated.View entering={FadeIn.duration(Motion.state)} style={[styles.sheet, styles.form]}>
-              <ThemedText type="subtitle">Set up your wallet</ThemedText>
+              <ThemedText type="subtitle">Finish setting up Loop</ThemedText>
               <ThemedText themeColor="textSecondary">
-                Your wallet holds your money and cashback. A passkey on this device keeps it
-                yours, with no password to remember.
+                Turn on Face ID or your fingerprint to keep your balance and cashback safe, with no
+                password to remember.
               </ThemedText>
               <Button
-                label={busy ? 'Creating wallet…' : 'Create wallet'}
+                label={busy ? 'Setting up…' : 'Turn on Face ID or fingerprint'}
                 variant="primary"
                 onPress={createWallet}
                 disabled={busy}
@@ -393,10 +362,5 @@ const styles = StyleSheet.create({
   },
   form: {
     maxWidth: Layout.formMaxWidth,
-  },
-  deposit: {
-    padding: Spacing.three,
-    borderRadius: Radius.control,
-    maxWidth: Layout.formMaxWidth * 1.5,
   },
 });
