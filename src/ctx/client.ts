@@ -1,31 +1,23 @@
 import { Account } from '@/ctx/account';
+import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
-import { Deadline, RequestTimeoutError } from '@/ctx/deadline';
+import { Deadline } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
-import { rateLimitedMessage } from '@/ctx/payment-state';
 import type { PayoutJson } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
-import {
-  blockingServiceState,
-  serviceState,
-  serviceStateMessages,
-  type BlockingServiceState,
-} from '@/ctx/service-state';
+import { blockingServiceState, type BlockingServiceState } from '@/ctx/service-state';
 import { errorReporting } from '@/ops/error-reporting';
+import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
 import {
   oauthLoginBody,
   signInRefusalMessage,
   type SignInMethod,
   type SocialProvider,
 } from '@/session/social-sign-in';
-import { SessionTokens } from '@/session/session-tokens';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
-type TokenPair = {
-  accessToken: string;
-  refreshToken: string;
-};
+export { CtxError };
 
 export type WalletLink = {
   id: string;
@@ -83,7 +75,7 @@ export type MerchantQuery = {
   country: string;
   name?: string;
   ids?: string[];
-  order?: 'name' | '-discount';
+  order?: 'name';
   page?: number;
   perPage?: number;
 };
@@ -206,58 +198,14 @@ export type ServiceStatus = {
 
 type ServiceStateListener = (state: BlockingServiceState) => void;
 
-type SendOptions = {
-  headers?: Record<string, string>;
-  reportServiceState?: boolean;
-  timeoutMs?: number;
-};
-
 export type SponsoredResult = {
   hash: string;
   status: string;
   error?: string;
 };
 
-export class CtxError extends Error {
-  constructor(
-    readonly status: number,
-    readonly body: string,
-  ) {
-    super(CtxError.displayMessage(status, body));
-  }
-
-  errorName(): string | undefined {
-    return this.bodyField('error');
-  }
-
-  bodyField(name: string): string | undefined {
-    return CtxError.field(this.body, name);
-  }
-
-  private static displayMessage(status: number, body: string): string {
-    if (status === 429) {
-      return rateLimitedMessage;
-    }
-    const state = serviceState(CtxError.field(body, 'error'));
-    return state ? serviceStateMessages[state] : `CTX ${status}: ${body}`;
-  }
-
-  private static field(body: string, name: string): string | undefined {
-    try {
-      const parsed: unknown = JSON.parse(body);
-      if (parsed && typeof parsed === 'object') {
-        const value = (parsed as Record<string, unknown>)[name];
-        return typeof value === 'string' ? value : undefined;
-      }
-    } catch {
-      return undefined;
-    }
-    return undefined;
-  }
-}
-
 class CtxClient {
-  private readonly session = new SessionTokens();
+  private readonly auth = new SessionAuth(this.send.bind(this), tokenStore);
   private serviceStateListener: ServiceStateListener | null = null;
 
   constructor(
@@ -279,8 +227,8 @@ class CtxClient {
     return { maintenance: maintenance === true };
   }
 
-  async hasSession(): Promise<boolean> {
-    return this.session.token() !== null || (await tokenStore.readRefreshToken()) !== null;
+  hasSession(): Promise<boolean> {
+    return this.auth.hasSession();
   }
 
   async requestCode(email: string): Promise<void> {
@@ -288,30 +236,30 @@ class CtxClient {
   }
 
   async verifyCode(email: string, code: string): Promise<void> {
-    await this.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+    await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
   }
 
   async signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
-    await this.startSession(
+    await this.auth.startSession(
       await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
     );
   }
 
   async isSignedIn(): Promise<boolean> {
-    return (await this.getAccessToken()) !== null;
+    return (await this.auth.accessToken()) !== null;
   }
 
   async signOut(): Promise<void> {
-    await this.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
-    await this.clearSession();
+    await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
+    await this.auth.clearSession();
   }
 
   async userId(): Promise<string> {
-    return this.userIdFrom(await this.requireAccessToken());
+    return this.userIdFrom(await this.auth.requireAccessToken());
   }
 
   async me(): Promise<Profile> {
-    return Profile.fromMe(await this.sessionRequest<MeJson>('GET', '/me'));
+    return Profile.fromMe(await this.auth.sessionRequest<MeJson>('GET', '/me'));
   }
 
   updateUser(update: UserUpdate): Promise<UserJson> {
@@ -337,7 +285,7 @@ class CtxClient {
     if (perPage) {
       query.set('perPage', String(perPage));
     }
-    const { result, pagination } = await this.sessionRequest<{
+    const { result, pagination } = await this.auth.sessionRequest<{
       result: MerchantJson[] | null;
       pagination: Pagination;
     }>('GET', `/merchants?${query}`);
@@ -345,17 +293,17 @@ class CtxClient {
   }
 
   async merchant(idOrSlug: string): Promise<Merchant> {
-    const json = await this.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
+    const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
     return new Merchant(json);
   }
 
   orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
-    return this.sessionRequest('POST', '/gift-cards', body);
+    return this.auth.sessionRequest('POST', '/gift-cards', body);
   }
 
   giftCard(id: string): Promise<GiftCard> {
-    return this.sessionRequest('GET', `/gift-cards/${id}`);
+    return this.auth.sessionRequest('GET', `/gift-cards/${id}`);
   }
 
   async giftCards({ merchantId, status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
@@ -378,7 +326,7 @@ class CtxClient {
     if (perPage) {
       query.set('perPage', String(perPage));
     }
-    const { result, pagination } = await this.sessionRequest<{
+    const { result, pagination } = await this.auth.sessionRequest<{
       result: GiftCard[] | null;
       pagination: Pagination;
     }>('GET', `/gift-cards?${query}`);
@@ -412,111 +360,9 @@ class CtxClient {
     return this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed });
   }
 
-  private async getAccessToken(): Promise<string | null> {
-    return this.session.token() ?? this.refresh();
-  }
-
   private async userRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const accessToken = await this.requireAccessToken();
-    return this.sessionRequest<T>(method, `/users/${this.userIdFrom(accessToken)}${path}`, body);
-  }
-
-  private async requireAccessToken(): Promise<string> {
-    const accessToken = await this.getAccessToken();
-    if (!accessToken) {
-      throw new Error('Sign in first');
-    }
-    return accessToken;
-  }
-
-  private async sessionRequest<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    reportServiceState = true,
-  ): Promise<T> {
-    const generation = this.session.current();
-    const accessToken = await this.requireAccessToken();
-    try {
-      return await this.authorized<T>(accessToken, method, path, body, reportServiceState);
-    } catch (error) {
-      if (!(error instanceof CtxError) || error.status !== 401) {
-        throw error;
-      }
-      if (!this.session.reject(generation, accessToken)) {
-        throw error;
-      }
-      const refreshed = await this.getAccessToken();
-      if (!refreshed || !this.session.isCurrent(generation)) {
-        throw error;
-      }
-      return this.authorized<T>(refreshed, method, path, body, reportServiceState);
-    }
-  }
-
-  private authorized<T>(
-    accessToken: string,
-    method: string,
-    path: string,
-    body: unknown,
-    reportServiceState: boolean,
-  ): Promise<T> {
-    return this.send<T>(method, path, body, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      reportServiceState,
-    });
-  }
-
-  private refresh(): Promise<string | null> {
-    const generation = this.session.current();
-    return this.session.refreshOnce(generation, () =>
-      tokenStore.exclusive(() => this.rotateRefreshToken(generation)),
-    );
-  }
-
-  private async rotateRefreshToken(generation: number): Promise<string | null> {
-    const refreshToken = await tokenStore.readRefreshToken();
-    if (!refreshToken || !this.session.isCurrent(generation)) {
-      return null;
-    }
-    try {
-      const tokens = await this.sendRefreshToken(refreshToken);
-      return (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null;
-    } catch (error) {
-      if (!this.session.isCurrent(generation)) {
-        return null;
-      }
-      if (error instanceof CtxError && error.status === 401) {
-        await this.clearSession();
-        return null;
-      }
-      throw error;
-    }
-  }
-
-  private async clearSession(): Promise<void> {
-    this.session.begin();
-    await tokenStore.clear();
-  }
-
-  private async sendRefreshToken(refreshToken: string): Promise<TokenPair> {
-    const request = () =>
-      this.send<TokenPair>('POST', '/refresh-token', { refreshToken }, { timeoutMs: Deadline.refreshMs });
-    try {
-      return await request();
-    } catch (error) {
-      if (!(error instanceof RequestTimeoutError)) {
-        throw error;
-      }
-      return request();
-    }
-  }
-
-  private async startSession(tokens: TokenPair): Promise<void> {
-    const generation = this.session.begin();
-    await this.session.refreshOnce(generation, async () =>
-      (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null,
-    );
+    const accessToken = await this.auth.requireAccessToken();
+    return this.auth.sessionRequest<T>(method, `/users/${this.userIdFrom(accessToken)}${path}`, body);
   }
 
   private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {
@@ -526,14 +372,6 @@ class CtxClient {
       const refusal = error instanceof CtxError ? signInRefusalMessage(method, error.errorName()) : null;
       throw refusal ? new Error(refusal, { cause: error }) : error;
     }
-  }
-
-  private async storeTokens(generation: number, tokens: TokenPair): Promise<boolean> {
-    if (!this.session.isCurrent(generation)) {
-      return false;
-    }
-    await tokenStore.writeRefreshToken(tokens.refreshToken);
-    return this.session.adopt(generation, tokens.accessToken);
   }
 
   private userIdFrom(accessToken: string): string {

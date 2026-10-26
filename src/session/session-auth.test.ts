@@ -1,0 +1,168 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { CtxError } from '../ctx/ctx-error.ts';
+import { SessionAuth, type RefreshTokenStore, type Send, type SendOptions } from './session-auth.ts';
+
+type Call = {
+  path: string;
+  token: string | undefined;
+};
+
+type Route = (call: Call) => Promise<unknown>;
+
+class FakeCtx {
+  readonly calls: Call[] = [];
+  readonly route: Route;
+
+  constructor(route: Route) {
+    this.route = route;
+  }
+
+  send: Send = <T>(_method: string, path: string, _body?: unknown, options?: SendOptions): Promise<T> => {
+    const call = { path, token: options?.headers?.Authorization?.replace('Bearer ', '') };
+    this.calls.push(call);
+    return this.route(call) as Promise<T>;
+  };
+
+  refreshes(): number {
+    return this.calls.filter((call) => call.path === '/refresh-token').length;
+  }
+
+  tokensFor(path: string): (string | undefined)[] {
+    return this.calls.filter((call) => call.path === path).map((call) => call.token);
+  }
+}
+
+class MemoryStore implements RefreshTokenStore {
+  refreshToken: string | null;
+  pendingWrite: Promise<void> = Promise.resolve();
+
+  constructor(refreshToken: string | null) {
+    this.refreshToken = refreshToken;
+  }
+
+  async readRefreshToken(): Promise<string | null> {
+    return this.refreshToken;
+  }
+
+  async writeRefreshToken(token: string): Promise<void> {
+    await this.pendingWrite;
+    this.refreshToken = token;
+  }
+
+  async clear(): Promise<void> {
+    this.refreshToken = null;
+  }
+
+  exclusive<T>(task: () => Promise<T>): Promise<T> {
+    return task();
+  }
+}
+
+class Gate {
+  readonly opened: Promise<void>;
+  open: () => void = () => undefined;
+
+  constructor() {
+    this.opened = new Promise((resolve) => {
+      this.open = resolve;
+    });
+  }
+}
+
+const unauthorized = () => new CtxError(401, '{"error":"unauthorized"}');
+
+test('a call made during sign-in waits for and uses the new tokens', async () => {
+  const ctx = new FakeCtx(async () => ({ ok: true }));
+  const store = new MemoryStore('r-old');
+  const write = new Gate();
+  store.pendingWrite = write.opened;
+  const auth = new SessionAuth(ctx.send, store);
+
+  const signingIn = auth.startSession({ accessToken: 'a-new', refreshToken: 'r-new' });
+  const request = auth.sessionRequest('GET', '/me');
+  write.open();
+  await Promise.all([signingIn, request]);
+
+  assert.deepEqual(ctx.tokensFor('/me'), ['a-new']);
+  assert.equal(ctx.refreshes(), 0);
+  assert.equal(store.refreshToken, 'r-new');
+});
+
+test('a late 401 after a refresh retries with the new token without rotating again', async () => {
+  const late = new Gate();
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    if (token === 'a2') {
+      return { ok: true };
+    }
+    if (path === '/slow') {
+      await late.opened;
+    }
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null));
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  const slow = auth.sessionRequest('GET', '/slow');
+  await auth.sessionRequest('GET', '/fast');
+  late.open();
+  await slow;
+
+  assert.equal(ctx.refreshes(), 1);
+  assert.deepEqual(ctx.tokensFor('/slow'), ['a1', 'a2']);
+  assert.deepEqual(ctx.tokensFor('/fast'), ['a1', 'a2']);
+});
+
+test('a refresh retries once after a network error', async () => {
+  let attempts = 0;
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new TypeError('Network request failed');
+      }
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    return { ok: true };
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'));
+
+  await auth.sessionRequest('GET', '/me');
+
+  assert.equal(ctx.refreshes(), 2);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a2']);
+});
+
+test('a refresh refused by CTX is not retried', async () => {
+  const refused = new CtxError(500, '{"error":"internal"}');
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      throw refused;
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore('r1');
+  const auth = new SessionAuth(ctx.send, store);
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), refused);
+
+  assert.equal(ctx.refreshes(), 1);
+  assert.equal(store.refreshToken, 'r1');
+});
+
+test('concurrent refreshes share one rotation', async () => {
+  const ctx = new FakeCtx(async ({ path }) =>
+    path === '/refresh-token' ? { accessToken: 'a2', refreshToken: 'r2' } : { ok: true },
+  );
+  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'));
+
+  await Promise.all([auth.sessionRequest('GET', '/one'), auth.sessionRequest('GET', '/two')]);
+
+  assert.equal(ctx.refreshes(), 1);
+  assert.deepEqual(ctx.tokensFor('/one'), ['a2']);
+  assert.deepEqual(ctx.tokensFor('/two'), ['a2']);
+});
