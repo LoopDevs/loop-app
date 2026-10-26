@@ -59,7 +59,7 @@ export function HomePanel({ view, signedIn, children }: HomePanelProps) {
         {signedIn ? (
           <Balance view={view} />
         ) : (
-          <Text style={styles.pitch} accessibilityRole="header">
+          <Text style={styles.pitch} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
             Gift cards that pay you back.
           </Text>
         )}

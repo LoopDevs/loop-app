@@ -167,7 +167,7 @@ export default function CashbackScreen() {
             <Pressable
               onPress={() => router.navigate('/orders')}
               accessibilityRole="link"
-              style={styles.note}>
+              style={[styles.note, styles.link]}>
               <ThemedText type="linkPrimary">Cashback still settling is shown on each order</ThemedText>
             </Pressable>
           </View>
@@ -210,5 +210,9 @@ const styles = StyleSheet.create({
   },
   note: {
     paddingHorizontal: Spacing.one,
+  },
+  link: {
+    minHeight: 44,
+    justifyContent: 'center',
   },
 });
