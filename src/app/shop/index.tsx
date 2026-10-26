@@ -181,6 +181,16 @@ export default function ShopScreen() {
       setSearch('');
     });
 
+  const selectCategory = (choice: MerchantCategory | null) => {
+    if (choice?.value === category?.value) {
+      return;
+    }
+    latestRequest.current++;
+    setMerchants([]);
+    setPage(0);
+    setCategory(choice);
+  };
+
   const loadMore = () => {
     if (!busy && page > 0 && page < pages) {
       loadMerchants(page + 1);
@@ -272,13 +282,13 @@ export default function ShopScreen() {
               showsHorizontalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.chips}>
-              <Button label="All" selected={category === null} onPress={() => setCategory(null)} />
+              <Button label="All" selected={category === null} onPress={() => selectCategory(null)} />
               {Merchant.categories.map((choice) => (
                 <Button
                   key={choice.value}
                   label={choice.label}
                   selected={category?.value === choice.value}
-                  onPress={() => setCategory(choice)}
+                  onPress={() => selectCategory(choice)}
                 />
               ))}
             </ScrollView>
@@ -299,7 +309,7 @@ export default function ShopScreen() {
           ) : listing.message !== '' ? undefined : category ? (
             <>
               <ThemedText type="small">{`No ${category.label} gift cards here yet`}</ThemedText>
-              <Button label="See all" onPress={() => setCategory(null)} />
+              <Button label="See all" onPress={() => selectCategory(null)} />
             </>
           ) : (
             <ThemedText type="small">No gift cards found.</ThemedText>
