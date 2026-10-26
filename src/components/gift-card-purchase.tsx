@@ -44,8 +44,9 @@ import { soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
 import type { Coverage, Holdings } from '@/wallet/holdings';
-import { SavingsTopUp, type PendingWithdrawal, type TopUpOutcome } from '@/wallet/savings-top-up';
+import { SavingsTopUp, type TopUpOutcome } from '@/wallet/savings-top-up';
 import type { SmartWallet } from '@/wallet/smart-wallet';
+import type { PendingVaultCall } from '@/wallet/vault-call';
 
 type Props = {
   merchant: Merchant;
@@ -104,7 +105,7 @@ function payRejection(error: unknown): PayRejection | undefined {
 
 const sentPayments = new SentPayments(AsyncStorage);
 const paymentSender = new PaymentSender(sentPayments, payRejection, paymentLock);
-const pendingTopUps = new Map<string, PendingWithdrawal>();
+const pendingTopUps = new Map<string, PendingVaultCall>();
 const inFlightPayments = new InFlightPayments();
 
 export function GiftCardPurchase({ merchant, wallet }: Props) {

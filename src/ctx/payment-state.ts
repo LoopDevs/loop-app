@@ -33,7 +33,7 @@ type SentRecord = {
   txId?: string;
 };
 
-type ChainTransaction = {
+export type ChainTransaction = {
   status: string;
   latestLedger: number;
 };

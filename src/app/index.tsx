@@ -20,6 +20,8 @@ import { useHoldings } from '@/hooks/use-holdings';
 import { socialSignIn } from '@/native/social-sign-in';
 import type { SocialProvider } from '@/session/social-sign-in';
 import { network } from '@/stellar/network';
+import { units } from '@/stellar/units';
+import { Savings } from '@/wallet/savings';
 import { SmartWallet } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'email' | 'code' | 'no-wallet' | 'wallet';
@@ -37,8 +39,12 @@ export default function HomeScreen() {
   const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
+  const walletUsdc = view?.holdings.inWallet(Savings.currency) ?? 0n;
+  const [depositInput, setDepositInput] = useState('');
+  const depositAmount = Savings.depositAmount(depositInput, walletUsdc);
   const walletLoadStarted = useRef(false);
   const homeFocused = useRef(false);
+  const depositing = useRef(false);
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -178,6 +184,34 @@ export default function HomeScreen() {
       await refresh();
     });
 
+  const deposit = () => {
+    if (depositing.current) {
+      return;
+    }
+    depositing.current = true;
+    return run(async () => {
+      if (!wallet || depositAmount === null) {
+        return;
+      }
+      const { sent, outcome } = await Savings.sendDeposit(
+        () => wallet.deposit(depositAmount),
+        wallet.vaultCall(),
+        {
+          clear: () => setDepositInput(''),
+          restore: () => setDepositInput(depositInput),
+        },
+      );
+      const refreshError = await refresh().then(
+        () => '',
+        (error: unknown) => errorMessage(error),
+      );
+      const text = Savings.depositMessage(outcome, depositAmount, sent.hash);
+      setMessage(refreshError ? `${text}\n${refreshError}` : text);
+    }).finally(() => {
+      depositing.current = false;
+    });
+  };
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -237,6 +271,22 @@ export default function HomeScreen() {
               {network.friendbotUrl && (
                 <Button label="Fund with testnet XLM" onPress={fund} disabled={busy} />
               )}
+              <Field
+                value={depositInput}
+                onChangeText={setDepositInput}
+                placeholder="USDC to add to savings"
+                keyboardType="decimal-pad"
+              />
+              <Button
+                label="Max"
+                onPress={() => setDepositInput(units.format(walletUsdc, units.decimals))}
+                disabled={busy || walletUsdc === 0n}
+              />
+              <Button
+                label="Add to savings"
+                onPress={deposit}
+                disabled={busy || depositAmount === null}
+              />
               <Button
                 label="Withdraw savings"
                 onPress={withdraw}

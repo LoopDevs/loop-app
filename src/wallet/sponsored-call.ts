@@ -11,16 +11,28 @@ import {
 import type { BuiltTransaction } from '../ctx/client.ts';
 import { network } from '../stellar/network.ts';
 
-export class SponsoredCall {
+export type ContractCall = {
+  contract: string;
+  method: string;
+  args: xdr.ScVal[];
+};
+
+export type AuthorizedCall = ContractCall & {
+  nested: ContractCall[];
+};
+
+export class SponsoredCall implements AuthorizedCall {
   readonly contract: string;
   readonly method: string;
   readonly args: xdr.ScVal[];
+  readonly nested: ContractCall[];
   readonly digest: Uint8Array;
 
-  private constructor(contract: string, method: string, args: xdr.ScVal[], digest: Uint8Array) {
-    this.contract = contract;
-    this.method = method;
-    this.args = args;
+  private constructor(root: ContractCall, nested: ContractCall[], digest: Uint8Array) {
+    this.contract = root.contract;
+    this.method = root.method;
+    this.args = root.args;
+    this.nested = nested;
     this.digest = digest;
   }
 
@@ -52,14 +64,15 @@ export class SponsoredCall {
     if (Address.fromScAddress(credentials.address.address).toString() !== wallet) {
       throw new Error('The authorization is for a different wallet');
     }
-    if (rootInvocation.subInvocations.length > 0) {
-      throw new Error('The authorization covers nested calls');
+    const { subInvocations } = rootInvocation;
+    if (1 + subInvocations.length !== ruleIds.length) {
+      throw new Error('The authorization covers nested calls the wallet rules do not');
     }
-    const authorized = rootInvocation.function;
-    if (authorized.type !== 'sorobanAuthorizedFunctionTypeContractFn') {
-      throw new Error('The authorization must cover a contract call');
+    if (subInvocations.some((invocation) => invocation.subInvocations.length > 0)) {
+      throw new Error('The authorization covers nested calls inside nested calls');
     }
-    const call = authorized.contractFn;
+    const call = SponsoredCall.contractFn(rootInvocation.function);
+    const nested = subInvocations.map((invocation) => SponsoredCall.contractFn(invocation.function));
     if (
       operation.func.type !== 'hostFunctionTypeInvokeContract' ||
       !operation.func.invokeContract.equals(call)
@@ -81,12 +94,22 @@ export class SponsoredCall {
     if (bytesToHex(digest) !== built.digest.toLowerCase()) {
       throw new Error('The digest to sign does not match the transaction');
     }
-    return new SponsoredCall(
-      Address.fromScAddress(call.contractAddress).toString(),
-      call.functionName.toStringStrict(),
-      call.args,
-      digest,
-    );
+    return new SponsoredCall(SponsoredCall.contractCall(call), nested.map(SponsoredCall.contractCall), digest);
+  }
+
+  private static contractFn(authorized: xdr.SorobanAuthorizedFunction): xdr.InvokeContractArgs {
+    if (authorized.type !== 'sorobanAuthorizedFunctionTypeContractFn') {
+      throw new Error('The authorization must cover a contract call');
+    }
+    return authorized.contractFn;
+  }
+
+  private static contractCall(call: xdr.InvokeContractArgs): ContractCall {
+    return {
+      contract: Address.fromScAddress(call.contractAddress).toString(),
+      method: call.functionName.toStringStrict(),
+      args: call.args,
+    };
   }
 }
 

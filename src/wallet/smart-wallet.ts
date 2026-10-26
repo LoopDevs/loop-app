@@ -21,8 +21,9 @@ import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
 import { PaymentSearch } from '@/wallet/payment-search';
 import { Savings } from '@/wallet/savings';
-import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
+import { SavingsTopUp } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
+import { VaultCall, type SentVaultCall } from '@/wallet/vault-call';
 import { WalletPin } from '@/wallet/wallet-pin';
 
 export type TokenBalance = {
@@ -138,7 +139,7 @@ export class SmartWallet {
     }
     const intent: SmartWalletIntent = { intent: 'pay', paymentId: giftCard.paymentId };
     const built = await ctx.buildTransaction(this.id, intent);
-    const call = await this.verifiedCall(built);
+    const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId]);
     const transfer = this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
     const signed = await this.sign(call);
     return {
@@ -152,17 +153,34 @@ export class SmartWallet {
     return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
   }
 
-  async withdraw(shares: bigint): Promise<SentWithdrawal> {
+  async withdraw(shares: bigint): Promise<SentVaultCall> {
     const intent: SmartWalletIntent = {
       intent: 'vault_withdraw',
       currency: Savings.currency,
       shares: shares.toString(),
     };
     const built = await ctx.buildTransaction(this.id, intent);
-    const call = await this.verifiedCall(built);
+    const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId]);
     await this.requireWithdraw(call, shares);
     const result = await this.signAndSponsor(intent, built.transaction, call);
     return { ...result, expiryLedger: built.expiryLedger };
+  }
+
+  async deposit(amount: bigint): Promise<SentVaultCall> {
+    const intent = Savings.depositIntent(amount);
+    const built = await ctx.buildTransaction(this.id, intent);
+    const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId, SmartWallet.deviceRuleId]);
+    Savings.requireDeposit(call, this.address, amount);
+    const result = await this.signAndSponsor(intent, built.transaction, call);
+    return { ...result, expiryLedger: built.expiryLedger };
+  }
+
+  vaultCall(): VaultCall {
+    return new VaultCall({
+      transaction: (hash) => soroban.transaction(hash),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      now: () => Date.now(),
+    });
   }
 
   savingsTopUp(): SavingsTopUp {
@@ -170,14 +188,13 @@ export class SmartWallet {
       balances: () => this.balances(),
       valueOf: (shares) => this.valueOf(shares),
       withdraw: (shares) => this.withdraw(shares),
-      transaction: (hash) => soroban.transaction(hash),
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      vaultCall: this.vaultCall(),
       now: () => Date.now(),
     });
   }
 
-  private async verifiedCall(built: BuiltTransaction): Promise<SponsoredCall> {
-    return SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId], await soroban.latestLedger());
+  private async verifiedCall(built: BuiltTransaction, ruleIds: number[]): Promise<SponsoredCall> {
+    return SponsoredCall.verify(built, this.address, ruleIds, await soroban.latestLedger());
   }
 
   private async signAndSponsor(
