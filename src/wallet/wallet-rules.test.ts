@@ -38,6 +38,14 @@ test('a device whose key was replaced by another device is reported unlinked', (
   assert.equal(WalletRules.check(reading(), passkeyKey, otherDeviceKey).thisDevice, 'unlinked');
 });
 
+test('a wallet running the first account code is rejected', () => {
+  const firstAccountWasmHash = 'de8d8b4f80ef1d45814fcb54d8d713216a00a29e8f6a6e87f3e26256494eed53';
+  assert.throws(
+    () => WalletRules.check(reading({ wasmHash: firstAccountWasmHash }), passkeyKey, deviceKey),
+    /unexpected code/,
+  );
+});
+
 test('an unexpected wallet still fails before the device is considered', () => {
   assert.throws(() => WalletRules.check(reading({ wasmHash: 'ff' }), undefined, null), /unexpected code/);
   assert.throws(() => WalletRules.check(reading({ ruleCount: 3 }), undefined, null), /unexpected rules/);
