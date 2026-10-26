@@ -1,6 +1,6 @@
-import { useScrollToTop } from 'expo-router';
+import { useFocusEffect, useScrollToTop } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { useRef, type ComponentProps, type ReactNode } from 'react';
+import { useCallback, useRef, type ComponentProps, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import Animated, {
   interpolate,
@@ -28,11 +28,24 @@ const balanceType = {
 
 type Scrollable = NonNullable<Parameters<typeof useScrollToTop>[0]['current']>;
 
+type OffsetScrollable = { scrollTo?: (options: object) => void; scrollToOffset?: (options: object) => void };
+
+export function useScrollToTopOnFocus(ref: { current: Scrollable | null }) {
+  useScrollToTop(ref);
+  useFocusEffect(
+    useCallback(() => {
+      const target = ref.current as unknown as OffsetScrollable | null;
+      target?.scrollTo?.({ y: 0, animated: false });
+      target?.scrollToOffset?.({ offset: 0, animated: false });
+    }, [ref]),
+  );
+}
+
 export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const scrollRef = useRef<T>(null);
-  useScrollToTop(scrollRef);
+  useScrollToTopOnFocus(scrollRef);
   const offset = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
     offset.value = event.contentOffset.y;
