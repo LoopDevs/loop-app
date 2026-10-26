@@ -14,6 +14,7 @@ import { useScrimScroll } from "@/components/home-panel";
 import { ListGroup, ListRow } from "@/components/list-row";
 import { PageHeader } from "@/components/page-header";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
+import { SiteFooter } from "@/components/site-footer";
 import { OrderRowsSkeleton } from "@/components/skeleton";
 import { SplitLayout } from "@/components/split-layout";
 import { PageWidth } from "@/components/storefront";
@@ -21,9 +22,9 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { loopLinks } from "@/constants/loop-links";
 import {
-  BottomTabInset,
   MaxContentWidth,
   Radius,
+  ScrollEndInset,
   Spacing,
 } from "@/constants/theme";
 import { ctx } from "@/ctx/client";
@@ -91,8 +92,8 @@ export default function SettingsScreen() {
       await ctx.signOut();
       setSignedIn(false);
       setProfile(null);
-      await check();
       router.navigate("/");
+      await check();
     });
 
   const confirmSignOut = () => {
@@ -135,6 +136,7 @@ export default function SettingsScreen() {
         >
           <PageHeader title="Change country" belowNavigationHeader />
           <View style={styles.body}>{countryPicker}</View>
+          <SiteFooter />
         </Animated.ScrollView>
         <Animated.View pointerEvents="none" style={scrim} />
       </ThemedView>
@@ -355,6 +357,7 @@ export default function SettingsScreen() {
               <View style={styles.wideSection}>{sectionContent}</View>
             </SplitLayout>
           </PageWidth>
+          <SiteFooter />
         </Animated.ScrollView>
       </ThemedView>
     );
@@ -384,6 +387,7 @@ export default function SettingsScreen() {
           {profile && errorText}
           {version}
         </View>
+        <SiteFooter />
       </Animated.ScrollView>
       <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
@@ -432,7 +436,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   body: {
     width: "100%",
@@ -452,7 +457,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   wideScroll: {
-    paddingBottom: Spacing.six,
+    flexGrow: 1,
   },
   wideBody: {
     paddingTop: Spacing.five,

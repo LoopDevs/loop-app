@@ -3,10 +3,8 @@ import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { ExternalLink } from '@/components/external-link';
 import { ThemedText } from '@/components/themed-text';
 import { Wordmark } from '@/components/wordmark';
-import { loopLinks } from '@/constants/loop-links';
 import { Layout, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
@@ -52,12 +50,6 @@ const footerColumns: readonly FooterColumn[] = [
   },
 ];
 
-const compactLinks: readonly FooterLink[] = [
-  { label: 'Help', path: '/faq' },
-  { label: 'Terms', path: '/terms' },
-  { label: 'Privacy', path: '/privacy' },
-];
-
 const pitch = 'Buy gift cards from brands you love and get cashback you can spend or save.';
 
 const smallPrint =
@@ -68,23 +60,25 @@ const smallPrint =
 export function SiteFooter() {
   const theme = useTheme();
   if (Platform.OS !== 'web') {
-    return <CompactFooter />;
+    return null;
   }
   return (
-    <Animated.View
-      entering={FadeIn}
-      style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.backgroundSubtle }]}>
-      <FooterWidth style={styles.inner}>
-        <FooterColumns />
-        <View style={[styles.rule, { backgroundColor: theme.border }]} />
-        <View style={styles.bottom}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.smallPrint}>
-            {smallPrint}
-          </ThemedText>
-          <Copyright />
-        </View>
-      </FooterWidth>
-    </Animated.View>
+    <View style={styles.placement}>
+      <Animated.View
+        entering={FadeIn}
+        style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.backgroundSubtle }]}>
+        <FooterWidth style={styles.inner}>
+          <FooterColumns />
+          <View style={[styles.rule, { backgroundColor: theme.border }]} />
+          <View style={styles.bottom}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.smallPrint}>
+              {smallPrint}
+            </ThemedText>
+            <Copyright />
+          </View>
+        </FooterWidth>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -116,26 +110,6 @@ function FooterColumns() {
   );
 }
 
-function CompactFooter() {
-  const theme = useTheme();
-  return (
-    <View style={[styles.footer, { borderTopColor: theme.border }]}>
-      <FooterWidth style={styles.compact}>
-        <View style={styles.compactLinks}>
-          {compactLinks.map((link) => (
-            <ExternalLink key={link.path} href={`${loopLinks.site}${link.path}`}>
-              <ThemedText type="small" themeColor="textSecondary">
-                {link.label}
-              </ThemedText>
-            </ExternalLink>
-          ))}
-        </View>
-        <Copyright />
-      </FooterWidth>
-    </View>
-  );
-}
-
 function Copyright() {
   return (
     <ThemedText type="caption" themeColor="textSecondary">
@@ -150,6 +124,10 @@ function FooterWidth({ children, style }: { children: ReactNode; style: object }
 }
 
 const styles = StyleSheet.create({
+  placement: {
+    marginTop: 'auto',
+    paddingTop: Spacing.five,
+  },
   footer: {
     borderTopWidth: 1,
   },
@@ -200,14 +178,5 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     fontSize: 13,
     lineHeight: 19,
-  },
-  compact: {
-    paddingVertical: Spacing.four,
-    gap: Spacing.two,
-  },
-  compactLinks: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.four,
   },
 });

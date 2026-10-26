@@ -22,6 +22,7 @@ import { useScrimScroll, useScrollToTopOnFocus } from "@/components/home-panel";
 import { PageHeader } from "@/components/page-header";
 import { PressScale } from "@/components/press-scale";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
+import { SiteFooter } from "@/components/site-footer";
 import { OrderRowsSkeleton } from "@/components/skeleton";
 import { SplitLayout } from "@/components/split-layout";
 import { PageWidth } from "@/components/storefront";
@@ -30,10 +31,10 @@ import { ThemedView } from "@/components/themed-view";
 import { WalletSummary } from "@/components/wallet-summary";
 import { loopLinks } from "@/constants/loop-links";
 import {
-  BottomTabInset,
   MaxContentWidth,
   Motion,
   Radius,
+  ScrollEndInset,
   Spacing,
 } from "@/constants/theme";
 import { ctx, type GiftCard } from "@/ctx/client";
@@ -212,6 +213,7 @@ export default function WalletScreen() {
               {footer}
             </SplitLayout>
           </PageWidth>
+          <SiteFooter />
         </Animated.ScrollView>
       </ThemedView>
     );
@@ -248,7 +250,10 @@ export default function WalletScreen() {
         }
         ListEmptyComponent={<View style={styles.body}>{emptyState}</View>}
         ListFooterComponent={
-          <View style={[styles.body, styles.footer]}>{footer}</View>
+          <>
+            <View style={[styles.body, styles.footer]}>{footer}</View>
+            <SiteFooter />
+          </>
         }
         renderItem={({ item, index }) => (
           <Animated.View
@@ -536,7 +541,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    paddingBottom: ScrollEndInset,
     gap: Spacing.two,
   },
   body: {
@@ -555,7 +560,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   wideContent: {
-    paddingBottom: Spacing.six,
+    flexGrow: 1,
   },
   wideBody: {
     paddingTop: Spacing.five,

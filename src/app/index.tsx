@@ -21,7 +21,7 @@ import {
   SectionHeading,
 } from '@/components/merchant-card';
 import { PressScale } from '@/components/press-scale';
-import { SignInButton, useOnSignIn } from '@/components/sign-in';
+import { SignInButton, useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
 import { Skeleton } from '@/components/skeleton';
 import {
@@ -73,6 +73,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { country: marketCountry, resolved: marketResolved } = useMarket();
+  const { check } = useSignIn();
   const signedOut = screen === 'signed-out';
   const signedOutCountry = marketResolved ? marketCountry : undefined;
   const catalogCountry = !sessionRead ? undefined : signedOut ? signedOutCountry : profileCountry;
@@ -126,11 +127,12 @@ export default function HomeScreen() {
       walletLoadStarted.current = false;
       setWallet(null);
       setScreen('signed-out');
+      check();
     } catch (error) {
       walletLoadStarted.current = false;
       setMessage(errorMessage(error));
     }
-  }, [screen, loadWallet, loadProfileCountry, setMessage]);
+  }, [screen, loadWallet, loadProfileCountry, setMessage, check]);
 
   useFocusEffect(
     useCallback(() => {
@@ -296,7 +298,7 @@ export default function HomeScreen() {
           )}
         </PageWidth>
         {signedOut && <HowLoopWorks />}
-        {(signedOut || wide) && <SiteFooter />}
+        <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>

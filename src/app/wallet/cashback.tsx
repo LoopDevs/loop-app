@@ -9,12 +9,13 @@ import { useScrimScroll } from '@/components/home-panel';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
+import { SiteFooter } from '@/components/site-footer';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { SplitLayout } from '@/components/split-layout';
 import { PageWidth } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, ScrollEndInset, Spacing } from '@/constants/theme';
 import type { Account, OnTheWayItem } from '@/ctx/account';
 import { ctx, type CashbackDestination } from '@/ctx/client';
 import { Profile } from '@/ctx/profile';
@@ -204,6 +205,7 @@ export default function CashbackScreen() {
             {onTheWaySection && <View style={styles.section}>{onTheWaySection}</View>}
           </>
         )}
+        <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
   );
@@ -230,11 +232,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
     gap: Spacing.four,
   },
   wideContent: {
-    paddingBottom: Spacing.six,
     gap: Spacing.five,
   },
   section: {
