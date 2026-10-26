@@ -14,6 +14,7 @@ import Animated, { FadeIn, FadeInDown, SlideInDown, useReducedMotion } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
+import { CountryPicker } from '@/components/country-picker';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
@@ -27,9 +28,11 @@ import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/consta
 import { ctx } from '@/ctx/client';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
+import type { CountryChoice } from '@/ctx/profile';
 import type { SocialProvider } from '@/session/social-sign-in';
 import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
@@ -188,16 +191,17 @@ export function SignInScreen() {
   );
 }
 
-type SignInStep = 'email' | 'code' | 'secure' | 'add-device';
+type SignInStep = 'email' | 'code' | 'country' | 'secure' | 'add-device';
 
 const stepNumbers: Record<SignInStep, number> = {
   email: 1,
   code: 2,
-  secure: 3,
-  'add-device': 3,
+  country: 3,
+  secure: 4,
+  'add-device': 4,
 };
 
-const stepCount = 3;
+const stepCount = 4;
 
 type SignInFormProps = {
   reason: string;
@@ -210,6 +214,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
+  const { profile, setProfile, applyCountryChoice } = useProfile();
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
 
@@ -220,6 +225,16 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
 
   const continueToWallet = async () => {
     onAuthenticated();
+    const loaded = await ctx.me();
+    if (loaded.needsSetup()) {
+      setProfile(loaded);
+      setStep('country');
+      return;
+    }
+    await openWallet();
+  };
+
+  const openWallet = async () => {
     try {
       if (await SmartWallet.load()) {
         finish();
@@ -235,6 +250,12 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
       throw error;
     }
   };
+
+  const chooseCountry = (choice: CountryChoice) =>
+    run(async () => {
+      await applyCountryChoice(choice);
+      await openWallet();
+    });
 
   const secureAccount = () =>
     run(async () => {
@@ -345,6 +366,16 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
               <Button label="Change email" variant="quiet" onPress={changeEmail} disabled={busy} />
             </View>
           </View>
+        </Animated.View>
+      )}
+      {step === 'country' && profile && (
+        <Animated.View key="country" entering={FadeIn.duration(Motion.state)} style={styles.form}>
+          <View style={styles.intro}>
+            <ThemedText type="subtitle" accessibilityRole="header">
+              Where do you shop?
+            </ThemedText>
+          </View>
+          <CountryPicker profile={profile} busy={busy} onChoose={chooseCountry} />
         </Animated.View>
       )}
       {step === 'secure' && (
