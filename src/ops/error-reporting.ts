@@ -16,6 +16,7 @@ export const errorReporting = {
       environment: process.env.EXPO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet',
       sendDefaultPii: false,
       tracesSampleRate: 0,
+      enableNetworkBreadcrumbs: false,
       beforeSend: (event) => SentryScrubber.scrubEvent(event),
       beforeBreadcrumb: (breadcrumb) => SentryScrubber.scrubBreadcrumb(breadcrumb),
     });

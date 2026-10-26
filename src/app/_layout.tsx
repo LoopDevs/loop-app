@@ -3,7 +3,6 @@ import 'react-native-get-random-values';
 import { ErrorBoundary } from '@sentry/react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
 
 import { AppLockProvider } from '@/components/app-lock';
 import AppTabs from '@/components/app-tabs';
@@ -14,6 +13,7 @@ import { ToastProvider } from '@/components/toast';
 import { ctx } from '@/ctx/client';
 import type { BlockingServiceState } from '@/ctx/service-state';
 import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAppSwitcherProtection } from '@/native/screen-privacy';
 import { errorReporting } from '@/ops/error-reporting';
 import { useUpdateChecks } from '@/updates/use-update-checks';
@@ -29,7 +29,7 @@ export default function TabLayout() {
   useEffect(() => ctx.onServiceState(setBlocked), []);
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <ErrorBoundary fallback={<CrashFallback />}>
+      <ErrorBoundary fallback={({ resetError }) => <CrashFallback onRetry={resetError} />}>
         <AppLockProvider>
           <ToastProvider>
             {blocked ? <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} /> : <AppTabs />}

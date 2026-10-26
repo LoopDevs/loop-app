@@ -1,17 +1,19 @@
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 
-export function CrashFallback() {
+export function CrashFallback({ onRetry }: { onRetry: () => void }) {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content}>
           <ThemedText type="subtitle">Something went wrong</ThemedText>
-          <ThemedText>Restart Loop to continue.</ThemedText>
+          <ThemedText>A payment already sent is not lost. Check Orders for its status.</ThemedText>
+          <Button label="Try again" onPress={onRetry} />
         </View>
       </SafeAreaView>
     </ThemedView>

@@ -2,6 +2,8 @@ import NetInfo from '@react-native-community/netinfo';
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
+import { ForegroundRefresh } from '@/hooks/foreground-refresh';
+
 type Listener = () => void;
 
 const listeners = new Set<Listener>();
@@ -24,14 +26,12 @@ export function useAppRefresh(listener: Listener): void {
 }
 
 export function useAppRefreshTriggers(): void {
-  const appState = useRef(AppState.currentState);
+  const foreground = useRef(new ForegroundRefresh());
   const connected = useRef<boolean | null>(null);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener('change', (next) => {
-      const returned = appState.current !== 'active' && next === 'active';
-      appState.current = next;
-      if (returned) {
+      if (foreground.current.shouldRefresh(next, Date.now())) {
         appRefresh.emit();
       }
     });
