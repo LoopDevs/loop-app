@@ -1,40 +1,45 @@
-import Constants from 'expo-constants';
-import * as Linking from 'expo-linking';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { openBrowserAsync } from 'expo-web-browser';
-import { useCallback, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Constants from "expo-constants";
+import * as Linking from "expo-linking";
+import { useFocusEffect, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { openBrowserAsync } from "expo-web-browser";
+import { useCallback, useRef, useState } from "react";
+import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { AppLockToggle } from '@/components/app-lock';
-import { CountryPicker } from '@/components/country-picker';
-import { Button, Notice } from '@/components/form';
-import { useScrimScroll } from '@/components/home-panel';
-import { ListGroup, ListRow } from '@/components/list-row';
-import { PageHeader } from '@/components/page-header';
-import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { OrderRowsSkeleton } from '@/components/skeleton';
-import { SplitLayout } from '@/components/split-layout';
-import { PageWidth } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { ctx } from '@/ctx/client';
-import { type CountryChoice, Profile } from '@/ctx/profile';
-import { useAppRefresh } from '@/hooks/use-app-refresh';
-import { useBusyAction } from '@/hooks/use-busy-action';
-import { usePageLayout } from '@/hooks/use-page-layout';
-import { useProfile } from '@/hooks/use-profile';
-import { useTheme } from '@/hooks/use-theme';
+import { AppLockToggle } from "@/components/app-lock";
+import { CountryPicker } from "@/components/country-picker";
+import { Button, Notice } from "@/components/form";
+import { useScrimScroll } from "@/components/home-panel";
+import { ListGroup, ListRow } from "@/components/list-row";
+import { PageHeader } from "@/components/page-header";
+import { useOnSignIn, useSignIn } from "@/components/sign-in";
+import { OrderRowsSkeleton } from "@/components/skeleton";
+import { SplitLayout } from "@/components/split-layout";
+import { PageWidth } from "@/components/storefront";
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { loopLinks } from "@/constants/loop-links";
+import {
+  BottomTabInset,
+  MaxContentWidth,
+  Radius,
+  Spacing,
+} from "@/constants/theme";
+import { ctx } from "@/ctx/client";
+import { type CountryChoice, Profile } from "@/ctx/profile";
+import { useAppRefresh } from "@/hooks/use-app-refresh";
+import { useBusyAction } from "@/hooks/use-busy-action";
+import { usePageLayout } from "@/hooks/use-page-layout";
+import { useProfile } from "@/hooks/use-profile";
+import { useTheme } from "@/hooks/use-theme";
 
-type SettingsSection = 'account' | 'help' | 'data';
+type SettingsSection = "account" | "help" | "data";
 
 const sectionTitles: Record<SettingsSection, string> = {
-  account: 'Account',
-  help: 'Help and legal',
-  data: 'Your data',
+  account: "Account",
+  help: "Help and legal",
+  data: "Your data",
 };
 
 export default function SettingsScreen() {
@@ -44,9 +49,10 @@ export default function SettingsScreen() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
-  const [chosenSection, setChosenSection] = useState<SettingsSection>('account');
+  const [chosenSection, setChosenSection] =
+    useState<SettingsSection>("account");
   const profileUserId = useRef<string | null>(null);
-  const { onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
 
   const loadAccount = useCallback(
     () =>
@@ -86,24 +92,24 @@ export default function SettingsScreen() {
       setSignedIn(false);
       setProfile(null);
       await check();
-      router.navigate('/');
+      router.navigate("/");
     });
 
   const confirmSignOut = () => {
-    const prompt = 'You can sign back in any time with your email.';
-    if (Platform.OS === 'web') {
+    const prompt = "You can sign back in any time with your email.";
+    if (Platform.OS === "web") {
       if (globalThis.confirm?.(`Sign out of Loop? ${prompt}`)) {
         signOut();
       }
       return;
     }
-    Alert.alert('Sign out of Loop?', prompt, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: signOut },
+    Alert.alert("Sign out of Loop?", prompt, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign out", style: "destructive", onPress: signOut },
     ]);
   };
 
-  const errorText = message !== '' && <Notice message={message} />;
+  const errorText = message !== "" && <Notice message={message} />;
 
   const countryPicker = profile && (
     <>
@@ -122,7 +128,12 @@ export default function SettingsScreen() {
       <ThemedView style={styles.container}>
         <StatusBar style="light" />
         <Animated.View pointerEvents="none" style={backdrop} />
-        <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scroll}>
+        <Animated.ScrollView
+          ref={scrollRef}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.scroll}
+        >
           <PageHeader title="Change country" />
           <View style={styles.body}>{countryPicker}</View>
         </Animated.ScrollView>
@@ -138,11 +149,19 @@ export default function SettingsScreen() {
       {signedIn === null && <OrderRowsSkeleton />}
 
       {signedIn && !profile && busy && <OrderRowsSkeleton />}
-      {signedIn && !profile && !busy && message === '' && (
-        <Notice message="Your account details didn't load." actionLabel="Try again" onAction={loadAccount} />
+      {signedIn && !profile && !busy && message === "" && (
+        <Notice
+          message="Your account details didn't load."
+          actionLabel="Try again"
+          onAction={loadAccount}
+        />
       )}
-      {signedIn && !profile && !busy && message !== '' && (
-        <Notice message={message} actionLabel="Try again" onAction={loadAccount} />
+      {signedIn && !profile && !busy && message !== "" && (
+        <Notice
+          message={message}
+          actionLabel="Try again"
+          onAction={loadAccount}
+        />
       )}
 
       {signedIn === false && (
@@ -150,11 +169,16 @@ export default function SettingsScreen() {
           <ThemedText type="heading">You&apos;re signed out</ThemedText>
           {wide && (
             <ThemedText themeColor="textSecondary">
-              Sign in to see your account, change your country and choose where cashback goes.
+              Sign in to see your account, change your country and choose where
+              cashback goes.
             </ThemedText>
           )}
           <View style={wide && styles.inlineAction}>
-            <Button label="Sign in" variant="primary" onPress={() => openSignIn()} />
+            <Button
+              label="Sign in"
+              variant="primary"
+              onPress={() => openSignIn()}
+            />
           </View>
         </View>
       )}
@@ -164,26 +188,34 @@ export default function SettingsScreen() {
   const accountGroups = profile && (
     <>
       <ListGroup title="Account">
-        <ListRow label="Email" value={profile.email ?? 'Not set'} />
+        <ListRow label="Email" value={profile.email ?? "Not set"} />
         {providerLabel && <ListRow label={providerLabel} />}
       </ListGroup>
 
       <ListGroup
         title="Region"
-        footer={profile.stableCurrency ? 'Contact support to change your cashback currency.' : undefined}>
+        footer={
+          profile.stableCurrency
+            ? "Contact support to change your cashback currency."
+            : undefined
+        }
+      >
         <ListRow
           label="Country"
-          value={profile.country ?? 'Choose'}
+          value={profile.country ?? "Choose"}
           onPress={() => setChangingCountry(true)}
           disabled={busy}
         />
         {profile.stableCurrency && (
-          <ListRow label="Cashback currency" value={Profile.currencyLabel(profile.stableCurrency)} />
+          <ListRow
+            label="Cashback currency"
+            value={Profile.currencyLabel(profile.stableCurrency)}
+          />
         )}
         <ListRow
           label="Cashback"
           detail="Where it goes and what's on the way"
-          onPress={() => router.push('/orders/cashback')}
+          onPress={() => router.push("/orders/cashback")}
         />
       </ListGroup>
     </>
@@ -217,7 +249,7 @@ export default function SettingsScreen() {
       <ListRow
         label="Request my data"
         trailing="external"
-        onPress={() => Linking.openURL(loopLinks.supportMail('Data request'))}
+        onPress={() => Linking.openURL(loopLinks.supportMail("Data request"))}
       />
       <ListRow
         label="Delete my account"
@@ -226,8 +258,8 @@ export default function SettingsScreen() {
         onPress={() =>
           Linking.openURL(
             loopLinks.supportMail(
-              'Delete my account',
-              `Please delete my Loop account.\n\nAccount email: ${profile.email ?? ''}`,
+              "Delete my account",
+              `Please delete my Loop account.\n\nAccount email: ${profile.email ?? ""}`,
             ),
           )
         }
@@ -238,7 +270,7 @@ export default function SettingsScreen() {
   const signOutGroup = profile && (
     <ListGroup>
       <ListRow
-        label={busy ? 'Signing out…' : 'Sign out'}
+        label={busy ? "Signing out…" : "Sign out"}
         tone="danger"
         trailing="none"
         onPress={confirmSignOut}
@@ -248,14 +280,22 @@ export default function SettingsScreen() {
   );
 
   const version = (
-    <ThemedText type="small" themeColor="textSecondary" style={!wide && styles.version}>
+    <ThemedText
+      type="small"
+      themeColor="textSecondary"
+      style={!wide && styles.version}
+    >
       Version {Constants.expoConfig?.version}
     </ThemedText>
   );
 
   if (wide) {
-    const sections: SettingsSection[] = profile ? ['account', 'help', 'data'] : ['account', 'help'];
-    const section = sections.includes(chosenSection) ? chosenSection : 'account';
+    const sections: SettingsSection[] = profile
+      ? ["account", "help", "data"]
+      : ["account", "help"];
+    const section = sections.includes(chosenSection)
+      ? chosenSection
+      : "account";
     const sectionContent = {
       account:
         profile && changingCountry ? (
@@ -279,8 +319,15 @@ export default function SettingsScreen() {
     return (
       <ThemedView style={styles.container}>
         <StatusBar style="light" />
-        <Animated.ScrollView contentContainerStyle={styles.wideScroll}>
-          <PageHeader title="Settings" detail={profile?.email ?? undefined} width="page" />
+        <Animated.ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.wideScroll}
+        >
+          <PageHeader
+            title="Settings"
+            detail={profile?.email ?? undefined}
+            width="page"
+          />
           <PageWidth style={styles.wideBody}>
             <SplitLayout
               asideSide="start"
@@ -303,7 +350,8 @@ export default function SettingsScreen() {
                   {signOutGroup}
                   <View style={styles.navFooter}>{version}</View>
                 </>
-              }>
+              }
+            >
               <View style={styles.wideSection}>{sectionContent}</View>
             </SplitLayout>
           </PageWidth>
@@ -316,7 +364,12 @@ export default function SettingsScreen() {
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={backdrop} />
-      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scroll}>
+      <Animated.ScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scroll}
+      >
         <PageHeader title="Settings" detail={profile?.email ?? undefined} />
         <View style={styles.body}>
           {accountStatus}
@@ -334,7 +387,15 @@ export default function SettingsScreen() {
   );
 }
 
-function SectionLink({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function SectionLink({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
   return (
@@ -347,9 +408,16 @@ function SectionLink({ label, selected, onPress }: { label: string; selected: bo
       style={({ pressed }) => [
         styles.navItem,
         (hovered || pressed) && { backgroundColor: theme.backgroundElement },
-        selected && { backgroundColor: theme.backgroundSelected, borderColor: theme.accent },
-      ]}>
-      <ThemedText type={selected ? 'smallBold' : 'small'} themeColor={selected ? 'accent' : 'text'}>
+        selected && {
+          backgroundColor: theme.backgroundSelected,
+          borderColor: theme.accent,
+        },
+      ]}
+    >
+      <ThemedText
+        type={selected ? "smallBold" : "small"}
+        themeColor={selected ? "accent" : "text"}
+      >
         {label}
       </ThemedText>
     </Pressable>
@@ -364,9 +432,9 @@ const styles = StyleSheet.create({
     paddingBottom: BottomTabInset + Spacing.five,
   },
   body: {
-    width: '100%',
+    width: "100%",
     maxWidth: MaxContentWidth,
-    alignSelf: 'center',
+    alignSelf: "center",
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.four,
     gap: Spacing.four,
@@ -375,10 +443,10 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   inlineAction: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   version: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   wideScroll: {
     paddingBottom: Spacing.six,
@@ -395,11 +463,11 @@ const styles = StyleSheet.create({
   },
   navItem: {
     minHeight: 44,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.control,
     borderLeftWidth: 3,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
   navFooter: {
     paddingHorizontal: Spacing.three,
