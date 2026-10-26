@@ -27,6 +27,31 @@ export function giftCardStatusLabel(status: GiftCard['status']): string {
   }
 }
 
+const refundAdvice = 'contact support about a refund.';
+
+export function outcomeText(card: GiftCard): string | null {
+  const { status, paymentStatus, paymentMethod, paymentCryptoTxId } = card;
+  if (status === 'refunded') {
+    return 'Your payment was refunded.';
+  }
+  if (status === 'rejected' && paymentStatus === 'paid') {
+    return `This card couldn't be issued. Contact support about a refund.`;
+  }
+  if (status === 'rejected' && paymentCryptoTxId) {
+    return `This card couldn't be issued. If you were charged, ${refundAdvice}`;
+  }
+  if (status === 'expired' && (paymentCryptoTxId || paymentMethod !== 'crypto')) {
+    return `This order expired. If you were charged, ${refundAdvice}`;
+  }
+  if (paymentStatus === 'cancelled') {
+    return `This order was cancelled. If you were charged, ${refundAdvice}`;
+  }
+  if (paymentStatus === 'error' || paymentStatus === 'expired') {
+    return "This order didn't go through. You weren't charged.";
+  }
+  return null;
+}
+
 export function cashbackState(card: GiftCard): CashbackState {
   if (!card.cashbackAmount) {
     return 'none';
