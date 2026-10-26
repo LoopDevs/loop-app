@@ -1,0 +1,4 @@
+/wallet/cash-out /wallet/cash-out 200
+/wallet/cashback /wallet/cashback 200
+/shop/* /shop/[slug] 200
+/wallet/* /wallet/[id] 200
