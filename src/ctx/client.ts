@@ -1,3 +1,4 @@
+import { ctxReportMessage } from '@/ctx/ctx-report';
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
 import { Profile } from '@/ctx/profile';
@@ -7,6 +8,7 @@ import {
   serviceStateMessages,
   type BlockingServiceState,
 } from '@/ctx/service-state';
+import { errorReporting } from '@/ops/error-reporting';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -224,6 +226,7 @@ export class CtxError extends Error {
 class CtxClient {
   private accessToken: string | null = null;
   private refreshInFlight: Promise<string | null> | null = null;
+  private sessionGeneration = 0;
   private serviceStateListener: ServiceStateListener | null = null;
 
   constructor(
@@ -255,6 +258,7 @@ class CtxClient {
 
   async verifyCode(email: string, code: string): Promise<void> {
     const tokens = await this.send<TokenPair>('POST', '/verify-email', { email, code });
+    this.sessionGeneration += 1;
     await this.storeTokens(tokens);
   }
 
@@ -263,7 +267,7 @@ class CtxClient {
   }
 
   async signOut(): Promise<void> {
-    await this.sessionRequest('POST', '/logout').catch(() => undefined);
+    await this.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
     await this.clearSession();
   }
 
@@ -389,10 +393,15 @@ class CtxClient {
     return accessToken;
   }
 
-  private async sessionRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async sessionRequest<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    reportServiceState = true,
+  ): Promise<T> {
     const accessToken = await this.requireAccessToken();
     try {
-      return await this.authorized<T>(accessToken, method, path, body);
+      return await this.authorized<T>(accessToken, method, path, body, reportServiceState);
     } catch (error) {
       if (!(error instanceof CtxError) || error.status !== 401) {
         throw error;
@@ -402,14 +411,24 @@ class CtxClient {
       if (!refreshed) {
         throw error;
       }
-      return this.authorized<T>(refreshed, method, path, body);
+      return this.authorized<T>(refreshed, method, path, body, reportServiceState);
     }
   }
 
-  private authorized<T>(accessToken: string, method: string, path: string, body?: unknown): Promise<T> {
-    return this.send<T>(method, path, body, {
-      Authorization: `Bearer ${accessToken}`,
-    });
+  private authorized<T>(
+    accessToken: string,
+    method: string,
+    path: string,
+    body: unknown,
+    reportServiceState: boolean,
+  ): Promise<T> {
+    return this.send<T>(
+      method,
+      path,
+      body,
+      { Authorization: `Bearer ${accessToken}` },
+      reportServiceState,
+    );
   }
 
   private refresh(): Promise<string | null> {
@@ -422,15 +441,22 @@ class CtxClient {
   }
 
   private async rotateRefreshToken(): Promise<string | null> {
+    const generation = this.sessionGeneration;
     const refreshToken = await tokenStore.readRefreshToken();
     if (!refreshToken) {
       return null;
     }
     try {
       const tokens = await this.send<TokenPair>('POST', '/refresh-token', { refreshToken });
+      if (generation !== this.sessionGeneration) {
+        return null;
+      }
       await this.storeTokens(tokens);
       return tokens.accessToken;
     } catch (error) {
+      if (generation !== this.sessionGeneration) {
+        return null;
+      }
       if (error instanceof CtxError && error.status === 401) {
         await this.clearSession();
         return null;
@@ -440,6 +466,7 @@ class CtxClient {
   }
 
   private async clearSession(): Promise<void> {
+    this.sessionGeneration += 1;
     this.accessToken = null;
     await tokenStore.clear();
   }
@@ -459,6 +486,7 @@ class CtxClient {
     path: string,
     body?: unknown,
     headers: Record<string, string> = {},
+    reportServiceState = true,
   ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
@@ -473,8 +501,12 @@ class CtxClient {
     if (!response.ok) {
       const error = new CtxError(response.status, text);
       const blocking = blockingServiceState(error.errorName());
-      if (blocking) {
+      if (blocking && reportServiceState) {
         this.serviceStateListener?.(blocking);
+      }
+      const report = ctxReportMessage(response.status, error.errorName());
+      if (report) {
+        errorReporting.reportMessage(report);
       }
       throw error;
     }
