@@ -106,11 +106,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     rowGap: Spacing.four,
-    columnGap: Spacing.three,
+    marginHorizontal: -Spacing.three / 2,
   },
   gridCell: {
-    width: '47%',
-    flexGrow: 1,
+    width: '50%',
+    paddingHorizontal: Spacing.three / 2,
     gap: Spacing.two,
   },
 });

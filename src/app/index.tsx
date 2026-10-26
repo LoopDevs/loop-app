@@ -40,6 +40,7 @@ export default function HomeScreen() {
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
+  const [giftCardsRefreshKey, setGiftCardsRefreshKey] = useState(0);
   const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
   const walletLoadStarted = useRef(false);
   const homeFocused = useRef(false);
@@ -156,6 +157,7 @@ export default function HomeScreen() {
 
   const pullToRefresh = async () => {
     setRefreshing(true);
+    setGiftCardsRefreshKey((key) => key + 1);
     await refreshBalances();
     setRefreshing(false);
   };
@@ -333,7 +335,9 @@ export default function HomeScreen() {
             </Animated.View>
           )}
 
-          {screen === 'wallet' && wallet && <HomeGiftCards onOpen={(slug) => router.push(`/shop/${slug}`)} />}
+          {screen === 'wallet' && wallet && (
+            <HomeGiftCards refreshKey={giftCardsRefreshKey} onOpen={(slug) => router.push(`/shop/${slug}`)} />
+          )}
 
           {(screen === 'email' || screen === 'code') && (
             <ThemedText type="small" themeColor="textSecondary">

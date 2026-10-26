@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { Notice } from '@/components/form';
 import { MerchantTile } from '@/components/merchant-tile';
 import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { Motion, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
+import { errorMessage } from '@/hooks/use-busy-action';
 
 const cardsShown = 6;
 const cashbackScanSize = 200;
@@ -22,29 +25,61 @@ async function loadTopCashback(): Promise<Merchant[]> {
   return Merchant.byCashback(result).slice(0, cardsShown);
 }
 
-export function HomeGiftCards({ onOpen }: { onOpen: (slug: string) => void }) {
-  const [merchants, setMerchants] = useState<Merchant[] | null>(null);
+type HomeGiftCardsProps = {
+  onOpen: (slug: string) => void;
+  refreshKey: number;
+};
 
-  useEffect(() => {
-    let current = true;
-    loadTopCashback()
-      .catch(() => [])
-      .then((loaded) => current && setMerchants(loaded));
-    return () => {
-      current = false;
-    };
+export function HomeGiftCards({ onOpen, refreshKey }: HomeGiftCardsProps) {
+  const [merchants, setMerchants] = useState<Merchant[] | null>(null);
+  const [failure, setFailure] = useState('');
+  const latestRequest = useRef(0);
+
+  const load = useCallback(async () => {
+    const request = ++latestRequest.current;
+    setFailure('');
+    try {
+      const loaded = await loadTopCashback();
+      if (request === latestRequest.current) {
+        setMerchants(loaded);
+      }
+    } catch (error) {
+      if (request === latestRequest.current) {
+        setFailure(errorMessage(error));
+      }
+    }
   }, []);
 
-  if (merchants !== null && merchants.length === 0) {
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      return () => {
+        latestRequest.current += 1;
+      };
+    }, [load]),
+  );
+
+  const loadedKey = useRef(refreshKey);
+  useEffect(() => {
+    if (loadedKey.current !== refreshKey) {
+      loadedKey.current = refreshKey;
+      load();
+    }
+  }, [refreshKey, load]);
+
+  const failed = failure !== '';
+  if (!failed && merchants !== null && merchants.length === 0) {
     return null;
   }
+  const shown: (Merchant | null)[] = merchants ??(failed ? [] : placeholders);
   return (
     <View style={styles.section}>
       <ThemedText type="heading" accessibilityRole="header">
         Top cashback
       </ThemedText>
+      {failed && <Notice message={failure} actionLabel="Try again" onAction={load} />}
       <View style={styles.grid}>
-        {(merchants ?? placeholders).map((merchant, index) => (
+        {shown.map((merchant, index) => (
           <Animated.View
             key={merchant ? merchant.id : `placeholder-${index}`}
             entering={FadeInDown.duration(Motion.state).delay(index * Motion.stagger)}
@@ -71,10 +106,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     rowGap: Spacing.four,
-    columnGap: Spacing.three,
+    marginHorizontal: -Spacing.three / 2,
   },
   cell: {
-    width: '47%',
-    flexGrow: 1,
+    width: '50%',
+    paddingHorizontal: Spacing.three / 2,
   },
 });
