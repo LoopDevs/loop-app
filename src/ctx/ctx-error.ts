@@ -1,4 +1,4 @@
-import { rateLimitedMessage } from './payment-state.ts';
+import { rateLimitedMessage, type PayRejection } from './payment-state.ts';
 import { serviceState, serviceStateMessages } from './service-state.ts';
 
 export class CtxError extends Error {
@@ -17,6 +17,19 @@ export class CtxError extends Error {
 
   bodyField(name: string): string | undefined {
     return CtxError.field(this.body, name);
+  }
+
+  payRejection(): PayRejection {
+    return {
+      status: this.status,
+      errorName: this.errorName(),
+      message: this.bodyField('message'),
+      txId: this.bodyField('txId'),
+    };
+  }
+
+  static payRejectionOf(error: unknown): PayRejection | undefined {
+    return error instanceof CtxError ? error.payRejection() : undefined;
   }
 
   private static displayMessage(status: number, body: string): string {

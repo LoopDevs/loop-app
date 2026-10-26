@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { amountErrorMessage } from './amount-error.ts';
+import { amountErrorMessage, withdrawalAmountErrorMessage } from './amount-error.ts';
 
 const range = { currency: 'GBP', denominations: ['5.00', '500.00'] };
 const fixed = { currency: 'USD', denominations: ['10', '25', '50'] };
@@ -32,4 +32,28 @@ test('no available discount asks for another amount', () => {
 test('other errors are not amount errors', () => {
   assert.equal(amountErrorMessage('ErrServerError', range), null);
   assert.equal(amountErrorMessage(undefined, range), null);
+});
+
+function ctxBody(fields: Record<string, string>) {
+  return {
+    errorName: () => fields.error,
+    bodyField: (name: string) => fields[name],
+  };
+}
+
+test('withdrawal limits come from the top-level min and max', () => {
+  assert.equal(
+    withdrawalAmountErrorMessage(ctxBody({ error: 'ErrAmountBelowMinimum', message: 'too low', min: 'GBP 10.00' })),
+    'Minimum is GBP 10.00',
+  );
+  assert.equal(
+    withdrawalAmountErrorMessage(ctxBody({ error: 'ErrAmountAboveMaximum', message: 'too high', max: 'GBP 1000.00' })),
+    'Maximum is GBP 1000.00',
+  );
+  assert.equal(
+    withdrawalAmountErrorMessage(ctxBody({ error: 'ErrAmountFractional' })),
+    'Use whole pence (2 decimal places)',
+  );
+  assert.equal(withdrawalAmountErrorMessage(ctxBody({ error: 'ErrAmountBelowMinimum' })), null);
+  assert.equal(withdrawalAmountErrorMessage(ctxBody({ error: 'ErrBankWithdrawalOpen' })), null);
 });

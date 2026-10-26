@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -20,27 +19,16 @@ import {
   settledStatuses,
 } from '@/ctx/gift-card-status';
 import type { Merchant } from '@/ctx/merchant';
-import { paymentLock } from '@/ctx/payment-lock';
-import { PaymentSender, type SendOutcome } from '@/ctx/payment-sender';
-import {
-  canPay,
-  landingClosed,
-  needsNewPrice,
-  resumedPaymentState,
-  sentTransactionOutcome,
-  type PaymentState,
-  type PayRejection,
-  type SignedTransfer,
-} from '@/ctx/payment-state';
-import { SentPayments } from '@/ctx/sent-payments';
+import type { SendOutcome } from '@/ctx/payment-sender';
+import { canPay, needsNewPrice, resumedPaymentState, type PaymentState } from '@/ctx/payment-state';
 import { PriceWindow } from '@/ctx/price-window';
 import { Rates } from '@/ctx/rates';
+import { paymentSender, sentPayments } from '@/ctx/wallet-payments';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
-import { soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
 import type { Coverage, Holdings } from '@/wallet/holdings';
@@ -57,53 +45,10 @@ type SentTransaction = {
   expiryLedger?: number;
 };
 
-async function sentPaymentFailure(
-  giftCard: GiftCard,
-  wallet: SmartWallet,
-  { txId, expiryLedger }: SentTransaction,
-): Promise<PaymentState | null> {
-  if (txId) {
-    return sentTransactionOutcome(await soroban.transaction(txId), expiryLedger) === 'failed'
-      ? { kind: 'failed' }
-      : null;
-  }
-  const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
-  if (expiryLedger === undefined || !token || !landingClosed(await soroban.latestLedger(), expiryLedger)) {
-    return null;
-  }
-  if (await wallet.paymentLanded(token, await signedTransfer(giftCard), expiryLedger)) {
-    return null;
-  }
-  return { kind: 'failed', contactSupport: true };
-}
-
-async function signedTransfer(giftCard: GiftCard): Promise<SignedTransfer | null> {
-  const recorded = await sentPayments.get(giftCard.paymentId);
-  if (recorded?.transfer) {
-    return recorded.transfer;
-  }
-  const price = orderPrice(giftCard);
-  return price === null ? null : { amount: price };
-}
-
 function needsSupport(state: PaymentState): boolean {
   return state.kind === 'failed' && state.contactSupport === true;
 }
 
-function payRejection(error: unknown): PayRejection | undefined {
-  if (!(error instanceof CtxError)) {
-    return undefined;
-  }
-  return {
-    status: error.status,
-    errorName: error.errorName(),
-    message: error.bodyField('message'),
-    txId: error.bodyField('txId'),
-  };
-}
-
-const sentPayments = new SentPayments(AsyncStorage);
-const paymentSender = new PaymentSender(sentPayments, payRejection, paymentLock);
 const pendingTopUps = new Map<string, PendingWithdrawal>();
 const inFlightPayments = new InFlightPayments();
 
@@ -170,9 +115,11 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         }
         let failure: PaymentState | null;
         try {
-          failure = await sentPaymentFailure(current, wallet, {
+          const recorded = await sentPayments.get(current.paymentId);
+          failure = await wallet.sentPaymentFailure(current, {
             txId: sent.txId ?? current.paymentCryptoTxId,
             expiryLedger: sent.expiryLedger,
+            transfer: recorded?.transfer,
           });
         } catch {
           continue;
