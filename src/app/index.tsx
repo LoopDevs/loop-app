@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LatestBankWithdrawal } from '@/components/bank-withdrawal-row';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
 import { HoldingsSummary } from '@/components/holdings-summary';
@@ -13,6 +14,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
 import { loopLinks } from '@/constants/loop-links';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { bankWithdrawalCurrency } from '@/ctx/bank-withdrawal';
 import { ctx } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
@@ -242,6 +244,10 @@ export default function HomeScreen() {
                 onPress={withdraw}
                 disabled={busy || vaultShares === 0n}
               />
+              {(view?.holdings.inWallet(bankWithdrawalCurrency) ?? 0n) > 0n && (
+                <Button label="Withdraw to bank" onPress={() => router.push('/withdraw')} />
+              )}
+              <LatestBankWithdrawal wallet={wallet} />
               <Button label="Shop gift cards" onPress={() => router.navigate('/shop')} />
               <Button label="Cashback" onPress={() => router.navigate('/orders/cashback')} />
             </>

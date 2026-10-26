@@ -19,3 +19,23 @@ export function amountErrorMessage(errorName: string | undefined, merchant: Amou
       return null;
   }
 }
+
+type ErrorFields = {
+  errorName(): string | undefined;
+  bodyField(name: string): string | undefined;
+};
+
+export function withdrawalAmountErrorMessage(error: ErrorFields): string | null {
+  const min = error.bodyField('min');
+  const max = error.bodyField('max');
+  switch (error.errorName()) {
+    case 'ErrAmountBelowMinimum':
+      return min ? `Minimum is ${min}` : null;
+    case 'ErrAmountAboveMaximum':
+      return max ? `Maximum is ${max}` : null;
+    case 'ErrAmountFractional':
+      return 'Use whole pence (2 decimal places)';
+    default:
+      return null;
+  }
+}

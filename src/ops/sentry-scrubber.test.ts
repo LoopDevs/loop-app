@@ -142,3 +142,16 @@ test('event breadcrumbs are scrubbed too', () => {
   assert.ok(!everything.includes(email));
   assert.ok(!everything.includes(jwt));
 });
+
+test('bank details are redacted and the withdrawal route keeps its name', () => {
+  const scrubbed = SentryScrubber.scrubString(
+    '{"sortCode":"123456","accountNumber":"12345678","accountName":"Ada Lovelace"}',
+  );
+  assert.ok(!scrubbed.includes('123456'));
+  assert.ok(!scrubbed.includes('12345678'));
+  assert.ok(!scrubbed.includes('Lovelace'));
+  assert.equal(
+    SentryScrubber.routeTemplate('/users/abc/bank-withdrawals/bw_1'),
+    '/users/:id/bank-withdrawals/:id',
+  );
+});
