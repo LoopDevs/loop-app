@@ -23,7 +23,7 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="orders">
         <NativeTabs.Trigger.Label>Orders</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
+          src={require('@/assets/images/tabIcons/orders.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
