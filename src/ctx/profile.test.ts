@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { MeJson } from './client.ts';
+import type { CashbackDestination, MeJson } from './client.ts';
 import { Profile } from './profile.ts';
 
 const company = {
@@ -80,4 +80,52 @@ test('a stable currency is labelled by its asset code', () => {
 test('a country code becomes its flag', () => {
   assert.equal(Profile.countryFlag('GB'), '🇬🇧');
   assert.equal(Profile.countryFlag('gb'), '');
+});
+
+function destinationProfile(stableCurrency: string | undefined, cashbackDestination?: CashbackDestination) {
+  return Profile.fromMe({ user: { id: 'u1', stableCurrency, cashbackDestination }, company });
+}
+
+test('a user whose cashback currency savings takes can choose either destination', () => {
+  assert.deepEqual(destinationProfile('XLM.USDC', 'account').cashbackDestinations(), ['account', 'savings']);
+});
+
+test('a user whose cashback currency savings does not take sees account only', () => {
+  for (const stableCurrency of ['XLM.GBPLOOP', 'XLM.EURC', '', undefined]) {
+    const profile = destinationProfile(stableCurrency, 'account');
+    assert.deepEqual(profile.cashbackDestinations(), ['account'], String(stableCurrency));
+    assert.equal(profile.destinationUpdate('savings'), null);
+  }
+});
+
+test('a saver in a currency savings does not take can still leave savings', () => {
+  const profile = destinationProfile('XLM.GBPLOOP', 'savings');
+  assert.deepEqual(profile.cashbackDestinations(), ['account', 'savings']);
+  assert.deepEqual(profile.destinationUpdate('account'), { cashbackDestination: 'account' });
+});
+
+test('choosing the other destination sends only the destination', () => {
+  assert.deepEqual(destinationProfile('XLM.USDC', 'account').destinationUpdate('savings'), {
+    cashbackDestination: 'savings',
+  });
+});
+
+test('choosing the active destination sends nothing', () => {
+  assert.equal(destinationProfile('XLM.USDC', 'savings').destinationUpdate('savings'), null);
+  assert.equal(destinationProfile('XLM.USDC', 'account').destinationUpdate('account'), null);
+});
+
+test('a missing destination reads as account', () => {
+  const profile = destinationProfile('XLM.USDC');
+  assert.equal(profile.cashbackDestination, 'account');
+  assert.equal(profile.savesCashback(), false);
+});
+
+test('the destination follows the saved user', () => {
+  const saved = destinationProfile('XLM.USDC', 'account').withUser({
+    id: 'u1',
+    stableCurrency: 'XLM.USDC',
+    cashbackDestination: 'savings',
+  });
+  assert.equal(saved.savesCashback(), true);
 });

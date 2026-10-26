@@ -1,4 +1,5 @@
-import type { MeJson, UserJson, UserUpdate } from './client.ts';
+import { Savings } from '../wallet/savings.ts';
+import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client.ts';
 
 const regionalIndicatorOffset = 0x1f1e6 - 'A'.charCodeAt(0);
 
@@ -10,12 +11,14 @@ export type CountryChoice = {
 export class Profile {
   readonly country?: string;
   readonly stableCurrency?: string;
+  readonly cashbackDestination: CashbackDestination;
   readonly countries: string[];
   readonly stableCurrencies: string[];
 
   constructor(user: UserJson, company: MeJson['company']) {
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
+    this.cashbackDestination = user.cashbackDestination ?? 'account';
     this.countries = company?.countries ?? [];
     this.stableCurrencies = company?.stableCurrencies ?? [];
   }
@@ -48,6 +51,21 @@ export class Profile {
       return { country: choice.country };
     }
     return null;
+  }
+
+  savesCashback(): boolean {
+    return this.cashbackDestination === 'savings';
+  }
+
+  cashbackDestinations(): CashbackDestination[] {
+    return Savings.takes(this.stableCurrency) || this.savesCashback() ? ['account', 'savings'] : ['account'];
+  }
+
+  destinationUpdate(destination: CashbackDestination): UserUpdate | null {
+    if (destination === this.cashbackDestination || !this.cashbackDestinations().includes(destination)) {
+      return null;
+    }
+    return { cashbackDestination: destination };
   }
 
   static currencyLabel(currency: string): string {

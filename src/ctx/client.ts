@@ -1,5 +1,7 @@
+import { Account } from '@/ctx/account';
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
+import type { PayoutStatus } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
@@ -141,10 +143,13 @@ export type GiftCardQuery = {
   perPage?: number;
 };
 
+export type CashbackDestination = 'account' | 'savings';
+
 export type UserJson = {
   id: string;
   country?: string;
   stableCurrency?: string;
+  cashbackDestination?: CashbackDestination;
 };
 
 export type MeJson = {
@@ -155,7 +160,31 @@ export type MeJson = {
   };
 };
 
-export type UserUpdate = { country: string } | { stableCurrency: string };
+export type UserUpdate =
+  | { country: string }
+  | { stableCurrency: string }
+  | { cashbackDestination: CashbackDestination };
+
+export type BalanceJson = {
+  currency: string;
+  amount: string;
+};
+
+export type PayoutJson = {
+  id: string;
+  kind?: 'wallet' | 'savings';
+  status: PayoutStatus;
+  currency: string;
+  amount: string;
+  retryAt?: string;
+  reservationTransferId?: string;
+  reversalTransferId?: string;
+};
+
+export type AccountJson = {
+  wallet: BalanceJson[] | null;
+  payouts: PayoutJson[] | null;
+};
 
 export type SponsoredResult = {
   hash: string;
@@ -226,6 +255,10 @@ class CtxClient {
 
   updateUser(update: UserUpdate): Promise<UserJson> {
     return this.userRequest('PUT', '', update);
+  }
+
+  async account(): Promise<Account> {
+    return new Account(await this.userRequest<AccountJson>('GET', '/account'));
   }
 
   async merchants({ country, name, ids, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
