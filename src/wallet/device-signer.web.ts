@@ -1,26 +1,26 @@
 import { base64 } from '@/wallet/base64';
+import { DeviceKey } from '@/wallet/device-key';
 
 const databaseName = 'loop-device-signer';
 const storeName = 'keys';
-const keyName = 'device';
 
 export const deviceSigner = {
-  async publicKey(): Promise<string | null> {
-    const keyPair = await read();
+  async publicKey(userId: string): Promise<string | null> {
+    const keyPair = await read(userId);
     return keyPair ? exportPublicKey(keyPair) : null;
   },
 
-  async create(): Promise<string> {
+  async create(userId: string): Promise<string> {
     const keyPair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, false, [
       'sign',
       'verify',
     ])) as CryptoKeyPair;
-    await write(keyPair);
+    await write(userId, keyPair);
     return exportPublicKey(keyPair);
   },
 
-  async sign(digest: Uint8Array): Promise<string> {
-    const keyPair = await read();
+  async sign(userId: string, digest: Uint8Array): Promise<string> {
+    const keyPair = await read(userId);
     if (!keyPair) {
       throw new Error('No device key in this browser');
     }
@@ -58,10 +58,12 @@ async function transact<T>(
   });
 }
 
-function read(): Promise<CryptoKeyPair | undefined> {
+function read(userId: string): Promise<CryptoKeyPair | undefined> {
+  const keyName = DeviceKey.storageName(userId);
   return transact('readonly', (store) => store.get(keyName));
 }
 
-async function write(keyPair: CryptoKeyPair): Promise<void> {
+async function write(userId: string, keyPair: CryptoKeyPair): Promise<void> {
+  const keyName = DeviceKey.storageName(userId);
   await transact('readwrite', (store) => store.put(keyPair, keyName));
 }
