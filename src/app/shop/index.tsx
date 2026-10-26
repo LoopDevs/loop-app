@@ -241,12 +241,17 @@ export default function ShopScreen() {
     return <SignedOutShop initialSearch={search} onOpen={openMerchant} />;
   }
 
+  const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
+
   if (!profile) {
-    return <SimplePage title="Shop">{account.message === '' ? <MerchantGridSkeleton columns={cardColumns} /> : accountError}</SimplePage>;
+    return (
+      <ShopLoading wide={wide} pageWidth={pageWidth} search={search} onSearch={setSearch}>
+        {account.message === '' ? <MerchantGridSkeleton columns={cardColumns} /> : accountError}
+      </ShopLoading>
+    );
   }
 
   const searching = query !== '';
-  const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
 
   return (
     <ThemedView style={styles.container}>
@@ -399,7 +404,15 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
   );
 }
 
-function SimplePage({ title, children }: { title: string; children: React.ReactNode }) {
+type ShopLoadingProps = {
+  wide: boolean;
+  pageWidth: { maxWidth: number; paddingHorizontal: number } | null;
+  search: string;
+  onSearch: (text: string) => void;
+  children: React.ReactNode;
+};
+
+function ShopLoading({ wide, pageWidth, search, onSearch, children }: ShopLoadingProps) {
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
@@ -410,8 +423,10 @@ function SimplePage({ title, children }: { title: string; children: React.ReactN
         scrollEventThrottle={16}
         contentContainerStyle={styles.simpleContent}
         keyboardShouldPersistTaps="handled">
-        <PageHeader title={title} />
-        <View style={[styles.body, styles.simpleBody]}>{children}</View>
+        <PageHeader title="Shop" width={wide ? 'page' : 'content'}>
+          <SearchBar value={search} onChangeText={onSearch} />
+        </PageHeader>
+        <View style={[styles.body, styles.header, pageWidth]}>{children}</View>
         <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
@@ -523,10 +538,6 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
-  },
-  simpleBody: {
-    paddingTop: Spacing.four,
-    gap: Spacing.three,
   },
   header: {
     paddingTop: Spacing.four,
