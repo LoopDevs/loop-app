@@ -40,8 +40,8 @@ export class SentPayments {
   }
 
   async sending(paymentId: string, signed: SignedRecord): Promise<void> {
-    await this.prune();
     await this.write(paymentId, { ...signed, at: this.now() });
+    await this.prune().catch(() => undefined);
   }
 
   async sent(paymentId: string, txId: string): Promise<void> {
