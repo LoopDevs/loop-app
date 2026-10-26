@@ -40,7 +40,7 @@ export function giftCardStatusLabel(status: GiftCard['status']): string {
 
 const refundAdvice = 'contact support about a refund.';
 
-export function outcomeText(card: GiftCard): string | null {
+export function outcomeText(card: GiftCard, sentUnconfirmed = false): string | null {
   const { status, paymentStatus, paymentMethod, paymentCryptoTxId } = card;
   if (status === 'refunded') {
     return 'Your payment was refunded.';
@@ -54,7 +54,7 @@ export function outcomeText(card: GiftCard): string | null {
   if (status === 'expired' && paymentStatus === 'paid') {
     return `This order expired after payment. Contact support about a refund.`;
   }
-  if (status === 'expired' && (paymentCryptoTxId || paymentMethod !== 'crypto')) {
+  if (status === 'expired' && (paymentCryptoTxId || paymentMethod !== 'crypto' || sentUnconfirmed)) {
     return `This order expired. If you were charged, ${refundAdvice}`;
   }
   if (paymentStatus === 'cancelled') {

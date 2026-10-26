@@ -83,6 +83,13 @@ test('an expired card with a sent transfer or a bank payment hedges about being 
   );
 });
 
+test('an expired card whose sent payment is unconfirmed on chain hedges about being charged', () => {
+  assert.equal(
+    outcomeText(card({ status: 'expired', paymentStatus: 'expired' }), true),
+    `This order expired. If you were charged, ${refundLine}`,
+  );
+});
+
 test('a cancelled card hedges about being charged, with or without a transfer', () => {
   const expected = `This order was cancelled. If you were charged, ${refundLine}`;
   assert.equal(outcomeText(card({ status: 'rejected', paymentStatus: 'cancelled' })), expected);
