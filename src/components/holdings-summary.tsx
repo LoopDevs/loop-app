@@ -7,7 +7,7 @@ import { Spacing } from '@/constants/theme';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
-import { Holdings } from '@/wallet/holdings';
+import { Savings } from '@/wallet/savings';
 
 export function HoldingsSummary({ view }: { view: HoldingsView }) {
   const { holdings, stable, problem } = view;
@@ -27,7 +27,7 @@ export function HoldingsSummary({ view }: { view: HoldingsView }) {
           </ThemedText>
         ))}
         <ThemedText type="small">
-          Savings: {money.token(holdings.savings(), Holdings.savingsCurrency)}
+          Savings: {money.token(holdings.savings(), Savings.currency)}
         </ThemedText>
       </Figure>
       {holdings.onTheWay ? (

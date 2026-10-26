@@ -199,6 +199,7 @@ export default function HomeScreen() {
                 disabled={busy || vaultShares === 0n}
               />
               <Button label="Shop gift cards" onPress={() => router.navigate('/shop')} />
+              <Button label="Cashback" onPress={() => router.navigate('/orders/cashback')} />
             </>
           )}
 
