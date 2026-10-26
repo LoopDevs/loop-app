@@ -36,7 +36,8 @@ export type DeployWalletIn = {
 
 export type SmartWalletIntent =
   | { intent: 'vault_withdraw'; currency: string; shares: string }
-  | { intent: 'pay'; paymentId: string };
+  | { intent: 'pay'; paymentId: string }
+  | { intent: 'rotate_device'; newDevicePublicKey: string };
 
 export type BuiltTransaction = {
   transaction: string;
@@ -45,16 +46,26 @@ export type BuiltTransaction = {
   expiryLedger: number;
 };
 
-export type SignedTransaction = {
-  transaction: string;
+export type PasskeySignature = {
+  publicKey: string;
+  authenticatorData: string;
+  clientDataJson: string;
   signature: string;
-  devicePublicKey: string;
 };
+
+export type SignedTransaction = { transaction: string } & (
+  | { signature: string; devicePublicKey: string }
+  | { passkey: PasskeySignature }
+);
 
 export type MerchantLinkJson = {
   userDiscountOverride?: boolean;
   userDiscountBasisPoints?: number;
 };
+
+export type MerchantRedeemLocation = 'any' | 'physical' | 'online';
+
+export type MerchantRedeemType = 'barcode' | 'url';
 
 export type MerchantJson = {
   id: string;
@@ -63,10 +74,13 @@ export type MerchantJson = {
   country: string;
   currency: string;
   denominationType: 'min-max' | 'min-max-major' | 'fixed';
-  denominations: string[];
+  denominationValues: string[] | null;
   logoUrl?: string;
   cardImageUrl?: string;
   website?: string;
+  categories?: string[];
+  redeemLocation?: MerchantRedeemLocation | '';
+  redeemType?: MerchantRedeemType | '';
   info?: GiftCardInfo;
   userDiscount: number;
   link?: MerchantLinkJson;
@@ -76,6 +90,7 @@ export type MerchantQuery = {
   country: string;
   name?: string;
   ids?: string[];
+  category?: string;
   order?: 'name';
   page?: number;
   perPage?: number;
@@ -116,7 +131,7 @@ export type GiftCard = {
   pin?: string;
   redeemUrl?: string;
   redeemUrlChallenge?: string;
-  redeemType?: 'barcode' | 'url';
+  redeemType?: MerchantRedeemType;
   barcodeUrl?: string;
   barcodeType?: string;
   info?: GiftCardInfo;
@@ -271,7 +286,7 @@ class CtxClient {
     return new Account(await this.userRequest<AccountJson>('GET', '/account'));
   }
 
-  async merchants({ country, name, ids, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
+  async merchants({ country, name, ids, category, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
     const query = new URLSearchParams({ enabled: '1', order, country });
     const pattern = Merchant.searchPattern(name ?? '');
     if (pattern) {
@@ -280,21 +295,33 @@ class CtxClient {
     if (ids) {
       query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
     }
+    if (category) {
+      query.set('category', category);
+    }
     if (page) {
       query.set('page', String(page));
     }
     if (perPage) {
       query.set('perPage', String(perPage));
     }
-    const { result, pagination } = await this.auth.sessionRequest<{
+    const { result, pagination } = await this.merchantRequest<{
       result: MerchantJson[] | null;
       pagination: Pagination;
-    }>('GET', `/merchants?${query}`);
+    }>(`/merchants?${query}`);
     return { result: (result ?? []).map((json) => new Merchant(json)), pagination };
   }
 
   async merchant(idOrSlug: string): Promise<Merchant> {
-    const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
+    if (await this.isSignedIn()) {
+      const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
+      return new Merchant(json);
+    }
+    const query = new URLSearchParams({ slug: idOrSlug });
+    const { result } = await this.send<{ result: MerchantJson[] | null }>('GET', `/merchants?${query}`);
+    const json = result?.[0];
+    if (!json) {
+      throw new Error('We couldn’t find that gift card.');
+    }
     return new Merchant(json);
   }
 
@@ -359,6 +386,13 @@ class CtxClient {
     signed: SignedTransaction,
   ): Promise<SponsoredResult> {
     return this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed });
+  }
+
+  private async merchantRequest<T>(path: string): Promise<T> {
+    if (await this.isSignedIn()) {
+      return this.auth.sessionRequest<T>('GET', path);
+    }
+    return this.send<T>('GET', path);
   }
 
   private async userRequest<T>(method: string, path: string, body?: unknown): Promise<T> {

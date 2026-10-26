@@ -6,7 +6,7 @@ import { Profile } from './profile.ts';
 
 const company = {
   countries: ['US', 'GB', 'CA'],
-  stableCurrencies: ['XLM.USDC', 'XLM.GBPLOOP'],
+  stableCurrencies: ['XLM.USDC', 'XLM.GBPLOOP', 'XLM.UNLISTED'],
 };
 
 const newUser: MeJson = { user: { id: 'u1' }, company };
@@ -15,6 +15,15 @@ test('a new user needs setup and a currency choice', () => {
   const profile = Profile.fromMe(newUser);
   assert.equal(profile.needsSetup(), true);
   assert.equal(profile.needsCurrencyChoice(), true);
+});
+
+test('only offered currencies are given as a choice', () => {
+  assert.deepEqual(Profile.fromMe(newUser).stableCurrencies, ['XLM.USDC', 'XLM.GBPLOOP']);
+});
+
+test('a company currency that is not offered is never sent', () => {
+  const profile = Profile.fromMe(newUser);
+  assert.equal(profile.nextUpdate({ country: 'GB', stableCurrency: 'XLM.UNLISTED' }), null);
 });
 
 test('the stable currency is sent before the country', () => {
@@ -104,7 +113,8 @@ test('the passkey is labelled with the account email', () => {
 });
 
 test('a stable currency is labelled by its asset code', () => {
-  assert.equal(Profile.currencyLabel('XLM.GBPLOOP'), 'GBPLOOP');
+  assert.equal(Profile.currencyLabel('XLM.GBPLOOP'), 'British Pound');
+  assert.equal(Profile.currencyLabel('XLM.USDC'), 'US Dollar');
   assert.equal(Profile.currencyLabel('XLM'), 'XLM');
 });
 

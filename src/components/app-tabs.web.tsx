@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import {
   Tabs,
   TabList,
@@ -6,93 +7,212 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { CountryMenu } from '@/components/country-menu';
+import { SignInButton, useSignIn } from '@/components/sign-in';
+import { MerchantSearch } from '@/components/storefront';
+import { Wordmark } from '@/components/wordmark';
+import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { usePageLayout } from '@/hooks/use-page-layout';
+import { useMarket } from '@/hooks/use-market';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
+  const { wide } = usePageLayout();
   return (
-    <Tabs>
-      <TabSlot style={{ height: '100%' }} />
+    <Tabs style={styles.shell}>
+      {wide ? null : <TabSlot style={styles.slot} />}
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
+          <TabTrigger name="home" href="/" resetOnFocus asChild>
             <TabButton>Home</TabButton>
           </TabTrigger>
-          <TabTrigger name="shop" href="/shop" asChild>
+          <TabTrigger name="shop" href="/shop" resetOnFocus asChild>
             <TabButton>Shop</TabButton>
           </TabTrigger>
-          <TabTrigger name="orders" href="/orders" asChild>
-            <TabButton>Orders</TabButton>
+          <TabTrigger name="savings" href="/savings" resetOnFocus asChild>
+            <TabButton>Savings</TabButton>
           </TabTrigger>
-          <TabTrigger name="settings" href="/settings" asChild>
-            <TabButton>Settings</TabButton>
+          <TabTrigger name="wallet" href="/wallet" resetOnFocus asChild>
+            <TabButton>Wallet</TabButton>
           </TabTrigger>
+          <TabTrigger name="profile" href="/profile" resetOnFocus asChild>
+            <TabButton>Profile</TabButton>
+          </TabTrigger>
+          <TabTrigger name="site" href="/about" style={styles.hiddenTab} />
         </CustomTabList>
       </TabList>
+      {wide ? <TabSlot style={styles.slot} /> : null}
     </Tabs>
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+export function TabButton({ children, isFocused, ...props }: Omit<TabTriggerSlotProps, 'ref'>) {
+  const { wide } = usePageLayout();
+  const theme = useTheme();
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+    <Pressable
+      {...props}
+      style={({ pressed }) => [
+        styles.tabButton,
+        !wide && styles.tabButtonNarrow,
+        wide && isFocused && { backgroundColor: theme.backgroundSelected },
+        !isFocused && pressed && { backgroundColor: theme.backgroundSubtle },
+      ]}>
+      <Text
+        style={[
+          styles.tabLabel,
+          { color: isFocused ? (wide ? theme.text : theme.accent) : theme.textSecondary },
+          isFocused && styles.tabLabelFocused,
+        ]}>
+        {children}
+      </Text>
     </Pressable>
   );
 }
 
 export function CustomTabList(props: TabListProps) {
-  return (
-    <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Loop
-        </ThemedText>
-
+  const { wide, gutter } = usePageLayout();
+  const theme = useTheme();
+  if (!wide) {
+    return (
+      <View
+        {...props}
+        style={[styles.bottomBar, { backgroundColor: theme.chrome, borderTopColor: theme.border }]}>
         {props.children}
-      </ThemedView>
+      </View>
+    );
+  }
+  return (
+    <View {...props} style={[styles.header, { backgroundColor: theme.chrome, borderBottomColor: theme.border }]}>
+      <View style={[styles.headerInner, { paddingHorizontal: gutter }]}>
+        <HomeLink />
+        <HeaderSearch />
+        <View style={styles.nav}>{props.children}</View>
+        <AccountActions />
+      </View>
+    </View>
+  );
+}
+
+function HomeLink() {
+  const router = useRouter();
+  return (
+    <Pressable
+      onPress={() => router.navigate('/')}
+      accessibilityRole="link"
+      accessibilityLabel="Loop home"
+      style={styles.brand}>
+      <Wordmark height={22} />
+    </Pressable>
+  );
+}
+
+function HeaderSearch() {
+  const router = useRouter();
+  const { country } = useMarket();
+  const [search, setSearch] = useState('');
+  const submit = () => {
+    const q = search.trim();
+    router.navigate(q ? { pathname: '/shop', params: { q } } : '/shop');
+  };
+  return (
+    <View style={styles.search}>
+      <MerchantSearch
+        country={country}
+        value={search}
+        onChangeText={setSearch}
+        onSubmit={submit}
+        onOpen={(merchant) => router.push(`/shop/${merchant.slug}`)}
+      />
+    </View>
+  );
+}
+
+function AccountActions() {
+  const { signedIn } = useSignIn();
+  if (signedIn !== false) {
+    return null;
+  }
+  return (
+    <View style={styles.actions}>
+      <CountryMenu />
+      <SignInButton />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tabListContainer: {
-    position: 'absolute',
+  shell: {
+    flex: 1,
+  },
+  slot: {
+    flex: 1,
+  },
+  header: {
+    borderBottomWidth: 1,
+    height: Layout.headerHeight,
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  headerInner: {
     width: '100%',
-    padding: Spacing.three,
+    maxWidth: Layout.pageMaxWidth,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.four,
+  },
+  brand: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  nav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    marginLeft: 'auto',
+  },
+  search: {
+    flex: 1,
+    maxWidth: 420,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.two,
+    gap: Spacing.one,
+  },
+  tabButton: {
+    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-  },
-  innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.two,
-    maxWidth: MaxContentWidth,
-  },
-  brandText: {
-    marginRight: 'auto',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.pill,
+    transitionProperty: 'background-color',
+    transitionDuration: `${Motion.feedback}ms`,
+  },
+  tabButtonNarrow: {
+    flex: 1,
+    paddingHorizontal: Spacing.one,
+  },
+  tabLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  tabLabelFocused: {
+    fontFamily: FontFamily.semibold,
+  },
+  hiddenTab: {
+    display: 'none',
   },
 });

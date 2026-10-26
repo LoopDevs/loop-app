@@ -55,7 +55,7 @@ test('balances that display as zero are not listed', () => {
 test('an XLM balance waits to convert whatever the destination', () => {
   const json = { wallet: [{ currency: 'XLM', amount: '3' }], payouts: [] };
   for (const routing of [saver, nonSaver]) {
-    assert.deepEqual(labels(json, routing), ['XLM converts to USDC when a conversion is available']);
+    assert.deepEqual(labels(json, routing), ['XLM converts to US Dollar when a conversion is available']);
   }
 });
 
@@ -82,7 +82,7 @@ test("a saver's balance goes to savings when savings takes it and is held otherw
     items.map((item) => [item.label, item.heldBySavings]),
     [
       ['goes to savings when savings is available', false],
-      ['held: Loop savings holds USDC, switch to Account to receive it', true],
+      ['held: Loop savings holds US Dollar, switch to Account to receive it', true],
     ],
   );
 });
