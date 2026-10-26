@@ -200,7 +200,7 @@ function OrderRow({ giftCard, onPress }: { giftCard: GiftCard; onPress: () => vo
       style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
-          <ThemedText type="smallBold" numberOfLines={1} style={styles.rowName}>
+          <ThemedText type="smallBold" style={styles.rowName}>
             {giftCard.merchantName}
           </ThemedText>
           <ThemedText type="smallBold" style={styles.amount}>

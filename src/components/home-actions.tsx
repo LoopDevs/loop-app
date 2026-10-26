@@ -76,7 +76,7 @@ function Action({ label, icon, onPress, selected = false, disabled = false, acce
       <View style={[styles.square, selected && styles.squareSelected]}>
         <SymbolView name={icon} size={24} tintColor={Brand.onRoyal} />
       </View>
-      <Text style={styles.label} maxFontSizeMultiplier={1.3} numberOfLines={1}>
+      <Text style={styles.label} maxFontSizeMultiplier={1.3} numberOfLines={2}>
         {label}
       </Text>
     </PressScale>
@@ -116,5 +116,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 13,
     lineHeight: 16,
+    textAlign: 'center',
   },
 });
