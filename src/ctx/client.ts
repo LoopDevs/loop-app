@@ -181,7 +181,6 @@ export type BankWithdrawal = {
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
   paymentUrlExpiration?: string;
-  refundTxId?: string;
 };
 
 export type BankWithdrawalIn = {

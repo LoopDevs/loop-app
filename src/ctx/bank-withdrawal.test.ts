@@ -78,10 +78,14 @@ test('each later status has its own copy', () => {
   assert.deepEqual(lines({ status: 'in-review' }), ['In review']);
   assert.deepEqual(lines({ status: 'paying' }), ['Sending to your bank']);
   assert.deepEqual(lines({ status: 'paid', bankReference: 'LOOP123' }), ['Paid', 'Reference LOOP123']);
-  assert.deepEqual(lines({ status: 'rejected', reason: 'Name mismatch' }), [
-    'Not approved, returning GBPLOOP',
-    'Name mismatch',
-  ]);
-  assert.deepEqual(lines({ status: 'rejected', refundTxId: 'tx' }), ['Returned to your wallet']);
-  assert.deepEqual(lines({ status: 'expired', refundTxId: 'tx' }), ['Expired', 'Returned to your wallet']);
+  assert.deepEqual(lines({ status: 'rejected', reason: 'Name mismatch' }), ['Not approved', 'Name mismatch']);
+  assert.deepEqual(lines({ status: 'expired' }), ['Expired']);
+});
+
+test('an unknown status reads as in progress', () => {
+  const status = 'settling' as BankWithdrawal['status'];
+  assert.deepEqual(BankWithdrawalForm.status({ ...awaiting, status }, now), {
+    lines: ['In progress'],
+    canFinish: false,
+  });
 });

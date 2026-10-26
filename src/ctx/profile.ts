@@ -15,6 +15,7 @@ export type CountryChoice = {
 
 export class Profile {
   static readonly fullNameHint = 'First and last name';
+  static readonly bankNameHint = 'Enter your first and last name as on your bank account';
 
   readonly name?: string;
   readonly accountName: string;

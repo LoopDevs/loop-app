@@ -15,7 +15,7 @@ import { BankWithdrawalForm, bankWithdrawalCurrency, type BankDetails } from '@/
 import { ctx, CtxError, type BankWithdrawal } from '@/ctx/client';
 import { pollIntervalMs } from '@/ctx/gift-card-status';
 import type { PaymentState } from '@/ctx/payment-state';
-import type { Profile } from '@/ctx/profile';
+import { Profile } from '@/ctx/profile';
 import { sentPayments } from '@/ctx/wallet-payments';
 import { WithdrawalPayment } from '@/ctx/withdrawal-payment';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
@@ -197,9 +197,12 @@ export default function WithdrawScreen() {
           throw error;
         }
         const name = error.errorName();
-        if (name === 'ErrBankPaymentIdentityRequired' && !retried) {
-          setRetryAfterName(true);
+        if (name === 'ErrBankPaymentIdentityRequired') {
+          setRetryAfterName(!retried);
           setStep('needs-name');
+          if (retried) {
+            setMessage(Profile.bankNameHint);
+          }
           return;
         }
         if (name === 'ErrBankWithdrawalOpen') {

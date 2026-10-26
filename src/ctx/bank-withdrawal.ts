@@ -87,7 +87,6 @@ export class BankWithdrawalForm {
   }
 
   static status(withdrawal: BankWithdrawal, now: number): WithdrawalStatusView {
-    const returned = withdrawal.refundTxId ? ['Returned to your wallet'] : [];
     const reason = withdrawal.reason ? [withdrawal.reason] : [];
     switch (withdrawal.status) {
       case 'awaiting-payment':
@@ -104,16 +103,11 @@ export class BankWithdrawalForm {
           canFinish: false,
         };
       case 'rejected':
-        return {
-          lines: [withdrawal.refundTxId ? 'Returned to your wallet' : 'Not approved, returning GBPLOOP', ...reason],
-          canFinish: false,
-        };
+        return { lines: ['Not approved', ...reason], canFinish: false };
       case 'expired':
-        return { lines: ['Expired', ...reason, ...returned], canFinish: false };
-      default: {
-        const unknown: never = withdrawal.status;
-        return { lines: [unknown], canFinish: false };
-      }
+        return { lines: ['Expired', ...reason], canFinish: false };
+      default:
+        return { lines: ['In progress'], canFinish: false };
     }
   }
 
