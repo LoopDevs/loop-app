@@ -11,7 +11,7 @@ import {
   type SponsoredResult,
 } from '@/ctx/client';
 import type { SignedPayment } from '@/ctx/payment-sender';
-import { transferLanded } from '@/ctx/payment-state';
+import type { SignedTransfer } from '@/ctx/payment-state';
 import { network, type Token } from '@/stellar/network';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
@@ -19,6 +19,7 @@ import { base64 } from '@/wallet/base64';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
+import { PaymentSearch } from '@/wallet/payment-search';
 import { Savings } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
@@ -44,7 +45,6 @@ type ContextRule = {
 export class SmartWallet {
   static readonly passkeyRuleId = 0;
   static readonly deviceRuleId = 1;
-  static readonly paymentSearchLedgers = 120;
 
   private constructor(
     readonly id: string,
@@ -139,20 +139,17 @@ export class SmartWallet {
     const intent: SmartWalletIntent = { intent: 'pay', paymentId: giftCard.paymentId };
     const built = await ctx.buildTransaction(this.id, intent);
     const call = await this.verifiedCall(built);
-    this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
+    const transfer = this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
     const signed = await this.sign(call);
     return {
       expiryLedger: built.expiryLedger,
+      transfer,
       sponsor: () => ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed }),
     };
   }
 
-  async paymentLanded(token: Token, price: bigint | null, expiryLedger: number): Promise<boolean> {
-    const transfers = await soroban.transfers(token.contract, this.address, network.payee, {
-      startLedger: expiryLedger - SmartWallet.paymentSearchLedgers,
-      endLedger: expiryLedger + 1,
-    });
-    return transferLanded(transfers, price);
+  paymentLanded(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
+    return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
   }
 
   async withdraw(shares: bigint): Promise<SentWithdrawal> {
@@ -214,7 +211,14 @@ export class SmartWallet {
     return address;
   }
 
-  private requirePayment(call: SponsoredCall, token: Token, amount: bigint): void {
+  private static muxedIdOf(address: string): bigint | undefined {
+    if (!StrKey.isValidMed25519PublicKey(address)) {
+      return undefined;
+    }
+    return BigInt(MuxedAccount.fromAddress(address, '0').id());
+  }
+
+  private requirePayment(call: SponsoredCall, token: Token, amount: bigint): SignedTransfer {
     if (call.contract !== token.contract || call.method !== 'transfer' || call.args.length !== 3) {
       throw new Error(`The transaction is not a ${token.symbol} transfer`);
     }
@@ -225,6 +229,8 @@ export class SmartWallet {
     if (transferred !== amount) {
       throw new Error('The payment amount does not match the order');
     }
+    const muxedId = SmartWallet.muxedIdOf(to);
+    return muxedId === undefined ? { amount } : { amount, muxedId };
   }
 
   private async rule(id: number): Promise<ContextRule> {

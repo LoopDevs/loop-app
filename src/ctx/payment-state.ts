@@ -23,8 +23,13 @@ const paymentClosedMessage = 'payment is no longer open';
 
 export const rateLimitedMessage = 'Too many requests. Wait a few minutes and try again.';
 
+export type SignedTransfer = {
+  amount: bigint;
+  muxedId?: bigint;
+};
+
 type SentRecord = {
-  expiryLedger: number;
+  expiryLedger?: number;
   txId?: string;
 };
 
@@ -77,15 +82,36 @@ export function transferAmount(value: unknown): bigint | null {
   return null;
 }
 
-export function transferLanded(values: readonly unknown[], price: bigint | null): boolean {
+export function transferMuxedId(value: unknown): bigint | null {
+  if (value && typeof value === 'object' && 'to_muxed_id' in value) {
+    const { to_muxed_id: muxedId } = value as { to_muxed_id: unknown };
+    return typeof muxedId === 'bigint' ? muxedId : null;
+  }
+  return null;
+}
+
+export function transferLanded(values: readonly unknown[], expected: SignedTransfer | null): boolean {
   return values.some((value) => {
     const amount = transferAmount(value);
-    return amount !== null && (price === null || amount === price);
+    if (amount === null) {
+      return false;
+    }
+    if (!expected) {
+      return true;
+    }
+    return (
+      amount === expected.amount &&
+      (expected.muxedId === undefined || transferMuxedId(value) === expected.muxedId)
+    );
   });
 }
 
+export function isAlreadySubmitted(rejection: PayRejection): boolean {
+  return rejection.status === 409 && rejection.errorName === 'ErrPaymentAlreadySubmitted';
+}
+
 export function rejectedPaymentState(rejection: PayRejection): PaymentState | null {
-  if (rejection.status === 409 && rejection.errorName === 'ErrPaymentAlreadySubmitted') {
+  if (isAlreadySubmitted(rejection)) {
     return { kind: 'confirming', txId: rejection.txId };
   }
   if (rejection.status === 429) {

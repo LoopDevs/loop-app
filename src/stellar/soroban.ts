@@ -13,6 +13,7 @@ import {
 
 import { Deadline } from '@/ctx/deadline';
 import { network } from '@/stellar/network';
+import { TransferEvents, type LedgerRange } from '@/stellar/transfer-events';
 
 const simulationSource = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
@@ -52,17 +53,9 @@ class Soroban {
     contractId: string,
     from: string,
     to: string,
-    ledgers: { startLedger: number; endLedger: number },
+    ledgers: LedgerRange,
   ): Promise<unknown[]> {
-    const topics = [
-      nativeToScVal('transfer', { type: 'symbol' }),
-      new Address(from).toScVal(),
-      new Address(to).toScVal(),
-    ].map((topic) => topic.toXDR('base64'));
-    const { events } = await this.server.getEvents({
-      ...ledgers,
-      filters: [{ type: 'contract', contractIds: [contractId], topics: [topics, [...topics, '*']] }],
-    });
+    const { events } = await this.server.getEvents(TransferEvents.request(contractId, from, to, ledgers));
     return events.map((event) => scValToNative(event.value));
   }
 

@@ -14,6 +14,7 @@ import {
   sentTransactionOutcome,
   transferAmount,
   transferLanded,
+  transferMuxedId,
 } from './payment-state.ts';
 
 const unpaid = { status: 'unpaid' };
@@ -153,10 +154,19 @@ test('a transfer amount is read from a plain amount or a muxed transfer map', ()
   assert.equal(transferAmount(null), null);
 });
 
-test('a transfer has landed when one matches the price', () => {
-  assert.equal(transferLanded([10n, { amount: 25n }], 25n), true);
-  assert.equal(transferLanded([10n], 25n), false);
-  assert.equal(transferLanded([], 25n), false);
+test('a transfer has landed when one matches the signed amount', () => {
+  assert.equal(transferLanded([10n, { amount: 25n }], { amount: 25n }), true);
+  assert.equal(transferLanded([10n], { amount: 25n }), false);
+  assert.equal(transferLanded([], { amount: 25n }), false);
   assert.equal(transferLanded(['junk'], null), false);
   assert.equal(transferLanded([10n], null), true);
+});
+
+test('a transfer to a muxed payee lands only with the signed muxed id', () => {
+  const signed = { amount: 25n, muxedId: 7n };
+  assert.equal(transferLanded([{ amount: 25n, to_muxed_id: 7n }], signed), true);
+  assert.equal(transferLanded([{ amount: 25n, to_muxed_id: 8n }], signed), false);
+  assert.equal(transferLanded([25n], signed), false);
+  assert.equal(transferMuxedId({ amount: 25n, to_muxed_id: 7n }), 7n);
+  assert.equal(transferMuxedId(25n), null);
 });
