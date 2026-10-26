@@ -1,12 +1,14 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
 import { BalanceSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { loopLinks } from '@/constants/loop-links';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -37,12 +39,27 @@ export default function HomeScreen() {
     await showWallet(await SmartWallet.load());
   }, [showWallet]);
 
-  useEffect(() => {
-    ctx
-      .isSignedIn()
-      .then((signedIn) => (signedIn ? loadWallet() : setScreen('email')))
-      .catch((error) => setMessage(errorMessage(error)));
-  }, [loadWallet, setMessage]);
+  const readSession = useCallback(async () => {
+    try {
+      if (await ctx.isSignedIn()) {
+        if (screen === 'loading') {
+          await loadWallet();
+        }
+        return;
+      }
+      setWallet(null);
+      setBalances(null);
+      setScreen((current) => (current === 'code' ? current : 'email'));
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }, [screen, loadWallet, setMessage]);
+
+  useFocusEffect(
+    useCallback(() => {
+      readSession();
+    }, [readSession]),
+  );
 
   const requestCode = () =>
     run(async () => {
@@ -105,14 +122,6 @@ export default function HomeScreen() {
         : `${result.status} ${result.hash}`;
       setMessage(outcome);
       setBalances(await wallet.balances());
-    });
-
-  const signOut = () =>
-    run(async () => {
-      await ctx.signOut();
-      setWallet(null);
-      setBalances(null);
-      setScreen('email');
     });
 
   return (
@@ -184,8 +193,18 @@ export default function HomeScreen() {
             </>
           )}
 
-          {(screen === 'no-wallet' || screen === 'wallet') && (
-            <Button label="Sign out" onPress={signOut} disabled={busy} />
+          {(screen === 'email' || screen === 'code') && (
+            <ThemedText type="small" themeColor="textSecondary">
+              By continuing you agree to Loop&apos;s{' '}
+              <ExternalLink href={loopLinks.terms} style={styles.link}>
+                Terms
+              </ExternalLink>{' '}
+              and{' '}
+              <ExternalLink href={loopLinks.privacy} style={styles.link}>
+                Privacy Policy
+              </ExternalLink>
+              .
+            </ThemedText>
           )}
 
           {message !== '' && (
@@ -214,5 +233,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.four,
     paddingBottom: BottomTabInset + Spacing.three,
     gap: Spacing.three,
+  },
+  link: {
+    textDecorationLine: 'underline',
   },
 });

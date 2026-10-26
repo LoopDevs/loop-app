@@ -15,6 +15,7 @@ import { type CountryChoice, Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
+import { useProfile } from '@/hooks/use-profile';
 
 const merchantsPerPage = 20;
 const searchDelayMs = 300;
@@ -47,7 +48,7 @@ export default function ShopScreen() {
   const router = useRouter();
   const { busy, message, run } = useBusyAction();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
   const [search, setSearch] = useState('');
@@ -74,7 +75,7 @@ export default function ShopScreen() {
         setProfile(loadedProfile);
         setActiveOrder(loadedOrder);
       }),
-    [run],
+    [run, setProfile],
   );
 
   useFocusEffect(
@@ -163,18 +164,7 @@ export default function ShopScreen() {
 
   const chooseCountry = (choice: CountryChoice) =>
     run(async () => {
-      if (!profile) {
-        return;
-      }
-      let current = profile;
-      const sent = new Set<string>();
-      let update = current.nextUpdate(choice);
-      while (update && !sent.has(Object.keys(update)[0])) {
-        sent.add(Object.keys(update)[0]);
-        current = current.withUser(await ctx.updateUser(update));
-        setProfile(current);
-        update = current.nextUpdate(choice);
-      }
+      await applyCountryChoice(choice);
       setChangingCountry(false);
       setSearch('');
     });
