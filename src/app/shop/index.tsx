@@ -1,22 +1,47 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 
 import { CountryPicker } from '@/components/country-picker';
 import { Button, Field } from '@/components/form';
-import { MerchantTile } from '@/components/merchant-tile';
+import { MerchantStrip, MerchantTile } from '@/components/merchant-tile';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
-import type { Merchant } from '@/ctx/merchant';
+import { Merchant } from '@/ctx/merchant';
 import { type CountryChoice, Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
+import { useFavourites } from '@/hooks/use-favourites';
 
 const merchantsPerPage = 20;
 const searchDelayMs = 300;
+const stripSize = 10;
+const recentOrdersScanned = 50;
+
+async function loadTopCashback(country: string): Promise<Merchant[]> {
+  const { result } = await ctx.merchants({ country, order: '-discount', perPage: stripSize });
+  return Merchant.byCashback(result);
+}
+
+async function loadRecentlyBought(country: string): Promise<Merchant[]> {
+  const { result: giftCards } = await ctx.giftCards({
+    status: ['fulfilled'],
+    perPage: recentOrdersScanned,
+  });
+  const ids = Merchant.idsByRecentPurchase(giftCards, stripSize);
+  return loadByIds(country, ids);
+}
+
+async function loadByIds(country: string, ids: readonly string[]): Promise<Merchant[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+  const { result } = await ctx.merchants({ country, ids: [...ids], perPage: ids.length });
+  return Merchant.inOrder(result, ids);
+}
 
 export default function ShopScreen() {
   const router = useRouter();
@@ -30,6 +55,10 @@ export default function ShopScreen() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
+  const [topCashback, setTopCashback] = useState<Merchant[]>([]);
+  const [recentlyBought, setRecentlyBought] = useState<Merchant[]>([]);
+  const [favouriteMerchants, setFavouriteMerchants] = useState<Merchant[]>([]);
+  const { favourites } = useFavourites();
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
 
@@ -70,6 +99,9 @@ export default function ShopScreen() {
         }
         const request = ++latestRequest.current;
         retryPage.current = next;
+        if (next === 1) {
+          setPage(0);
+        }
         const { result, pagination } = await ctx.merchants({
           country,
           name: query,
@@ -89,6 +121,45 @@ export default function ShopScreen() {
   useEffect(() => {
     loadMerchants(1);
   }, [loadMerchants]);
+
+  useEffect(() => {
+    if (!country) {
+      return;
+    }
+    let current = true;
+    Promise.all([
+      loadTopCashback(country).catch(() => []),
+      loadRecentlyBought(country).catch(() => []),
+    ]).then(([top, recent]) => {
+      if (current) {
+        setTopCashback(top);
+        setRecentlyBought(recent);
+      }
+    });
+    return () => {
+      current = false;
+    };
+  }, [country]);
+
+  useEffect(() => {
+    if (!country) {
+      return;
+    }
+    let current = true;
+    loadByIds(country, favourites.ids)
+      .catch(() => [])
+      .then((loaded) => {
+        if (current) {
+          setFavouriteMerchants(loaded);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [country, favourites]);
+
+  const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
+  const shownFavourites = Merchant.inOrder(favouriteMerchants, favourites.ids);
 
   const chooseCountry = (choice: CountryChoice) =>
     run(async () => {
@@ -194,6 +265,14 @@ export default function ShopScreen() {
               placeholder="Search gift cards"
               returnKeyType="search"
             />
+            {query === '' && (
+              <>
+                <MerchantStrip title="Favourites" merchants={shownFavourites} onOpen={openMerchant} />
+                <MerchantStrip title="Bought recently" merchants={recentlyBought} onOpen={openMerchant} />
+                <MerchantStrip title="Top cashback" merchants={topCashback} onOpen={openMerchant} />
+                <ThemedText type="smallBold">All gift cards</ThemedText>
+              </>
+            )}
           </ThemedView>
         }
         ListEmptyComponent={
@@ -212,7 +291,9 @@ export default function ShopScreen() {
           </>
         }
         renderItem={({ item }) => (
-          <MerchantTile merchant={item} onPress={() => router.push(`/shop/${item.slug}`)} />
+          <View style={styles.cell}>
+            <MerchantTile merchant={item} onPress={() => openMerchant(item)} />
+          </View>
         )}
       />
     </ThemedView>
@@ -234,5 +315,9 @@ const styles = StyleSheet.create({
   },
   columns: {
     gap: Spacing.two,
+  },
+  cell: {
+    flex: 1,
+    maxWidth: '50%',
   },
 });

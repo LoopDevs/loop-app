@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -34,9 +34,11 @@ type Props = {
   wallet: SmartWallet;
 };
 
+const sentPayments = new Map<string, string>();
+
 export function GiftCardPurchase({ merchant, wallet }: Props) {
   const router = useRouter();
-  const { busy, message, run } = useBusyAction();
+  const { busy, message, setMessage, run } = useBusyAction();
   const [amount, setAmount] = useState(firstAmount(merchant));
   const [amountError, setAmountError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<PaymentCurrency>(network.tokens[0].currency);
@@ -46,6 +48,16 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const following = useRef(0);
   const paying = useRef(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  usePreventRemove(payment.kind === 'sending', () => toast('Wait until the payment is sent'));
 
   const stopFollowing = () => {
     following.current += 1;
@@ -78,11 +90,12 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const resumeOrder = useCallback(
     () =>
       run(async () => {
-        const giftCard = await ctx.activeGiftCard();
-        if (!giftCard || giftCard.merchantId !== merchant.id) {
+        const giftCard = await ctx.activeGiftCard(merchant.id);
+        if (!giftCard) {
           return;
         }
-        const resumed = resumedPaymentState(giftCard);
+        const sentTxId = sentPayments.get(giftCard.paymentId);
+        const resumed = resumedPaymentState(sentTxId ? { ...giftCard, paymentCryptoTxId: sentTxId } : giftCard);
         setOrder(giftCard);
         setPayment(resumed);
         if (resumed.kind === 'confirming' || giftCard.status === 'paid') {
@@ -184,11 +197,16 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       await run(async () => {
         setPayment({ kind: 'sending' });
         const next = await sendPayment(order);
+        if (next.kind === 'confirming' && next.txId) {
+          sentPayments.set(order.paymentId, next.txId);
+        }
         setPayment(next);
         if (next.kind === 'confirming') {
           haptics.success();
           toast('Payment sent');
-          void followOrder(order, next.txId);
+          if (mounted.current) {
+            void followOrder(order, next.txId);
+          }
         } else {
           haptics.error();
         }
@@ -200,6 +218,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const startOver = () => {
     stopFollowing();
+    setMessage('');
     setOrder(null);
     setPayment({ kind: 'ready' });
     changeAmount(firstAmount(merchant));
