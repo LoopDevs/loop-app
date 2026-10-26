@@ -81,9 +81,13 @@ export class Merchant {
     return this.userDiscount;
   }
 
-  rateLabel(locale?: string): string {
+  rateFigure(locale?: string): string {
     const rate = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 });
-    return `${rate.format(this.cashbackBasisPoints() / Number(basisPointsPerWhole))} cashback`;
+    return rate.format(this.cashbackBasisPoints() / Number(basisPointsPerWhole));
+  }
+
+  rateLabel(locale?: string): string {
+    return `${this.rateFigure(locale)} cashback`;
   }
 
   cashbackEstimate(amount: string, locale?: string): string | null {
