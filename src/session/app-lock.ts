@@ -36,6 +36,10 @@ export class AppLock {
     return new AppLock(enabled ? 'locked' : 'off');
   }
 
+  loadFailed(): AppLock {
+    return this.loaded(true);
+  }
+
   backgrounded(now: number): AppLock {
     if (this.status !== 'unlocked' || this.backgroundedAt !== null) {
       return this;

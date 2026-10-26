@@ -110,6 +110,14 @@ test('a device with no screen lock left cannot keep the user locked out', () => 
   assert.equal(AppLock.unlocksWith({ success: false, error: 'passcode_not_set' }), true);
 });
 
+test('a failed preference read starts locked', () => {
+  assert.equal(AppLock.loading().loadFailed().status, 'locked');
+});
+
+test('a failed preference read cannot change a settled lock', () => {
+  assert.equal(AppLock.loading().loaded(false).loadFailed().status, 'off');
+});
+
 test('cancelled prompts are told apart from failures', () => {
   assert.equal(AppLock.isCancel({ success: false, error: 'user_cancel' }), true);
   assert.equal(AppLock.isCancel({ success: false, error: 'system_cancel' }), true);

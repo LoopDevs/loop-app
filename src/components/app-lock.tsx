@@ -1,4 +1,5 @@
 import { useFocusEffect } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -80,14 +81,18 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let current = true;
-    appLockStore
-      .readEnabled()
-      .catch(() => true)
-      .then((enabled) => {
+    appLockStore.readEnabled().then(
+      (enabled) => {
         if (current) {
           setLock((previous) => previous.loaded(enabled));
         }
-      });
+      },
+      () => {
+        if (current) {
+          setLock((previous) => previous.loadFailed());
+        }
+      },
+    );
     return () => {
       current = false;
     };
@@ -138,6 +143,13 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     [authenticate, applyUnlockResult],
   );
 
+  const covered = lock.covers();
+  useEffect(() => {
+    if (covered) {
+      WebBrowser.dismissBrowser().catch(() => undefined);
+    }
+  }, [covered]);
+
   useEffect(() => {
     if (lock.status === 'locked' && inForeground) {
       void unlock();
@@ -167,8 +179,6 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     await appLockStore.clear();
     setLock((previous) => previous.turnedOff());
   }, [authenticate]);
-
-  const covered = lock.covers();
 
   return (
     <AppLockContext.Provider value={{ isOn: lock.isOn(), turnOn, turnOff }}>
