@@ -4,7 +4,18 @@ export type CashbackState = 'none' | 'pending' | 'credited' | 'reversed';
 
 export const pollIntervalMs = 3000;
 export const settledStatuses: GiftCard['status'][] = ['fulfilled', 'rejected', 'refunded', 'expired'];
-export const historyHiddenStatuses: GiftCard['status'][] = ['unpaid', 'expired'];
+export const unpaidStatuses: GiftCard['status'][] = ['unpaid'];
+
+export function wasCharged(card: GiftCard): boolean {
+  return card.paymentStatus === 'paid' || Boolean(card.paymentCryptoTxId) || card.paymentMethod !== 'crypto';
+}
+
+export function isHiddenFromHistory(card: GiftCard): boolean {
+  if (card.status === 'unpaid') {
+    return true;
+  }
+  return card.status === 'expired' && !wasCharged(card);
+}
 
 export function giftCardStatusLabel(status: GiftCard['status']): string {
   switch (status) {
@@ -39,6 +50,9 @@ export function outcomeText(card: GiftCard): string | null {
   }
   if (status === 'rejected' && paymentCryptoTxId) {
     return `This card couldn't be issued. If you were charged, ${refundAdvice}`;
+  }
+  if (status === 'expired' && paymentStatus === 'paid') {
+    return `This order expired after payment. Contact support about a refund.`;
   }
   if (status === 'expired' && (paymentCryptoTxId || paymentMethod !== 'crypto')) {
     return `This order expired. If you were charged, ${refundAdvice}`;

@@ -88,6 +88,22 @@ test('a queued savings payout is listed as retrying to savings', () => {
   );
 });
 
+test('an in-flight payout lists what CTX sends after the network fee', () => {
+  const json = { wallet: [], payouts: [payout({ amount: '5.0000000', sentAmount: '4.9700000' })] };
+  assert.deepEqual(
+    new Account(json).onTheWay(nonSaver).map((item) => item.amount),
+    ['4.9700000'],
+  );
+});
+
+test('an in-flight payout without a sent amount lists its full amount', () => {
+  const json = { wallet: [], payouts: [payout({ amount: '5.0000000' })] };
+  assert.deepEqual(
+    new Account(json).onTheWay(nonSaver).map((item) => item.amount),
+    ['5.0000000'],
+  );
+});
+
 test('complete and reversed payouts are not listed', () => {
   const json = {
     wallet: [],

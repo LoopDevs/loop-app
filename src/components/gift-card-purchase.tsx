@@ -7,12 +7,13 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
+import { invalidAmountMessage, normalizeAmount } from '@/ctx/amount-input';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal';
 import { InFlightPayments } from '@/ctx/in-flight-payments';
 import {
   giftCardStatusLabel,
-  historyHiddenStatuses,
+  isHiddenFromHistory,
   outcomeText,
   pollIntervalMs,
   settledStatuses,
@@ -162,11 +163,16 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       if (!payWith) {
         return;
       }
+      const fiatAmount = normalizeAmount(amount);
+      if (!fiatAmount) {
+        setAmountError(invalidAmountMessage);
+        return;
+      }
       try {
         showNewOrder(
           await ctx.orderGiftCard({
             merchantId: merchant.id,
-            fiatAmount: amount.trim(),
+            fiatAmount,
             fiatCurrency: merchant.currency,
             cryptoCurrency: payWith,
           }),
@@ -325,7 +331,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   };
 
   const finish = () => {
-    if (order && !historyHiddenStatuses.includes(order.status)) {
+    if (order && !isHiddenFromHistory(order)) {
       router.push(`/orders/${order.id}`, { withAnchor: true });
     }
     startOver();
@@ -355,7 +361,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     );
   }
 
-  const estimate = merchant.cashbackEstimate(amount);
+  const estimate = merchant.cashbackEstimate(normalizeAmount(amount) ?? '');
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">Buy a gift card</ThemedText>

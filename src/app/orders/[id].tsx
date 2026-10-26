@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/form';
@@ -17,19 +17,52 @@ import {
   outcomeText,
   pollIntervalMs,
 } from '@/ctx/gift-card-status';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { money } from '@/money';
+
+const signInMessage = 'Sign in to see this order.';
 
 export default function GiftCardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [giftCard, setGiftCard] = useState<GiftCard | null>(null);
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const readSession = useSessionOwner();
+
+  useFocusEffect(
+    useCallback(() => {
+      let current = true;
+      readSession()
+        .then(({ userId, changed }) => {
+          if (current && (changed || !userId)) {
+            setGiftCard(null);
+            setMessage('');
+            setAttempt((count) => count + 1);
+          }
+        })
+        .catch(() => undefined);
+      return () => {
+        current = false;
+      };
+    }, [readSession]),
+  );
 
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       try {
+        const { userId, changed } = await readSession();
+        if (!active) {
+          return;
+        }
+        if (changed || !userId) {
+          setGiftCard(null);
+        }
+        if (!userId) {
+          setMessage(signInMessage);
+          return;
+        }
         const loaded = await ctx.giftCard(id);
         if (!active) {
           return;
@@ -49,7 +82,7 @@ export default function GiftCardScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [id, attempt]);
+  }, [id, attempt, readSession]);
 
   const retry = () => {
     setMessage('');
