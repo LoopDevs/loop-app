@@ -69,7 +69,7 @@ export default function OrdersScreen() {
           ) : (
             <>
               <ThemedText type="small">No orders yet.</ThemedText>
-              <Button label="Buy a gift card" onPress={() => router.navigate('/')} />
+              <Button label="Buy a gift card" onPress={() => router.navigate('/shop')} />
             </>
           )
         }
