@@ -6,6 +6,7 @@ import { Market } from '@/ctx/market';
 
 type MarketState = {
   country: string;
+  resolved: boolean;
   choose: (country: string) => void;
 };
 
@@ -20,6 +21,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const [country, setCountry] = useState(() =>
     Platform.OS === 'web' ? Market.fallback : Market.resolve(null, deviceLocales()),
   );
+  const [resolved, setResolved] = useState(false);
   const chosenByUser = useRef(false);
 
   useEffect(() => {
@@ -27,9 +29,13 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     AsyncStorage.getItem(Market.storageKey)
       .catch(() => null)
       .then((stored) => {
-        if (current && !chosenByUser.current) {
+        if (!current) {
+          return;
+        }
+        if (!chosenByUser.current) {
           setCountry(Market.resolve(stored, deviceLocales()));
         }
+        setResolved(true);
       });
     return () => {
       current = false;
@@ -42,10 +48,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     }
     chosenByUser.current = true;
     setCountry(chosen);
+    setResolved(true);
     AsyncStorage.setItem(Market.storageKey, chosen).catch(() => undefined);
   }, []);
 
-  const value = useMemo(() => ({ country, choose }), [country, choose]);
+  const value = useMemo(() => ({ country, resolved, choose }), [country, resolved, choose]);
   return <MarketContext.Provider value={value}>{children}</MarketContext.Provider>;
 }
 

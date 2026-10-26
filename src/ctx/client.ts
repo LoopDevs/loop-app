@@ -92,7 +92,7 @@ export type MerchantQuery = {
   name?: string;
   ids?: string[];
   category?: string;
-  order?: 'name';
+  order?: 'name' | '-discount,name';
   page?: number;
   perPage?: number;
 };

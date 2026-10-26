@@ -38,7 +38,6 @@ const suggestionScanSize = 20;
 const suggestionDelayMs = 120;
 
 export type Catalog = {
-  merchants: Merchant[];
   top: Merchant[];
   categories: string[];
   total: number;
@@ -90,46 +89,51 @@ export async function loadMerchantPage(query: MerchantQuery): Promise<MerchantPa
   return loaded;
 }
 
-export function loadCatalog(country: string): Promise<Catalog> {
-  const pending = catalogRequests.get(country);
+function catalogKey(country: string, size: number): string {
+  return `${country}:${size}`;
+}
+
+export function loadCatalog(country: string, size: number): Promise<Catalog> {
+  const key = catalogKey(country, size);
+  const pending = catalogRequests.get(key);
   if (pending) {
     return pending;
   }
-  const request = loadMerchantPage({ country, perPage: catalogScanSize })
+  const request = loadMerchantPage({ country, order: '-discount,name', perPage: size })
     .then(({ result, pagination }) => {
       const catalog = {
-        merchants: result,
         top: Merchant.byCashback(result).filter((merchant) => merchant.cashbackBasisPoints() > 0),
         categories: Merchant.categoriesOf(result),
         total: pagination.total,
       };
-      loadedCatalogs.set(country, catalog);
+      loadedCatalogs.set(key, catalog);
       return catalog;
     })
     .catch(() => {
-      catalogRequests.delete(country);
-      return { merchants: [], top: [], categories: [], total: 0 };
+      catalogRequests.delete(key);
+      return { top: [], categories: [], total: 0 };
     });
-  catalogRequests.set(country, request);
+  catalogRequests.set(key, request);
   return request;
 }
 
-export function useCatalog(country: string | undefined) {
-  const [loaded, setLoaded] = useState<{ country: string; catalog: Catalog } | null>(() => {
-    const cached = country ? loadedCatalogs.get(country) : undefined;
-    return country && cached ? { country, catalog: cached } : null;
+export function useCatalog(country: string | undefined, size = catalogScanSize) {
+  const key = country ? catalogKey(country, size) : null;
+  const [loaded, setLoaded] = useState<{ key: string; catalog: Catalog } | null>(() => {
+    const cached = key ? loadedCatalogs.get(key) : undefined;
+    return key && cached ? { key, catalog: cached } : null;
   });
   useEffect(() => {
-    if (!country) {
+    if (!country || !key) {
       return;
     }
     let current = true;
-    loadCatalog(country).then((catalog) => current && setLoaded({ country, catalog }));
+    loadCatalog(country, size).then((catalog) => current && setLoaded({ key, catalog }));
     return () => {
       current = false;
     };
-  }, [country]);
-  return loaded && loaded.country === country ? loaded.catalog : null;
+  }, [country, size, key]);
+  return loaded && loaded.key === key ? loaded.catalog : null;
 }
 
 export function PageWidth({ children, style }: { children: ReactNode; style?: object }) {
@@ -243,16 +247,12 @@ type MerchantSearchProps = {
 };
 
 export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen, large = false }: MerchantSearchProps) {
-  const catalog = useCatalog(country);
-  const remote = useRemoteMatches(country, value);
+  const found = useSearchResults(country, value);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const query = value.trim();
-  const suggestions = useMemo(
-    () => Merchant.matching([...(catalog?.merchants ?? []), ...remote], query, suggestionLimit),
-    [catalog, remote, query],
-  );
+  const suggestions = useMemo(() => Merchant.matching(found, query, suggestionLimit), [found, query]);
   const open = focused && !dismissed && suggestions.length > 0;
 
   const change = (text: string) => {
@@ -318,7 +318,7 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
   );
 }
 
-function useRemoteMatches(country: string, text: string): Merchant[] {
+function useSearchResults(country: string, text: string): Merchant[] {
   const name = text.trim();
   const query = useMemo(() => ({ country, name, perPage: suggestionScanSize }), [country, name]);
   const searchable = name.length >= 2;
