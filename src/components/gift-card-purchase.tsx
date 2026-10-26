@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
-import { Button, Field } from '@/components/form';
+import { Button, Field, Notice } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
-import { Spacing } from '@/constants/theme';
+import { Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { invalidAmountMessage, normalizeAmount } from '@/ctx/amount-input';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
@@ -37,6 +39,7 @@ import { PriceWindow } from '@/ctx/price-window';
 import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
+import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
@@ -400,11 +403,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     startOver();
   };
 
-  const errorText = message !== '' && (
-    <ThemedText type="small" selectable>
-      {message}
-    </ThemedText>
-  );
+  const errorText = message !== '' && <Notice message={message} />;
 
   if (order) {
     return (
@@ -426,45 +425,100 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const estimate = merchant.cashbackEstimate(normalizeAmount(amount) ?? '');
   return (
-    <View style={styles.section}>
-      <ThemedText type="smallBold">Buy a gift card</ThemedText>
-      <ThemedText type="small">{denominationHint(merchant)}</ThemedText>
-      {estimate && <ThemedText type="small">You&apos;ll earn about {estimate} in cashback</ThemedText>}
-      {merchant.denominationType === 'fixed' ? (
-        <View style={styles.row}>
-          {merchant.denominations.map((denomination) => (
-            <Button
-              key={denomination}
-              label={denomination}
-              onPress={() => changeAmount(denomination)}
-              selected={amount === denomination}
-            />
+    <PurchaseCard>
+      <View style={styles.step}>
+        <ThemedText type="heading" accessibilityRole="header">
+          Choose an amount
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {denominationHint(merchant)}
+        </ThemedText>
+        {merchant.denominationType === 'fixed' ? (
+          <View style={styles.grid} accessibilityRole="radiogroup">
+            {merchant.denominations.map((denomination) => (
+              <View key={denomination} style={styles.chip}>
+                <Button
+                  label={denomination}
+                  accessibilityLabel={`${denomination} ${merchant.currency}`}
+                  onPress={() => changeAmount(denomination)}
+                  selected={amount === denomination}
+                />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Field
+            value={amount}
+            onChangeText={changeAmount}
+            placeholder={`Amount in ${merchant.currency}`}
+            keyboardType={merchant.denominationType === 'min-max-major' ? 'number-pad' : 'decimal-pad'}
+          />
+        )}
+        {amountError && <InlineError text={amountError} />}
+      </View>
+
+      <View style={styles.step}>
+        <ThemedText type="heading" accessibilityRole="header">
+          Pay with
+        </ThemedText>
+        <View style={styles.grid} accessibilityRole="radiogroup">
+          {network.tokens.map((token) => (
+            <View key={token.currency} style={styles.token}>
+              <Button
+                label={tokenLabel(token, view?.holdings ?? null)}
+                onPress={() => setChosenCurrency(token.currency)}
+                selected={currency === token.currency}
+                disabled={refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n}
+              />
+            </View>
           ))}
         </View>
-      ) : (
-        <Field
-          value={amount}
-          onChangeText={changeAmount}
-          placeholder={`Amount in ${merchant.currency}`}
-          keyboardType={merchant.denominationType === 'min-max-major' ? 'number-pad' : 'decimal-pad'}
-        />
-      )}
-      {amountError && <ThemedText type="small">{amountError}</ThemedText>}
-      <ThemedText type="small">Pay with</ThemedText>
-      <View style={styles.row}>
-        {network.tokens.map((token) => (
-          <Button
-            key={token.currency}
-            label={tokenLabel(token, view?.holdings ?? null)}
-            onPress={() => setChosenCurrency(token.currency)}
-            selected={currency === token.currency}
-            disabled={refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n}
-          />
-        ))}
       </View>
-      <Button label="Get price" onPress={createOrder} disabled={busy || !amount.trim() || !currency} />
+
+      {estimate && (
+        <SummaryRow label="Cashback" value={`About ${estimate}`} emphasis />
+      )}
+      <Button
+        label={busy ? 'Getting price…' : 'Get price'}
+        variant="primary"
+        onPress={createOrder}
+        disabled={busy || !amount.trim() || !currency}
+      />
       {errorText}
+    </PurchaseCard>
+  );
+}
+
+function PurchaseCard({ children }: { children: React.ReactNode }) {
+  const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  return (
+    <Animated.View
+      entering={reduceMotion ? undefined : FadeInDown.duration(Motion.state).easing(Motion.easeOut)}
+      style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+function SummaryRow({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <View style={styles.summaryRow}>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.summaryLabel}>
+        {label}
+      </ThemedText>
+      <ThemedText type={emphasis ? 'smallBold' : 'small'} themeColor={emphasis ? 'success' : 'text'} style={styles.summaryValue}>
+        {value}
+      </ThemedText>
     </View>
+  );
+}
+
+function InlineError({ text }: { text: string }) {
+  return (
+    <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">
+      {text}
+    </ThemedText>
   );
 }
 
@@ -522,7 +576,7 @@ type OrderViewProps = {
 };
 
 function OrderView({ order, coverage, topUpPending, payment, busy, onPay, onNewPrice, onDone }: OrderViewProps) {
-  const card = `${money.ctx(order.cardFiatAmount, order.cardFiatCurrency)} ${order.merchantName}`;
+  const theme = useTheme();
   const price = money.payment(order.paymentCryptoAmount ?? '', order.paymentCryptoCurrency ?? '');
   const priceWindow = PriceWindow.of(order);
   const now = useClock(priceWindow?.expiresAt);
@@ -532,21 +586,133 @@ function OrderView({ order, coverage, topUpPending, payment, busy, onPay, onNewP
   const short = payable && coverage?.kind === 'short' && !topUpPending;
   const symbol = tokenSymbol(order.paymentCryptoCurrency ?? '');
   const outcome = outcomeText(order);
+  const ready = order.status === 'fulfilled';
+  const failed = shown.kind === 'failed' || shown.kind === 'notSent' || outcome !== null;
+  const expired = needsNewPrice(order, shown);
   return (
-    <View style={styles.section}>
-      <ThemedText type="smallBold">{card}</ThemedText>
-      <ThemedText>Price: {price}</ThemedText>
-      {payable && priceWindow && <ThemedText type="small">Pay within {priceWindow.remaining(now)}</ThemedText>}
-      <ThemedText type="small">{orderStatus(order, shown)}</ThemedText>
-      {outcome && <ThemedText type="small">{outcome}</ThemedText>}
-      {shown.kind === 'notSent' && shown.detail !== '' && <ThemedText type="small">{shown.detail}</ThemedText>}
-      {order.status === 'unpaid' && needsSupport(shown) && (
-        <ThemedText type="small">This payment isn&apos;t on the network. Contact support about this order.</ThemedText>
+    <PurchaseCard>
+      <View style={styles.orderHead}>
+        <ThemedText type="small" themeColor="textSecondary">
+          {order.merchantName} gift card
+        </ThemedText>
+        <ThemedText type="subtitle">{money.ctx(order.cardFiatAmount, order.cardFiatCurrency)}</ThemedText>
+      </View>
+
+      <View style={[styles.summary, { borderColor: theme.border }]}>
+        <SummaryRow label="You pay" value={price} emphasis={false} />
+        {coverage?.kind === 'savings' && (
+          <SummaryRow
+            label="From savings"
+            value={money.token(coverage.fromSavings, SavingsTopUp.currency)}
+          />
+        )}
+        {payable && priceWindow && (
+          <SummaryRow label="Price held for" value={priceWindow.remaining(now)} />
+        )}
+      </View>
+
+      {ready ? (
+        <View style={styles.outcome} accessibilityLiveRegion="polite">
+          <SymbolView
+            name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
+            size={28}
+            tintColor={theme.success}
+          />
+          <View style={styles.outcomeText}>
+            <ThemedText type="smallBold">Your gift card is ready</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Open it to see the code and how to use it.
+            </ThemedText>
+          </View>
+        </View>
+      ) : (
+        <PaymentProgress step={progressStep(order, shown)} label={orderStatus(order, shown)} failed={failed || expired} />
       )}
-      {short && <ThemedText type="small">{SavingsTopUp.notEnough(symbol)}</ThemedText>}
-      {payable && <Button label={payLabel(price, coverage)} onPress={onPay} disabled={busy || short} />}
-      {needsNewPrice(order, shown) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}
-      <Button label={payable ? 'Cancel' : 'Done'} onPress={onDone} disabled={busy} />
+
+      {outcome && <Notice message={outcome} />}
+      {shown.kind === 'notSent' && shown.detail !== '' && <Notice message={shown.detail} />}
+      {order.status === 'unpaid' && needsSupport(shown) && (
+        <Notice message="This payment isn't on the network. Contact support about this order." />
+      )}
+      {expired && (
+        <Notice tone="neutral" message="This price has expired. Get a new price to finish your order." />
+      )}
+      {short && <InlineError text={SavingsTopUp.notEnough(symbol)} />}
+
+      {payable && (
+        <Button
+          label={busy ? 'Paying…' : payLabel(price, coverage)}
+          variant="primary"
+          onPress={onPay}
+          disabled={busy || short}
+        />
+      )}
+      {expired && (
+        <Button
+          label={busy ? 'Getting price…' : 'Get new price'}
+          variant="primary"
+          onPress={onNewPrice}
+          disabled={busy}
+        />
+      )}
+      <Button
+        label={ready ? 'View gift card' : payable || expired ? 'Cancel' : 'Done'}
+        variant={ready ? 'primary' : 'quiet'}
+        onPress={onDone}
+        disabled={busy}
+      />
+    </PurchaseCard>
+  );
+}
+
+const progressLabels = ['Price', 'Payment', 'Card'];
+
+function progressStep(order: GiftCard, payment: PaymentState): number {
+  if (order.status === 'paid') {
+    return 2;
+  }
+  if (payment.kind === 'sending' || payment.kind === 'movingSavings' || payment.kind === 'confirming') {
+    return 1;
+  }
+  return 0;
+}
+
+function PaymentProgress({ step, label, failed }: { step: number; label: string; failed: boolean }) {
+  const theme = useTheme();
+  const working = !failed && step > 0;
+  return (
+    <View style={styles.progress} accessibilityLiveRegion="polite" accessibilityLabel={label}>
+      <View style={styles.progressBars}>
+        {progressLabels.map((stepLabel, index) => (
+          <View key={stepLabel} style={styles.progressStep}>
+            <View
+              style={[
+                styles.progressBar,
+                {
+                  backgroundColor:
+                    index < step
+                      ? theme.accent
+                      : index === step
+                        ? failed
+                          ? theme.danger
+                          : theme.accent
+                        : theme.backgroundSelected,
+                  opacity: index === step && working ? 0.6 : 1,
+                },
+              ]}
+            />
+            <ThemedText type="caption" themeColor={index <= step ? 'text' : 'textSecondary'}>
+              {stepLabel}
+            </ThemedText>
+          </View>
+        ))}
+      </View>
+      <View style={styles.statusRow}>
+        {working && <ActivityIndicator size="small" color={theme.accent} />}
+        <ThemedText type="smallBold" themeColor={failed ? 'danger' : 'text'}>
+          {label}
+        </ThemedText>
+      </View>
     </View>
   );
 }
@@ -599,11 +765,80 @@ function denominationHint(merchant: Merchant): string {
 
 const styles = StyleSheet.create({
   section: {
+    gap: Spacing.three,
+  },
+  card: {
+    borderWidth: 1,
+    borderRadius: Radius.control,
+    padding: Spacing.three,
+    gap: Spacing.four,
+  },
+  step: {
     gap: Spacing.two,
   },
-  row: {
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  chip: {
+    flexBasis: '22%',
+    flexGrow: 1,
+  },
+  token: {
+    flexBasis: '45%',
+    flexGrow: 1,
+  },
+  orderHead: {
+    gap: Spacing.one,
+  },
+  summary: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    paddingVertical: Spacing.two,
+    gap: Spacing.one,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: Spacing.three,
+    minHeight: 32,
+  },
+  summaryLabel: {
+    flexShrink: 0,
+  },
+  summaryValue: {
+    flex: 1,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
+  outcome: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  outcomeText: {
+    flex: 1,
+  },
+  progress: {
+    gap: Spacing.three,
+  },
+  progressBars: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  progressStep: {
+    flex: 1,
+    gap: Spacing.one,
+  },
+  progressBar: {
+    height: 4,
+    borderRadius: Radius.tile,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
 });
