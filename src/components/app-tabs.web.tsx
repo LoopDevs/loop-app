@@ -24,16 +24,16 @@ export default function AppTabs() {
       {wide ? null : <TabSlot style={styles.slot} />}
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
+          <TabTrigger name="home" href="/" resetOnFocus asChild>
             <TabButton>Home</TabButton>
           </TabTrigger>
-          <TabTrigger name="shop" href="/shop" asChild>
+          <TabTrigger name="shop" href="/shop" resetOnFocus asChild>
             <TabButton>Shop</TabButton>
           </TabTrigger>
-          <TabTrigger name="orders" href="/orders" asChild>
+          <TabTrigger name="orders" href="/orders" resetOnFocus asChild>
             <TabButton>Orders</TabButton>
           </TabTrigger>
-          <TabTrigger name="settings" href="/settings" asChild>
+          <TabTrigger name="settings" href="/settings" resetOnFocus asChild>
             <TabButton>Settings</TabButton>
           </TabTrigger>
         </CustomTabList>

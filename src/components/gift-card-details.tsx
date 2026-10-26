@@ -52,8 +52,8 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
               />
             </View>
           )}
-          {giftCard.number && <CopyableSecret label="Card number" value={giftCard.number} />}
-          {giftCard.pin && <CopyableSecret label="PIN" value={giftCard.pin} />}
+          {giftCard.number ? <CopyableSecret label="Card number" value={giftCard.number} /> : null}
+          {giftCard.pin ? <CopyableSecret label="PIN" value={giftCard.pin} /> : null}
           {giftCard.redeemUrlChallenge && (
             <CopyableSecret label="Code" value={giftCard.redeemUrlChallenge} />
           )}

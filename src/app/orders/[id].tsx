@@ -162,7 +162,7 @@ function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
       </View>
 
       <View style={[styles.body, styles.section]}>
-        {outcome && <Notice message={outcome} />}
+        {outcome ? <Notice message={outcome} /> : null}
 
         <GiftCardDetails giftCard={giftCard} />
 
@@ -178,7 +178,7 @@ function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
             {giftCard.paymentCryptoAmount && (
               <SummaryRow
                 label="Paid"
-                value={money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
+                value={money.ctx(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
               />
             )}
             {cashback !== 'none' && (

@@ -1,6 +1,7 @@
 import { Platform, useWindowDimensions } from 'react-native';
 
 import { Layout } from '@/constants/theme';
+import { useHydrated } from '@/hooks/use-hydrated';
 
 const columnSteps = [
   { minWidth: 1180, columns: 6 },
@@ -10,7 +11,9 @@ const columnSteps = [
 ] as const;
 
 export function usePageLayout() {
-  const { width } = useWindowDimensions();
+  const hydrated = useHydrated();
+  const { width: windowWidth } = useWindowDimensions();
+  const width = hydrated ? windowWidth : 0;
   const wide = Platform.OS === 'web' && width >= Layout.wideMinWidth;
   const gutter = wide ? Layout.wideGutter : Layout.narrowGutter;
   const contentWidth = Math.min(width, Layout.pageMaxWidth) - gutter * 2;

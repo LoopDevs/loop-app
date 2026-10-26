@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 
 import { Market } from '@/ctx/market';
 
@@ -16,15 +17,18 @@ function deviceLocales(): (string | undefined)[] {
 }
 
 export function MarketProvider({ children }: { children: ReactNode }) {
-  const [country, setCountry] = useState(() => Market.resolve(null, deviceLocales()));
+  const [country, setCountry] = useState(() =>
+    Platform.OS === 'web' ? Market.fallback : Market.resolve(null, deviceLocales()),
+  );
+  const chosenByUser = useRef(false);
 
   useEffect(() => {
     let current = true;
     AsyncStorage.getItem(Market.storageKey)
       .catch(() => null)
       .then((stored) => {
-        if (current && Market.supports(stored)) {
-          setCountry(stored);
+        if (current && !chosenByUser.current) {
+          setCountry(Market.resolve(stored, deviceLocales()));
         }
       });
     return () => {
@@ -36,6 +40,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     if (!Market.supports(chosen)) {
       return;
     }
+    chosenByUser.current = true;
     setCountry(chosen);
     AsyncStorage.setItem(Market.storageKey, chosen).catch(() => undefined);
   }, []);

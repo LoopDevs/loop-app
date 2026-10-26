@@ -100,7 +100,7 @@ export const Motion = {
   exit: 160,
   stagger: 45,
   pressScale: 0.97,
-  easeOut: Easing.out(Easing.exp),
+  easeOut: Easing.bezier(0.16, 1, 0.3, 1),
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
