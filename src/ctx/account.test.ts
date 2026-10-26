@@ -42,7 +42,7 @@ test('zero balances are not listed', () => {
 test('an XLM balance waits to convert whatever the destination', () => {
   const json = { wallet: [{ currency: 'XLM', amount: '3' }], payouts: [] };
   for (const routing of [saver, nonSaver]) {
-    assert.deepEqual(labels(json, routing), ['XLM waiting to convert to XLM.USDC']);
+    assert.deepEqual(labels(json, routing), ['XLM converts to XLM.USDC when a conversion is available']);
   }
 });
 
@@ -57,7 +57,7 @@ test("a saver's balance goes to savings when savings takes it and is held otherw
   assert.deepEqual(
     items.map((item) => [item.label, item.heldBySavings]),
     [
-      ['goes to savings with your next cashback', false],
+      ['goes to savings when savings is available', false],
       ['held: Loop savings holds XLM.USDC, switch to Account to receive it', true],
     ],
   );
@@ -66,10 +66,16 @@ test("a saver's balance goes to savings when savings takes it and is held otherw
 test('a balance with a failed payout in its currency reads delayed', () => {
   const json = {
     wallet: [{ currency: 'XLM.USDC', amount: '1' }],
-    payouts: [payout({ status: 'failed', reversalTransferId: 't2' })],
+    payouts: [payout({ status: 'failed' })],
   };
   for (const routing of [saver, nonSaver]) {
-    assert.deepEqual(labels(json, routing), ['XLM.USDC delayed, contact support']);
+    assert.deepEqual(
+      new Account(json).onTheWay(routing).map((item) => [item.key, item.label]),
+      [
+        ['balance:XLM.USDC', 'delayed, contact support'],
+        ['payout:p1', 'delayed, contact support'],
+      ],
+    );
   }
 });
 
@@ -84,7 +90,11 @@ test('a queued savings payout is listed as retrying to savings', () => {
 test('complete and reversed payouts are not listed', () => {
   const json = {
     wallet: [],
-    payouts: [payout({ status: 'complete' }), payout({ id: 'p2', status: 'failed', reversalTransferId: 't2' })],
+    payouts: [
+      payout({ status: 'complete' }),
+      payout({ id: 'p2', status: 'cancelled', reversalTransferId: 't2' }),
+      payout({ id: 'p3', status: 'rejected', reversalTransferId: 't3' }),
+    ],
   };
   assert.deepEqual(labels(json, nonSaver), []);
 });

@@ -11,6 +11,7 @@ import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import {
   giftCardStatusLabel,
   historyHiddenStatuses,
+  outcomeText,
   pollIntervalMs,
   settledStatuses,
 } from '@/ctx/gift-card-status';
@@ -27,6 +28,7 @@ import { dates, money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
+import { holdCriticalReload } from '@/updates/update-checker';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
 type Props = {
@@ -81,8 +83,8 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         continue;
       }
       if (isCurrent()) {
-        const { status } = current;
-        setOrder((held) => held && { ...held, status });
+        const { status, paymentStatus } = current;
+        setOrder((held) => held && { ...held, status, paymentStatus });
       }
     }
   }, []);
@@ -196,7 +198,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     try {
       await run(async () => {
         setPayment({ kind: 'sending' });
-        const next = await sendPayment(order);
+        const next = await holdCriticalReload(() => sendPayment(order));
         if (next.kind === 'confirming' && next.txId) {
           sentPayments.set(order.paymentId, next.txId);
         }
@@ -313,6 +315,7 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
   const card = `${money.ctx(order.cardFiatAmount, order.cardFiatCurrency)} ${order.merchantName}`;
   const price = money.payment(order.paymentCryptoAmount ?? '', order.paymentCryptoCurrency ?? '');
   const payable = canPay(order, payment);
+  const outcome = outcomeText(order);
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">{card}</ThemedText>
@@ -321,6 +324,7 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
         <ThemedText type="small">Price held until {dates.time(order.paymentUrlExpiration)}</ThemedText>
       )}
       <ThemedText type="small">{orderStatus(order, payment)}</ThemedText>
+      {outcome && <ThemedText type="small">{outcome}</ThemedText>}
       {payment.kind === 'notSent' && payment.detail !== '' && <ThemedText type="small">{payment.detail}</ThemedText>}
       {payable && <Button label={`Pay ${price}`} onPress={onPay} disabled={busy} />}
       {needsNewPrice(order, payment) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}

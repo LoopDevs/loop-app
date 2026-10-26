@@ -16,24 +16,28 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { Account, OnTheWayItem } from '@/ctx/account';
 import { ctx, type CashbackDestination } from '@/ctx/client';
-import type { Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
+import { useProfile } from '@/hooks/use-profile';
 import { money } from '@/money';
 import { Savings } from '@/wallet/savings';
 
 const destinationCopy: Record<CashbackDestination, { label: string; detail: string }> = {
   account: { label: 'Account', detail: 'Cashback is paid to your wallet.' },
-  savings: { label: 'Savings', detail: 'Cashback is deposited into savings and earns interest.' },
+  savings: {
+    label: 'Savings',
+    detail: 'Cashback goes to savings and earns interest when savings is available. Otherwise it stays with Loop.',
+  },
 };
 
-const savingsNote = `Loop savings holds ${Savings.currency}. Cashback in another currency waits with Loop; switch to Account to have it paid to your wallet.`;
+const savingsNote = `Loop savings holds ${Savings.currency}. Cashback in another currency stays with Loop; switch to Account to have it paid to your wallet.`;
 
 export default function CashbackScreen() {
   const router = useRouter();
   const scroll = useRef<ScrollViewInstance>(null);
   const destinationY = useRef(0);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { profile, setProfile } = useProfile();
+  const destinationWrites = useRef(0);
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState('');
@@ -42,16 +46,19 @@ export default function CashbackScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     setFailure('');
+    const writesAtStart = destinationWrites.current;
     try {
       const [me, loaded] = await Promise.all([ctx.me(), ctx.account()]);
-      setProfile(me);
+      if (writesAtStart === destinationWrites.current) {
+        setProfile(me);
+      }
       setAccount(loaded);
     } catch (error) {
       setFailure(errorMessage(error));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setProfile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -65,6 +72,7 @@ export default function CashbackScreen() {
     if (!profile || !update) {
       return;
     }
+    destinationWrites.current += 1;
     run(async () => {
       setProfile(profile.withUser(await ctx.updateUser(update)));
     });
@@ -106,7 +114,7 @@ export default function CashbackScreen() {
                   <Button
                     label={destinationCopy[destination].label}
                     selected={profile.cashbackDestination === destination}
-                    disabled={busy}
+                    disabled={busy || loading}
                     onPress={() => choose(destination)}
                   />
                   <ThemedText type="small" themeColor="textSecondary">

@@ -3,22 +3,31 @@ import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client
 
 const regionalIndicatorOffset = 0x1f1e6 - 'A'.charCodeAt(0);
 
+const signInProviderNames: Record<string, string> = {
+  apple: 'Apple',
+  google: 'Google',
+};
+
 export type CountryChoice = {
   country: string;
   stableCurrency?: string;
 };
 
 export class Profile {
+  readonly email?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
   readonly cashbackDestination: CashbackDestination;
+  readonly signInProviders: string[];
   readonly countries: string[];
   readonly stableCurrencies: string[];
 
   constructor(user: UserJson, company: MeJson['company']) {
+    this.email = user.email;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
     this.cashbackDestination = user.cashbackDestination ?? 'account';
+    this.signInProviders = (user.oauthIdentities ?? []).map((identity) => identity.provider);
     this.countries = company?.countries ?? [];
     this.stableCurrencies = company?.stableCurrencies ?? [];
   }
@@ -66,6 +75,13 @@ export class Profile {
       return null;
     }
     return { cashbackDestination: destination };
+  }
+
+  signInProviderLabel(): string | null {
+    const names = [...new Set(this.signInProviders)]
+      .map((provider) => signInProviderNames[provider])
+      .filter((name) => name !== undefined);
+    return names.length > 0 ? `Signed in with ${names.join(' and ')}` : null;
   }
 
   static currencyLabel(currency: string): string {

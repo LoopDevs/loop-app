@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "io.loopfinance.app",
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "associatedDomains": ["webcredentials:loopfinance.io"],
       "config": {
         "usesNonExemptEncryption": false
@@ -66,9 +66,8 @@
     "android": {
       "package": "io.loopfinance.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#111111",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -84,12 +83,13 @@
     },
     "plugins": [
       "expo-router",
+      "@sentry/react-native",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#111111",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 200
         }
       ],
       [
@@ -99,6 +99,15 @@
         }
       ]
     ],
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "checkAutomatically": "NEVER"
+    },
+    "extra": {
+      "criticalIndex": 0
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

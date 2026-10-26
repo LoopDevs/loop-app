@@ -62,10 +62,10 @@ export class Account {
       return { ...item, label: 'delayed, contact support' };
     }
     if (balance.currency === 'XLM' && routing.stableCurrency) {
-      return { ...item, label: `waiting to convert to ${routing.stableCurrency}` };
+      return { ...item, label: `converts to ${routing.stableCurrency} when a conversion is available` };
     }
     if (routing.savesCashback() && Savings.takes(balance.currency)) {
-      return { ...item, label: 'goes to savings with your next cashback' };
+      return { ...item, label: 'goes to savings when savings is available' };
     }
     if (routing.savesCashback()) {
       return {
