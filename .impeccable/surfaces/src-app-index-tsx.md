@@ -2,22 +2,22 @@
 version: 2
 slug: "src-app-index-tsx"
 primary_target: "src/app/index.tsx"
-related_targets: ["src/app/shop/index.tsx", "src/components/home-overview.tsx", "src/components/merchant-card.tsx"]
+related_targets: ["src/app/shop/index.tsx", "src/components/home-overview.tsx", "src/components/merchant-card.tsx", "src/components/sign-in.tsx"]
 ---
 
 # Home and Shop
 
 Scope: app home tab and shop tab (iOS, Android, web). Mode: Operate.
-Decision: founder direction 2026-10-26: "we're a fintech app ... we should inspire trust, our two core products are gift cards and savings." References: a Revolut-style money overview for Home, the Too Good To Go Discover feed for Shop. Brand stays Loop: Royal #1C3FAE panel, navy #0A1640, Fira Sans, cool tinted ground. The reference purple is not adopted.
+Decision: founder direction 2026-10-26: "we're a fintech app ... we should inspire trust, our two core products are gift cards and savings", and a full redesign toward the Airbnb Explore look. Loop keeps its accent #1A56DB and Fira Sans; the Royal/navy panel is retired.
 Audience and job: see what they hold (spending balance, savings, cashback on the way) and what they bought, then find the next gift card.
-Constraints: cashback and savings only, no discount anywhere; geometric Loop wordmark only; no wallet, passkey, crypto, token or address words on screen; never invent numbers (no savings rate is shown until the app has one from a real source).
+Constraints: cashback and savings only, no discount anywhere; geometric Loop wordmark only; no wallet, passkey, crypto, token or address words on screen; never invent numbers.
 
 ## Direction contract
 
-THESIS: a calm money overview. The blue panel holds "Total balance", the odometer balance, one account-state line and four round actions; everything below sits on white rounded cards with soft shadows and generous space.
-OWN-WORLD: full-bleed Royal panel to the top edge; round translucent-navy action buttons (56px) with white icons; section titles in accent colour; white cards at Radius.card (20) with Elevation.card; rows lead with a 40px round disc (currency symbol, merchant logo or icon) and end with right-aligned tabular amounts; the cashback badge stays a rounded pill (decided).
-HOME (signed in): panel, next-step card (add money when the total is zero, otherwise the top cashback merchant), Spending balance (one row per held currency, "Other money" valued at today's rate), Savings (savings value, cashback on the way, Withdraw), Recent gift cards (four latest, See all), then a Top cashback strip. Wide web: the money cards in the left column, next step and recent gift cards in the right. Signed out, Home stays the storefront landing.
-SHOP (signed in): search in the panel header, category tiles (icon on a rounded square, "All" first, tap filters the list), strips of photo cards (Top cashback, Favourites, Bought recently), then all gift cards as a card grid (2 columns on phones, up to 4 on wide web).
-MERCHANT CARD: full-bleed card photo when CTX has one, with a round white logo badge overlapping the photo's bottom-left; without a photo, the logo centred on white, or the initial on the merchant's hue. Cashback pill top right, round white heart top left, then name and category.
-FORM: odometer balance (whole units roll in as a left-to-right wave, cents follow). Status-bar scrim: deep navy ~50% with backdrop blur fading in over the first 160px of scroll. Motion stays quiet: press scale, a short fade-down on cards.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict and DESIGN.md.
+THESIS: a calm money overview on a white canvas. Near-black ink, cool slate greys, hairline borders, very soft shadows. The accent is rare: primary buttons, links, focus, the cashback pill tint and the active tab.
+OWN-WORLD: no coloured hero bands; headers are white with a hairline bottom on scroll; dark mode is near-black, not navy. Round neutral action buttons (56px, grey fill, ink icon). Cards at Radius.card (22) with Elevation.card and a hairline. Full-pill buttons and chips. Section headings bold ink with a round grey arrow button.
+HOME (signed in): "Total balance" odometer on white, round actions, the next-step card (grey label row, bold title, grey subline, chevron, thumbnail right), balance rows in a white bordered list, Savings first-class, a promo card (bold two-line title, grey pill button, illustration right), Recent gift cards, Top cashback strip.
+SHOP: a big white pill search bar with a soft shadow, category chips (white pills with icons, selected one grey), strips and a grid of merchant cards.
+MERCHANT CARD: one component everywhere. Cover photo on top (merchant hue when there is none), round logo overlapping the cover's bottom edge with a white ring and soft shadow, cashback pill on the photo, heart top right, then a one-line name and the category in grey.
+SIGN-UP (web): Enter your email, Confirm code, Secure your account, with a step indicator; a centred card on wide web, a sheet on narrow.
+FORM: odometer balance; a white status-bar scrim with a hairline fades in on scroll. Motion stays quiet: press scale, short fades.
