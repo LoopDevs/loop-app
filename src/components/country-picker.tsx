@@ -31,7 +31,7 @@ export function CountryPicker({ profile, busy, onChoose, onCancel }: Props) {
     setStableCurrency(null);
   };
 
-  if (country) {
+  if (country && profile.needsCurrencyChoice()) {
     return (
       <View style={styles.section}>
         <ThemedText type="smallBold">Choose your cashback currency</ThemedText>

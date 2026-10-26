@@ -79,12 +79,13 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
         return;
       }
       let current = profile;
+      const sent = new Set<string>();
       let update = current.nextUpdate(choice);
-      while (update) {
+      while (update && !sent.has(Object.keys(update)[0])) {
+        sent.add(Object.keys(update)[0]);
         current = current.withUser(await ctx.updateUser(update));
         setProfile(current);
-        const next = current.nextUpdate(choice);
-        update = next && Object.keys(next)[0] !== Object.keys(update)[0] ? next : null;
+        update = current.nextUpdate(choice);
       }
       setChangingCountry(false);
       if (current.country && !current.needsSetup()) {
@@ -334,7 +335,7 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   }
 
   if (!profile) {
-    return null;
+    return busy ? null : <Button label="Load gift cards" onPress={loadProfile} />;
   }
 
   if (profile.needsSetup() || changingCountry) {
