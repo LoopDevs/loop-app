@@ -74,12 +74,12 @@ export function OrderRowsSkeleton() {
   );
 }
 
-export function MerchantGridSkeleton({ columns }: { columns?: number }) {
+export function MerchantGridSkeleton({ columns, rows = merchantSkeletonRows }: { columns?: number; rows?: number }) {
   const layout = usePageLayout();
   const count = columns ?? layout.columns;
   return (
     <View style={styles.grid} accessible accessibilityLabel="Loading gift cards">
-      {Array.from({ length: count * merchantSkeletonRows }, (_, index) => (
+      {Array.from({ length: count * rows }, (_, index) => (
         <View key={index} style={[styles.gridCell, { width: `${100 / count}%` }]}>
           <Skeleton width="100%" height={merchantTileHeight} />
         </View>

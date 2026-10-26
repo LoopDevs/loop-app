@@ -9,6 +9,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { Odometer } from '@/components/odometer';
 import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
@@ -19,6 +20,7 @@ import { units } from '@/stellar/units';
 import { Savings } from '@/wallet/savings';
 
 const scrimFadeDistance = 48;
+const nearEndDistance = 800;
 const balanceType = {
   fontFamily: FontFamily.semibold,
   fontSize: 36,
@@ -41,7 +43,7 @@ export function useScrollToTopOnFocus(ref: { current: Scrollable | null }) {
   );
 }
 
-export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
+export function useScrimScroll<T extends Scrollable = ScrollViewInstance>(onNearEnd?: () => void) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const scrollRef = useRef<T>(null);
@@ -49,6 +51,10 @@ export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
   const offset = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
     offset.value = event.contentOffset.y;
+    const remaining = event.contentSize.height - event.contentOffset.y - event.layoutMeasurement.height;
+    if (onNearEnd && remaining < nearEndDistance) {
+      scheduleOnRN(onNearEnd);
+    }
   });
   const fade = useAnimatedStyle(() => ({
     opacity: interpolate(offset.value, [0, scrimFadeDistance], [0, 1], 'clamp'),

@@ -17,6 +17,7 @@ import { SiteFooter } from '@/components/site-footer';
 import { MerchantGridSkeleton } from '@/components/skeleton';
 import {
   cachedMerchantPage,
+  loadedCategories,
   loadMerchantPage,
   MerchantCatalog,
   PageWidth,
@@ -28,6 +29,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
+import { MerchantPaging } from '@/ctx/merchant-paging';
 import type { CountryChoice } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
@@ -136,8 +138,8 @@ export default function ShopScreen() {
   }, [search]);
 
   const country = profile && !profile.needsSetup() ? profile.country : undefined;
-  const catalog = useCatalog(country);
-  const topCashback = catalog?.top.slice(0, stripSize) ?? [];
+  const catalog = useCatalog(country, stripSize);
+  const topCashback = catalog?.top ?? [];
   const category = pickedCategory.country === country ? pickedCategory.category : null;
   const setCategory = (picked: string | null) => setPickedCategory({ country, category: picked });
 
@@ -172,7 +174,7 @@ export default function ShopScreen() {
         if (request !== latestRequest.current) {
           return;
         }
-        setMerchants((shown) => (next === 1 ? result : [...shown, ...result]));
+        setMerchants((shown) => MerchantPaging.merge(shown, result, next));
         setPage(next);
         setPages(pagination.pages);
       }),
@@ -234,8 +236,9 @@ export default function ShopScreen() {
     });
 
   const loadMore = () => {
-    if (!busy && page > 0 && page < pages) {
-      loadMerchants(page + 1);
+    const next = MerchantPaging.nextPage(page, pages, busy || listing.message !== '');
+    if (next) {
+      loadMerchants(next);
     }
   };
 
@@ -306,7 +309,11 @@ export default function ShopScreen() {
               )}
               {accountError}
               {!searching && (
-                <CategoryTiles categories={catalog?.categories ?? []} selected={category} onSelect={setCategory} />
+                <CategoryTiles
+                  categories={country ? loadedCategories(country) : []}
+                  selected={category}
+                  onSelect={setCategory}
+                />
               )}
               {!searching && category === null && (
                 <>
@@ -357,9 +364,7 @@ export default function ShopScreen() {
               />
             )}
             {merchants.length > 0 && listing.busy && page > 0 && (
-              <ThemedText type="small" themeColor="textSecondary" style={styles.loadingMore}>
-                Loading more gift cards
-              </ThemedText>
+              <MerchantGridSkeleton columns={cardColumns} rows={1} />
             )}
             </View>
             <SiteFooter />
@@ -387,9 +392,11 @@ export default function ShopScreen() {
 function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpen: (merchant: Merchant) => void }) {
   const { country } = useMarket();
   const { wide } = usePageLayout();
-  const catalog = useCatalog(country);
+  const catalog = useCatalog(country, stripSize);
   const [search, setSearch] = useState(initialSearch);
-  const { scrollRef, onScroll, scrim } = useScrimScroll();
+  const loadMoreRef = useRef<(() => void) | null>(null);
+  const loadMore = useCallback(() => loadMoreRef.current?.(), []);
+  const { scrollRef, onScroll, scrim } = useScrimScroll(loadMore);
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="auto" />
@@ -404,10 +411,10 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
           {search.trim() === '' && <TopCashback catalog={catalog} onOpen={onOpen} />}
           <MerchantCatalog
             country={country}
-            categories={catalog?.categories ?? []}
             search={search}
             onSearch={setSearch}
             onOpen={onOpen}
+            loadMoreRef={loadMoreRef}
           />
         </PageWidth>
         <SiteFooter />
@@ -615,8 +622,5 @@ const styles = StyleSheet.create({
   empty: {
     gap: Spacing.two,
     paddingVertical: Spacing.four,
-  },
-  loadingMore: {
-    textAlign: 'center',
   },
 });
