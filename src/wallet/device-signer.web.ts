@@ -58,9 +58,12 @@ async function transact<T>(
   });
 }
 
-function read(userId: string): Promise<CryptoKeyPair | undefined> {
+const sharedKeyName = 'device';
+
+async function read(userId: string): Promise<CryptoKeyPair | undefined> {
   const keyName = DeviceKey.storageName(userId);
-  return transact('readonly', (store) => store.get(keyName));
+  const own = await transact<CryptoKeyPair | undefined>('readonly', (store) => store.get(keyName));
+  return own ?? transact('readonly', (store) => store.get(sharedKeyName));
 }
 
 async function write(userId: string, keyPair: CryptoKeyPair): Promise<void> {

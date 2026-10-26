@@ -83,6 +83,33 @@ test('each user signs with their own key', async () => {
   assert.equal(ed25519.verify(bSignature, digest, base64.decode(aPublicKey)), false);
 });
 
+test('a user with no own key uses the shared key a wallet was created with', async () => {
+  const storage = new MemoryStorage();
+  const secret = new Uint8Array(32).fill(3);
+  const sharedPublicKey = base64.encode(ed25519.getPublicKey(secret));
+  await storage.write(DeviceKey.sharedSecretName, base64.encode(secret), true);
+  await storage.write(DeviceKey.sharedPublicKeyName, sharedPublicKey, false);
+
+  const a = new DeviceKey(storage, 'a');
+  assert.equal(await a.publicKey(), sharedPublicKey);
+  const signature = base64.decode(await a.sign(digest));
+  assert.ok(ed25519.verify(signature, digest, base64.decode(sharedPublicKey)));
+});
+
+test('creating an own key leaves the shared key in place and takes precedence', async () => {
+  const storage = new MemoryStorage();
+  const secret = new Uint8Array(32).fill(3);
+  await storage.write(DeviceKey.sharedSecretName, base64.encode(secret), true);
+  await storage.write(DeviceKey.sharedPublicKeyName, base64.encode(ed25519.getPublicKey(secret)), false);
+
+  const b = new DeviceKey(storage, 'b');
+  const bPublicKey = await b.create();
+  assert.equal(await b.publicKey(), bPublicKey);
+  const signature = base64.decode(await b.sign(digest));
+  assert.ok(ed25519.verify(signature, digest, base64.decode(bPublicKey)));
+  assert.ok(storage.entries.has(DeviceKey.sharedSecretName));
+});
+
 test('a user with no key cannot sign', async () => {
   const storage = new MemoryStorage();
   await new DeviceKey(storage, 'a').create();

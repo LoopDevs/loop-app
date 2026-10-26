@@ -28,8 +28,12 @@ export class DeviceKey {
     return `device.signer.${userId}`;
   }
 
-  publicKey(): Promise<string | null> {
-    return this.storage.read(this.publicKeyName, false);
+  static readonly sharedSecretName = 'device.signer.secret';
+  static readonly sharedPublicKeyName = 'device.signer.public';
+
+  async publicKey(): Promise<string | null> {
+    const own = await this.storage.read(this.publicKeyName, false);
+    return own ?? this.storage.read(DeviceKey.sharedPublicKeyName, false);
   }
 
   async create(): Promise<string> {
@@ -42,7 +46,9 @@ export class DeviceKey {
   }
 
   async sign(digest: Uint8Array): Promise<string> {
-    const secret = await this.storage.read(this.secretName, true);
+    const ownPublicKey = await this.storage.read(this.publicKeyName, false);
+    const secretName = ownPublicKey ? this.secretName : DeviceKey.sharedSecretName;
+    const secret = await this.storage.read(secretName, true);
     if (!secret) {
       throw new Error('No device key on this phone');
     }
