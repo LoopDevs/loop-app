@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { CountryPicker } from '@/components/country-picker';
@@ -24,13 +24,21 @@ export default function SettingsScreen() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
+  const profileUserId = useRef<string | null>(null);
 
   const loadAccount = useCallback(
     () =>
       run(async () => {
         const isSignedIn = await ctx.isSignedIn();
         setSignedIn(isSignedIn);
-        setProfile(isSignedIn ? await ctx.me() : null);
+        const userId = isSignedIn ? await ctx.userId() : null;
+        if (userId !== profileUserId.current) {
+          profileUserId.current = userId;
+          setProfile(null);
+        }
+        if (userId) {
+          setProfile(await ctx.me());
+        }
       }),
     [run, setProfile],
   );

@@ -2,7 +2,14 @@ export type ServiceState = 'maintenance' | 'purchases-paused' | 'app-disabled';
 
 export type BlockingServiceState = Exclude<ServiceState, 'purchases-paused'>;
 
-export type RecoveryProbe = 'GET /status' | 'GET /me' | 'sign-in';
+export type RecoveryProbe = 'GET /status' | 'GET /me';
+
+export type RecoveryChecks = {
+  hasSession(): Promise<boolean>;
+  maintenance(): Promise<boolean>;
+  readProfile(): Promise<unknown>;
+  isBlocking(error: unknown): boolean;
+};
 
 export const serviceStateMessages: Record<ServiceState, string> = {
   maintenance: 'Loop is down for maintenance',
@@ -29,8 +36,25 @@ export function blockingServiceState(errorName: string | undefined): BlockingSer
 }
 
 export function recoveryProbe(state: BlockingServiceState, signedIn: boolean): RecoveryProbe {
-  if (state === 'maintenance') {
-    return 'GET /status';
+  return state === 'app-disabled' && signedIn ? 'GET /me' : 'GET /status';
+}
+
+export async function hasRecovered(state: BlockingServiceState, checks: RecoveryChecks): Promise<boolean> {
+  switch (recoveryProbe(state, await checks.hasSession())) {
+    case 'GET /status':
+      return !(await checks.maintenance());
+    case 'GET /me':
+      try {
+        await checks.readProfile();
+        return true;
+      } catch (error) {
+        if (checks.isBlocking(error)) {
+          return false;
+        }
+        if (!(await checks.hasSession())) {
+          return true;
+        }
+        throw error;
+      }
   }
-  return signedIn ? 'GET /me' : 'sign-in';
 }

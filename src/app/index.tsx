@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -28,6 +28,8 @@ export default function HomeScreen() {
   const [balances, setBalances] = useState<Balances | null>(null);
   const { busy, message, setMessage, run } = useBusyAction();
   const [refreshing, setRefreshing] = useState(false);
+  const walletLoadStarted = useRef(false);
+  const homeFocused = useRef(false);
 
   const showWallet = useCallback(async (loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -36,8 +38,8 @@ export default function HomeScreen() {
   }, []);
 
   const openActiveOrder = useCallback(async () => {
-    const activeOrder = await ctx.activeGiftCard();
-    if (activeOrder) {
+    const activeOrder = await ctx.activeGiftCard().catch(() => null);
+    if (activeOrder && homeFocused.current) {
       router.push(`/shop/${activeOrder.merchantId}`, { withAnchor: true });
     }
   }, [router]);
@@ -50,22 +52,29 @@ export default function HomeScreen() {
   const readSession = useCallback(async () => {
     try {
       if (await ctx.isSignedIn()) {
-        if (screen === 'loading') {
+        if (screen === 'loading' && !walletLoadStarted.current) {
+          walletLoadStarted.current = true;
           await loadWallet();
         }
         return;
       }
+      walletLoadStarted.current = false;
       setWallet(null);
       setBalances(null);
       setScreen((current) => (current === 'code' ? current : 'email'));
     } catch (error) {
+      walletLoadStarted.current = false;
       setMessage(errorMessage(error));
     }
   }, [screen, loadWallet, setMessage]);
 
   useFocusEffect(
     useCallback(() => {
+      homeFocused.current = true;
       readSession();
+      return () => {
+        homeFocused.current = false;
+      };
     }, [readSession]),
   );
 
