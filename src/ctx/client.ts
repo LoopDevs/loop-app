@@ -1,7 +1,8 @@
+import { Account } from '@/ctx/account';
 import { ctxReportMessage } from '@/ctx/ctx-report';
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
-import { Payout, type PayoutJson } from '@/ctx/payout';
+import type { PayoutJson } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
 import {
   blockingServiceState,
@@ -152,6 +153,8 @@ export type GiftCardQuery = {
   perPage?: number;
 };
 
+export type CashbackDestination = 'account' | 'savings';
+
 export type OAuthIdentityJson = {
   provider: string;
 };
@@ -161,6 +164,7 @@ export type UserJson = {
   email?: string;
   country?: string;
   stableCurrency?: string;
+  cashbackDestination?: CashbackDestination;
   oauthIdentities?: OAuthIdentityJson[];
 };
 
@@ -172,13 +176,10 @@ export type MeJson = {
   };
 };
 
-export type ServiceStatus = {
-  maintenance: boolean;
-};
-
-type ServiceStateListener = (state: BlockingServiceState) => void;
-
-export type UserUpdate = { country: string } | { stableCurrency: string };
+export type UserUpdate =
+  | { country: string }
+  | { stableCurrency: string }
+  | { cashbackDestination: CashbackDestination };
 
 export type BalanceJson = {
   currency: string;
@@ -186,15 +187,16 @@ export type BalanceJson = {
   estimates?: Record<string, string>;
 };
 
-type AccountJson = {
+export type AccountJson = {
   wallet: BalanceJson[] | null;
   payouts: PayoutJson[] | null;
 };
 
-export type Account = {
-  wallet: BalanceJson[];
-  payouts: Payout[];
+export type ServiceStatus = {
+  maintenance: boolean;
 };
+
+type ServiceStateListener = (state: BlockingServiceState) => void;
 
 export type SponsoredResult = {
   hash: string;
@@ -301,11 +303,7 @@ class CtxClient {
   }
 
   async account(): Promise<Account> {
-    const json = await this.userRequest<AccountJson>('GET', '/account');
-    return {
-      wallet: json.wallet ?? [],
-      payouts: (json.payouts ?? []).map((payout) => new Payout(payout)),
-    };
+    return new Account(await this.userRequest<AccountJson>('GET', '/account'));
   }
 
   async merchants({ country, name, ids, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
