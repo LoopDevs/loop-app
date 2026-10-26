@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { ctx, CtxError, type GiftCard, type Merchant } from '@/ctx/client';
+import { giftCardStatusLabel } from '@/ctx/gift-card-status';
 import {
   canPay,
   needsNewPrice,
@@ -335,7 +336,7 @@ function orderStatus(order: GiftCard, payment: PaymentState): string {
     return 'Order expired';
   }
   if (order.status !== 'unpaid') {
-    return `Status: ${order.status}`;
+    return giftCardStatusLabel(order.status);
   }
   switch (payment.kind) {
     case 'sending':
@@ -349,7 +350,7 @@ function orderStatus(order: GiftCard, payment: PaymentState): string {
     case 'notSent':
       return "Payment couldn't be sent";
     case 'ready':
-      return `Status: ${order.status}`;
+      return giftCardStatusLabel(order.status);
   }
 }
 
