@@ -99,18 +99,10 @@ export const Radius = {
 
 export const Elevation = {
   card: {
-    shadowColor: '#0A1640',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 18,
-    elevation: 2,
+    boxShadow: '0 6px 18px rgba(10, 22, 64, 0.07)',
   },
   badge: {
-    shadowColor: '#0A1640',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    elevation: 3,
+    boxShadow: '0 2px 6px rgba(10, 22, 64, 0.16)',
   },
 } as const;
 
