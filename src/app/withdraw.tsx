@@ -1,5 +1,5 @@
 import { usePreventRemove, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,7 +22,7 @@ import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
-import { SmartWallet } from '@/wallet/smart-wallet';
+import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type Step = 'amount' | 'bank' | 'needs-name' | 'review' | 'submitted';
 
@@ -56,16 +56,26 @@ export default function WithdrawScreen() {
 
   const balance = view?.holdings.inWallet(bankWithdrawalCurrency) ?? 0n;
 
+  const homeIfUnlinked = useCallback(
+    (error: unknown): never => {
+      if (error instanceof UnlinkedDevice) {
+        router.replace('/');
+      }
+      throw error;
+    },
+    [router],
+  );
+
   useEffect(() => {
     run(async () => {
-      const [loaded, me] = await Promise.all([SmartWallet.load(), ctx.me()]);
+      const [loaded, me] = await Promise.all([SmartWallet.load().catch(homeIfUnlinked), ctx.me()]);
       setWallet(loaded);
       setProfile(me);
     });
     return () => {
       following.current += 1;
     };
-  }, [run]);
+  }, [run, homeIfUnlinked]);
 
   useEffect(() => {
     refresh().catch((error: unknown) => setMessage(errorMessage(error)));
@@ -170,7 +180,7 @@ export default function WithdrawScreen() {
       void follow(created, state);
     } catch (error) {
       setHeading('');
-      throw error;
+      homeIfUnlinked(error);
     } finally {
       setSending(false);
     }
