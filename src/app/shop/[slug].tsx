@@ -96,11 +96,11 @@ export default function MerchantScreen() {
     <GiftCardPurchase merchant={merchant} wallet={wallet} />
   ) : signedIn ? (
     <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      <ThemedText type="heading">Set up your wallet first</ThemedText>
+      <ThemedText type="heading">Finish setting up Loop</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Your wallet pays for gift cards and holds your cashback.
+        Turn on Face ID or your fingerprint to pay for gift cards and collect your cashback.
       </ThemedText>
-      <Button label="Create wallet" variant="primary" onPress={() => router.navigate('/')} />
+      <Button label="Finish setup" variant="primary" onPress={() => router.navigate('/')} />
     </View>
   ) : (
     <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>

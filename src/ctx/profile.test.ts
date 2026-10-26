@@ -104,7 +104,8 @@ test('the passkey is labelled with the account email', () => {
 });
 
 test('a stable currency is labelled by its asset code', () => {
-  assert.equal(Profile.currencyLabel('XLM.GBPLOOP'), 'GBPLOOP');
+  assert.equal(Profile.currencyLabel('XLM.GBPLOOP'), 'British Pound');
+  assert.equal(Profile.currencyLabel('XLM.USDC'), 'US Dollar');
   assert.equal(Profile.currencyLabel('XLM'), 'XLM');
 });
 

@@ -211,7 +211,7 @@ function SignInForm({ reason, onSignedIn }: { reason: string; onSignedIn: () => 
               Sign in to Loop
             </ThemedText>
             <ThemedText themeColor="textSecondary">
-              {reason || 'Buy gift cards, earn cashback and keep it in a wallet only you control.'}
+              {reason || 'Buy gift cards and earn cashback on every one.'}
             </ThemedText>
           </View>
           <SocialSignInButtons providers={socialSignIn.providers()} disabled={busy} onPress={signInWith} />

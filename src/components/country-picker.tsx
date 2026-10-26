@@ -5,7 +5,6 @@ import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { type CountryChoice, Profile } from '@/ctx/profile';
-import { network } from '@/stellar/network';
 
 type Props = {
   profile: Profile;
@@ -89,14 +88,9 @@ export function CountryPicker({ profile, busy, onChoose, onCancel }: Props) {
 }
 
 function currencyStepCopy(): string {
-  const stableSymbols = network.tokens
-    .filter((token) => token.currency !== 'XLM')
-    .map((token) => token.symbol)
-    .join(', ');
   return (
-    'Cashback from payments in XLM is converted to this currency. ' +
-    `Cashback from ${stableSymbols} payments stays in that currency. ` +
-    "This can't be changed later."
+    'Cashback is paid in this currency unless you pay in another one, ' +
+    "in which case it stays in the currency you paid with. This can't be changed later."
   );
 }
 

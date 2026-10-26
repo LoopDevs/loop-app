@@ -24,14 +24,14 @@ import { money } from '@/money';
 import { Savings } from '@/wallet/savings';
 
 const destinationCopy: Record<CashbackDestination, { label: string; detail: string }> = {
-  account: { label: 'Account', detail: 'Cashback is paid to your wallet.' },
+  account: { label: 'Account', detail: 'Cashback is paid into your balance.' },
   savings: {
     label: 'Savings',
     detail: 'Cashback goes to savings and earns interest when savings is available. Otherwise it stays with Loop.',
   },
 };
 
-const savingsNote = `Loop savings holds ${Profile.currencyLabel(Savings.currency)}. Cashback in another currency stays with Loop; switch to Account to have it paid to your wallet.`;
+const savingsNote = `Loop savings holds ${Profile.currencyLabel(Savings.currency)}. Cashback in another currency stays with Loop; switch to Account to have it paid into your balance.`;
 
 const signInFailure = 'Sign in to see your cashback.';
 const destinationFooter = 'Your choice applies to future cashback. Cashback already paid out stays where it is.';
