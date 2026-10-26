@@ -1,22 +1,27 @@
+import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useCallback, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
-import { HoldingsSummary } from '@/components/holdings-summary';
+import { HomeActions } from '@/components/home-actions';
+import { HomeGiftCards } from '@/components/home-gift-cards';
+import { HomePanel, useScrimScroll } from '@/components/home-panel';
 import { BalanceSkeleton } from '@/components/skeleton';
 import { SocialSignInButtons } from '@/components/social-sign-in-buttons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
 import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
+import { useTheme } from '@/hooks/use-theme';
 import { socialSignIn } from '@/native/social-sign-in';
 import type { SocialProvider } from '@/session/social-sign-in';
 import { network } from '@/stellar/network';
@@ -165,6 +170,31 @@ export default function HomeScreen() {
       await refresh();
     });
 
+  const [depositOpen, setDepositOpen] = useState(false);
+  const { onScroll, scrim } = useScrimScroll();
+
+  const copyAddress = async () => {
+    if (!wallet) {
+      return;
+    }
+    await Clipboard.setStringAsync(wallet.address);
+    toast('Address copied');
+  };
+
+  const confirmWithdraw = () => {
+    const prompt = 'Move your savings back to your account balance?';
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm?.(prompt)) {
+        withdraw();
+      }
+      return;
+    }
+    Alert.alert('Withdraw savings', prompt, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Withdraw', onPress: withdraw },
+    ]);
+  };
+
   const withdraw = () =>
     run(async () => {
       if (!wallet || vaultShares === 0n) {
@@ -178,22 +208,59 @@ export default function HomeScreen() {
       await refresh();
     });
 
+  const signedIn = screen === 'wallet';
+  const theme = useTheme();
+
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          refreshControl={
-            screen === 'wallet' ? (
-              <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} />
-            ) : undefined
-          }>
-          <ThemedText type="subtitle">Loop</ThemedText>
+      <StatusBar style="light" />
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          screen === 'wallet' ? (
+            <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={theme.accent} />
+          ) : undefined
+        }>
+        <HomePanel view={screen === 'wallet' ? view : null} signedIn={signedIn}>
+          {screen === 'wallet' && wallet && (
+            <HomeActions
+              depositOpen={depositOpen}
+              onAddMoney={() => setDepositOpen((open) => !open)}
+              onShop={() => router.navigate('/shop')}
+              onCashback={() => router.navigate('/orders/cashback')}
+              onWithdraw={confirmWithdraw}
+              withdrawDisabled={busy || vaultShares === 0n}
+            />
+          )}
+        </HomePanel>
 
+        <View style={styles.content}>
           {screen === 'loading' && <BalanceSkeleton />}
 
+          {screen === 'wallet' && wallet && depositOpen && (
+            <Animated.View
+              entering={FadeInDown.duration(Motion.state)}
+              style={[styles.sheet, styles.deposit, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="heading">Add money</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Send money on the Stellar network to this address. It shows here once it arrives.
+              </ThemedText>
+              <ThemedText type="code" selectable>
+                {wallet.address}
+              </ThemedText>
+              <Button label="Copy address" variant="primary" onPress={copyAddress} />
+              {network.friendbotUrl && (
+                <Button label="Fund with testnet XLM" onPress={fund} disabled={busy} />
+              )}
+            </Animated.View>
+          )}
+
           {screen === 'email' && (
-            <>
+            <Animated.View entering={FadeIn.duration(Motion.state)} style={styles.sheet}>
+              <ThemedText type="subtitle">Sign in to Loop</ThemedText>
               <SocialSignInButtons
                 providers={socialSignIn.providers()}
                 disabled={busy}
@@ -204,48 +271,71 @@ export default function HomeScreen() {
                 onChangeText={setEmail}
                 placeholder="Email"
                 keyboardType="email-address"
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="send"
+                onSubmitEditing={() => email.trim() && !busy && requestCode()}
               />
-              <Button label="Send code" onPress={requestCode} disabled={busy || !email.trim()} />
-            </>
+              <Button
+                label={busy ? 'Sending code…' : 'Send code'}
+                variant="primary"
+                onPress={requestCode}
+                disabled={busy || !email.trim()}
+              />
+            </Animated.View>
           )}
 
           {screen === 'code' && (
-            <>
-              <ThemedText type="small">We sent a code to {email.trim()}</ThemedText>
-              <Field value={code} onChangeText={setCode} placeholder="Code" keyboardType="number-pad" />
-              <Button label="Sign in" onPress={verifyCode} disabled={busy || !code.trim()} />
-              <Button label="Resend code" onPress={resendCode} disabled={busy} />
-              <Button label="Use a different email" onPress={changeEmail} disabled={busy} />
-            </>
+            <Animated.View entering={FadeIn.duration(Motion.state)} style={styles.sheet}>
+              <ThemedText type="subtitle">Check your email</ThemedText>
+              <ThemedText themeColor="textSecondary">
+                We sent a code to {email.trim()}. Enter it below.
+              </ThemedText>
+              <Field
+                value={code}
+                onChangeText={setCode}
+                placeholder="Code"
+                keyboardType="number-pad"
+                autoComplete="one-time-code"
+                textContentType="oneTimeCode"
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={() => code.trim() && !busy && verifyCode()}
+              />
+              <Button
+                label={busy ? 'Signing in…' : 'Sign in'}
+                variant="primary"
+                onPress={verifyCode}
+                disabled={busy || !code.trim()}
+              />
+              <View style={styles.row}>
+                <View style={styles.rowItem}>
+                  <Button label="Resend code" variant="quiet" onPress={resendCode} disabled={busy} />
+                </View>
+                <View style={styles.rowItem}>
+                  <Button label="Change email" variant="quiet" onPress={changeEmail} disabled={busy} />
+                </View>
+              </View>
+            </Animated.View>
           )}
 
           {screen === 'no-wallet' && (
-            <>
-              <ThemedText>Create your wallet with a passkey.</ThemedText>
-              <Button label="Create wallet" onPress={createWallet} disabled={busy} />
-            </>
+            <Animated.View entering={FadeIn.duration(Motion.state)} style={styles.sheet}>
+              <ThemedText type="subtitle">Set up your wallet</ThemedText>
+              <ThemedText themeColor="textSecondary">
+                Your wallet holds your money and cashback. A passkey on this device keeps it
+                yours, with no password to remember.
+              </ThemedText>
+              <Button
+                label={busy ? 'Creating wallet…' : 'Create wallet'}
+                variant="primary"
+                onPress={createWallet}
+                disabled={busy}
+              />
+            </Animated.View>
           )}
 
-          {screen === 'wallet' && wallet && (
-            <>
-              <ThemedText type="small">Deposit address</ThemedText>
-              <ThemedText type="code" selectable>
-                {wallet.address}
-              </ThemedText>
-              {view ? <HoldingsSummary view={view} /> : <BalanceSkeleton />}
-              <Button label="Refresh" onPress={refreshBalances} disabled={busy} />
-              {network.friendbotUrl && (
-                <Button label="Fund with testnet XLM" onPress={fund} disabled={busy} />
-              )}
-              <Button
-                label="Withdraw savings"
-                onPress={withdraw}
-                disabled={busy || vaultShares === 0n}
-              />
-              <Button label="Shop gift cards" onPress={() => router.navigate('/shop')} />
-              <Button label="Cashback" onPress={() => router.navigate('/orders/cashback')} />
-            </>
-          )}
+          {screen === 'wallet' && wallet && <HomeGiftCards onOpen={(slug) => router.push(`/shop/${slug}`)} />}
 
           {(screen === 'email' || screen === 'code') && (
             <ThemedText type="small" themeColor="textSecondary">
@@ -262,12 +352,13 @@ export default function HomeScreen() {
           )}
 
           {message !== '' && (
-            <ThemedText type="small" selectable>
+            <ThemedText type="small" selectable accessibilityLiveRegion="polite">
               {message}
             </ThemedText>
           )}
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </Animated.ScrollView>
+      <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
   );
 }
@@ -275,18 +366,31 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
   },
-  safeArea: {
-    flex: 1,
-    maxWidth: MaxContentWidth,
+  scrollContent: {
+    paddingBottom: BottomTabInset + Spacing.five,
   },
   content: {
-    paddingHorizontal: Spacing.four,
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
     paddingTop: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
+    gap: Spacing.four,
+  },
+  sheet: {
     gap: Spacing.three,
+  },
+  deposit: {
+    padding: Spacing.three,
+    borderRadius: Radius.control,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  rowItem: {
+    flex: 1,
   },
   link: {
     textDecorationLine: 'underline',
