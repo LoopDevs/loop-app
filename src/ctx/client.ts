@@ -149,10 +149,16 @@ export type GiftCardQuery = {
   perPage?: number;
 };
 
+export type OAuthIdentityJson = {
+  provider: string;
+};
+
 export type UserJson = {
   id: string;
+  email?: string;
   country?: string;
   stableCurrency?: string;
+  oauthIdentities?: OAuthIdentityJson[];
 };
 
 export type MeJson = {
@@ -257,8 +263,8 @@ class CtxClient {
   }
 
   async signOut(): Promise<void> {
-    this.accessToken = null;
-    await tokenStore.clear();
+    await this.sessionRequest('POST', '/logout').catch(() => undefined);
+    await this.clearSession();
   }
 
   async userId(): Promise<string> {
@@ -426,11 +432,16 @@ class CtxClient {
       return tokens.accessToken;
     } catch (error) {
       if (error instanceof CtxError && error.status === 401) {
-        await this.signOut();
+        await this.clearSession();
         return null;
       }
       throw error;
     }
+  }
+
+  private async clearSession(): Promise<void> {
+    this.accessToken = null;
+    await tokenStore.clear();
   }
 
   private async storeTokens(tokens: TokenPair): Promise<void> {

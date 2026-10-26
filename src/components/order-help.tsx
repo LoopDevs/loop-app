@@ -4,7 +4,7 @@ import { View } from 'react-native';
 
 import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
-import { support } from '@/constants/support';
+import { loopLinks } from '@/constants/loop-links';
 import type { GiftCard } from '@/ctx/client';
 import { orderHelp } from '@/ctx/order-help';
 
@@ -24,7 +24,7 @@ export function OrderHelp({ giftCard }: { giftCard: GiftCard }) {
       <Button label="Get help with this order" onPress={openMail} />
       {mailUnavailable && (
         <ThemedText type="small" selectable>
-          Email {support.email} and quote order {giftCard.id}.
+          Email {loopLinks.supportEmail} and quote order {giftCard.id}.
         </ThemedText>
       )}
     </View>
