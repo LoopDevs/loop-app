@@ -1,7 +1,8 @@
-import type { Account } from '../ctx/client.ts';
+import type { Account } from '../ctx/account.ts';
 import type { Rates } from '../ctx/rates.ts';
 import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
+import { Savings } from './savings.ts';
 import type { Balances } from './smart-wallet.ts';
 
 export type Holding = {
@@ -13,7 +14,6 @@ export type Holding = {
 export type Coverage = { kind: 'wallet' } | { kind: 'savings'; fromSavings: bigint } | { kind: 'short' };
 
 export class Holdings {
-  static readonly savingsCurrency: PaymentCurrency = 'XLM.USDC';
   static readonly withdrawSlippageBasisPoints = 100n;
   static readonly shownUnit = units.parse('0.01');
 
@@ -27,7 +27,7 @@ export class Holdings {
     this.rates = rates;
   }
 
-  static onTheWayFrom(account: Account, address: string): Holding[] {
+  static onTheWayFrom(account: Pick<Account, 'wallet' | 'payouts'>, address: string): Holding[] {
     const ledger = account.wallet.flatMap(({ currency, amount, estimates }) =>
       Holdings.holdingOf(currency, amount, estimates),
     );
@@ -64,7 +64,7 @@ export class Holdings {
 
   spendable(currency: string): bigint {
     const inWallet = this.inWallet(currency);
-    return currency === Holdings.savingsCurrency ? inWallet + this.savings() : inWallet;
+    return currency === Savings.currency ? inWallet + this.savings() : inWallet;
   }
 
   coverage(currency: string, price: bigint): Coverage {
@@ -72,7 +72,7 @@ export class Holdings {
     if (inWallet >= price) {
       return { kind: 'wallet' };
     }
-    if (currency === Holdings.savingsCurrency && this.spendable(currency) >= price) {
+    if (currency === Savings.currency &&this.spendable(currency) >= price) {
       return { kind: 'savings', fromSavings: price - inWallet };
     }
     return { kind: 'short' };
@@ -143,7 +143,7 @@ export class Holdings {
     return (
       best?.currency ??
       funded.find((currency) => currency === stable) ??
-      funded.find((currency) => currency === Holdings.savingsCurrency) ??
+      funded.find((currency) => currency === Savings.currency) ??
       funded[0] ??
       null
     );

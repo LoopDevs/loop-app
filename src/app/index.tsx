@@ -7,6 +7,7 @@ import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
 import { HoldingsSummary } from '@/components/holdings-summary';
 import { BalanceSkeleton } from '@/components/skeleton';
+import { SocialSignInButtons } from '@/components/social-sign-in-buttons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { loopLinks } from '@/constants/loop-links';
@@ -15,6 +16,8 @@ import { ctx } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
+import { socialSignIn } from '@/native/social-sign-in';
+import type { SocialProvider } from '@/session/social-sign-in';
 import { network } from '@/stellar/network';
 import { SmartWallet } from '@/wallet/smart-wallet';
 
@@ -90,9 +93,20 @@ export default function HomeScreen() {
       await loadWallet();
     });
 
+  const signInWith = (provider: SocialProvider) =>
+    run(async () => {
+      const idToken = await socialSignIn.idToken(provider);
+      if (!idToken) {
+        return;
+      }
+      await ctx.signInWithOAuth(provider, idToken);
+      await loadWallet();
+    });
+
   const createWallet = () =>
     run(async () => {
-      showWallet(await SmartWallet.create(email.trim() || 'Loop wallet'));
+      const profile = await ctx.me();
+      showWallet(await SmartWallet.create(profile.passkeyLabel()));
     });
 
   const refreshBalances = useCallback(async () => {
@@ -157,6 +171,11 @@ export default function HomeScreen() {
 
           {screen === 'email' && (
             <>
+              <SocialSignInButtons
+                providers={socialSignIn.providers()}
+                disabled={busy}
+                onPress={signInWith}
+              />
               <Field
                 value={email}
                 onChangeText={setEmail}
@@ -199,6 +218,7 @@ export default function HomeScreen() {
                 disabled={busy || vaultShares === 0n}
               />
               <Button label="Shop gift cards" onPress={() => router.navigate('/shop')} />
+              <Button label="Cashback" onPress={() => router.navigate('/orders/cashback')} />
             </>
           )}
 

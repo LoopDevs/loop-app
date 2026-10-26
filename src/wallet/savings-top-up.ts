@@ -3,6 +3,7 @@ import { chainOutcome } from '../ctx/payment-state.ts';
 import type { PriceWindow } from '../ctx/price-window.ts';
 import { money } from '../money.ts';
 import { Holdings } from './holdings.ts';
+import { Savings } from './savings.ts';
 import type { Balances } from './smart-wallet.ts';
 
 export type PendingWithdrawal = {
@@ -38,7 +39,7 @@ export type TopUpOutcome =
 type ChainOutcome = 'pending' | 'success' | 'failed';
 
 export class SavingsTopUp {
-  static readonly currency = Holdings.savingsCurrency;
+  static readonly currency = Savings.currency;
   static readonly requiredWindowMs = 90_000;
   static readonly confirmTimeoutMs = 30_000;
   static readonly confirmPollMs = 2_000;
