@@ -6,6 +6,7 @@ import { Merchant } from '@/ctx/merchant';
 import type { PayoutJson } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
 import { blockingServiceState, type BlockingServiceState } from '@/ctx/service-state';
+import { loopEnvironment } from '@/environment';
 import { errorReporting } from '@/ops/error-reporting';
 import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
 import {
@@ -415,7 +416,4 @@ class CtxClient {
   }
 }
 
-export const ctx = new CtxClient(
-  process.env.EXPO_PUBLIC_CTX_API_URL ?? '',
-  process.env.EXPO_PUBLIC_CTX_CLIENT_ID ?? '',
-);
+export const ctx = new CtxClient(loopEnvironment.ctxApiUrl, process.env.EXPO_PUBLIC_CTX_CLIENT_ID ?? '');

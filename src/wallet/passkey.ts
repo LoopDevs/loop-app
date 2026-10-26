@@ -2,6 +2,7 @@ import { randomBytes } from '@noble/hashes/utils';
 import { Platform } from 'react-native';
 import * as Passkeys from 'react-native-passkeys';
 
+import { loopEnvironment } from '@/environment';
 import { base64 } from '@/wallet/base64';
 import { PasskeyPublicKey } from '@/wallet/passkey-public-key';
 
@@ -14,10 +15,11 @@ export type Passkey = {
 
 export const passkey = {
   async create(label: string): Promise<Passkey> {
+    const passkeyLabel = loopEnvironment.passkeyLabel(label);
     const created = await Passkeys.create({
       challenge: base64.encode(randomBytes(32)),
       rp: { id: rpId(), name: 'Loop' },
-      user: { id: base64.encode(randomBytes(16)), name: label, displayName: label },
+      user: { id: base64.encode(randomBytes(16)), name: passkeyLabel, displayName: passkeyLabel },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
     }).catch((error: unknown) => {

@@ -1,5 +1,6 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
+import './src/environment.ts';
 import { SocialSignInConfig } from './src/session/social-sign-in.ts';
 
 export default ({ config }: ConfigContext): ExpoConfig => {

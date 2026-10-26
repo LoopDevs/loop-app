@@ -1,5 +1,7 @@
 import { Networks } from '@stellar/stellar-sdk';
 
+import { loopEnvironment, type StellarNetworkName } from '../environment.ts';
+
 export type PaymentCurrency = 'XLM' | 'XLM.USDC' | 'XLM.EURC' | 'XLM.GBPLOOP';
 
 export const stablePeg: Record<PaymentCurrency, 'USD' | 'EUR' | 'GBP' | null> = {
@@ -29,7 +31,7 @@ export type StellarNetwork = {
   usdcVault: string;
 };
 
-const networks: Record<'testnet' | 'mainnet', StellarNetwork> = {
+const networks: Record<StellarNetworkName, StellarNetwork> = {
   testnet: {
     rpcUrl: 'https://soroban-testnet.stellar.org',
     passphrase: Networks.TESTNET,
@@ -67,4 +69,4 @@ const networks: Record<'testnet' | 'mainnet', StellarNetwork> = {
   },
 };
 
-export const network = networks[process.env.EXPO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'];
+export const network = networks[loopEnvironment.stellarNetwork];
