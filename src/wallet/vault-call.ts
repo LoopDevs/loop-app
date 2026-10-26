@@ -26,6 +26,13 @@ export class VaultCall {
     this.chain = chain;
   }
 
+  async settle(sent: SentVaultCall): Promise<VaultCallOutcome> {
+    if (sent.error || sent.status === 'failed' || !sent.hash) {
+      return 'failed';
+    }
+    return this.confirm({ hash: sent.hash, expiryLedger: sent.expiryLedger });
+  }
+
   async confirm(call: PendingVaultCall): Promise<VaultCallOutcome> {
     const deadline = this.chain.now() + VaultCall.confirmTimeoutMs;
     for (;;) {

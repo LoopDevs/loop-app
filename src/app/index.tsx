@@ -193,11 +193,11 @@ export default function HomeScreen() {
       if (!wallet || depositAmount === null) {
         return;
       }
+      setDepositInput('');
       const sent = await wallet.deposit(depositAmount);
-      const refused = sent.error || sent.status === 'failed' || !sent.hash;
-      const outcome = refused ? 'failed' : await wallet.vaultCall().confirm(sent);
-      if (outcome === 'success') {
-        setDepositInput('');
+      const outcome = await wallet.vaultCall().settle(sent);
+      if (outcome === 'failed') {
+        setDepositInput(depositInput);
       }
       const refreshError = await refresh().then(
         () => '',

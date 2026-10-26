@@ -82,12 +82,13 @@ export class SavingsTopUp {
     if (started.kind !== 'sent') {
       return started;
     }
-    const status = await this.chain.vaultCall.confirm(started.withdrawal);
+    const { hash, expiryLedger } = started.withdrawal;
+    const status = await this.chain.vaultCall.settle(started.withdrawal);
     if (status === 'failed') {
       return { kind: 'withdrawFailed' };
     }
     if (status === 'pending') {
-      return { kind: 'stillMoving', withdrawal: started.withdrawal };
+      return { kind: 'stillMoving', withdrawal: { hash, expiryLedger } };
     }
     const after = SavingsTopUp.inWallet(await this.chain.balances());
     if (!window || window.isClosed(this.chain.now())) {
@@ -119,7 +120,7 @@ export class SavingsTopUp {
     shortfall: bigint,
     balances: Balances,
     window: PriceWindow | null,
-  ): Promise<{ kind: 'sent'; withdrawal: PendingVaultCall } | TopUpOutcome> {
+  ): Promise<{ kind: 'sent'; withdrawal: SentVaultCall } | TopUpOutcome> {
     if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
       return { kind: 'priceClosing' };
     }
@@ -127,10 +128,6 @@ export class SavingsTopUp {
     if (shares === null) {
       return { kind: 'notEnough' };
     }
-    const result = await this.chain.withdraw(shares);
-    if (result.error || result.status === 'failed' || !result.hash) {
-      return { kind: 'withdrawFailed' };
-    }
-    return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
+    return { kind: 'sent', withdrawal: await this.chain.withdraw(shares) };
   }
 }

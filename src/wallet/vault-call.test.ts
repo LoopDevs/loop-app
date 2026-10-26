@@ -54,3 +54,27 @@ test('a read error while confirming counts as pending and polling continues', as
   assert.equal(await chain.vaultCall.confirm({ hash: 'HASH', expiryLedger }), 'success');
   assert.equal(chain.polls(), 2);
 });
+
+test('a vault call refused at the sponsor settles as failed without a confirmation poll', async () => {
+  const refusals = [
+    { hash: '', status: 'failed', error: 'tx_failed' },
+    { hash: 'HASH', status: 'failed' },
+    { hash: 'HASH', status: 'pending', error: 'tx_bad_seq' },
+    { hash: '', status: 'pending' },
+  ];
+  for (const refusal of refusals) {
+    const chain = chainAnswering([{ status: 'SUCCESS', latestLedger: 1_000 }]);
+    assert.equal(await chain.vaultCall.settle({ ...refusal, expiryLedger }), 'failed');
+    assert.equal(chain.polls(), 0);
+  }
+});
+
+test('a vault call accepted at the sponsor settles to its confirmed outcome', async () => {
+  const chain = chainAnswering([
+    { status: 'NOT_FOUND', latestLedger: 1_000 },
+    { status: 'SUCCESS', latestLedger: 1_001 },
+  ]);
+  const sent = { hash: 'HASH', status: 'pending', expiryLedger };
+  assert.equal(await chain.vaultCall.settle(sent), 'success');
+  assert.equal(chain.polls(), 2);
+});
