@@ -1,4 +1,5 @@
 import { Account } from '@/ctx/account';
+import { bankWithdrawalCurrency } from '@/ctx/bank-withdrawal';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
 import { OrderWake } from '@/ctx/order-wake';
@@ -177,8 +178,37 @@ export type OAuthIdentityJson = {
   provider: string;
 };
 
+export type BankWithdrawalStatus = 'awaiting-payment' | 'expired' | 'in-review' | 'paying' | 'paid' | 'rejected';
+
+export type BankWithdrawal = {
+  id: string;
+  status: BankWithdrawalStatus;
+  amount: string;
+  currency: string;
+  fiatAmount: string;
+  fiatCurrency: string;
+  accountName: string;
+  sortCode: string;
+  accountNumberLast4: string;
+  paymentId: string;
+  created: string;
+  updated: string;
+  bankReference?: string;
+  reason?: string;
+  paymentCryptoAmount?: string;
+  paymentCryptoCurrency?: string;
+  paymentUrlExpiration?: string;
+};
+
+export type BankWithdrawalIn = {
+  amount: string;
+  sortCode: string;
+  accountNumber: string;
+};
+
 export type UserJson = {
   id: string;
+  name?: string;
   email?: string;
   country?: string;
   stableCurrency?: string;
@@ -195,6 +225,7 @@ export type MeJson = {
 };
 
 export type UserUpdate =
+  | { name: string }
   | { country: string }
   | { stableCurrency: string }
   | { cashbackDestination: CashbackDestination };
@@ -387,6 +418,27 @@ class CtxClient {
     const { result } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], perPage: 5 });
     const newest = result[0];
     return newest ? this.giftCard(newest.id) : null;
+  }
+
+  createBankWithdrawal({ amount, sortCode, accountNumber }: BankWithdrawalIn): Promise<BankWithdrawal> {
+    return this.userRequest('POST', '/bank-withdrawals', {
+      currency: bankWithdrawalCurrency,
+      amount,
+      sortCode,
+      accountNumber,
+    });
+  }
+
+  async latestBankWithdrawal(): Promise<BankWithdrawal | null> {
+    const { result } = await this.userRequest<{ result: BankWithdrawal[] | null }>(
+      'GET',
+      '/bank-withdrawals?perPage=1',
+    );
+    return result?.[0] ?? null;
+  }
+
+  bankWithdrawal(id: string): Promise<BankWithdrawal> {
+    return this.userRequest('GET', `/bank-withdrawals/${encodeURIComponent(id)}`);
   }
 
   async wallets(): Promise<WalletLink[]> {

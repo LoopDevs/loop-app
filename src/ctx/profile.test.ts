@@ -170,3 +170,13 @@ test('the destination follows the saved user', () => {
   });
   assert.equal(saved.savesCashback(), true);
 });
+
+test('a full name is two or more words with spacing tidied', () => {
+  assert.deepEqual(Profile.nameUpdate('  Ada   Lovelace '), { name: 'Ada Lovelace' });
+  assert.equal(Profile.nameUpdate('Ada'), null);
+  const named = Profile.fromMe({ user: { id: 'u1', name: '  Ada   Lovelace ' }, company });
+  assert.equal(named.accountName, 'Ada Lovelace');
+  assert.equal(named.hasFullName(), true);
+  assert.equal(Profile.fromMe({ user: { id: 'u1', name: 'Ada' }, company }).hasFullName(), false);
+  assert.equal(Profile.fromMe(newUser).hasFullName(), false);
+});

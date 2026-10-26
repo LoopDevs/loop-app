@@ -8,6 +8,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
+import { LatestBankWithdrawal } from '@/components/bank-withdrawal-row';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
@@ -34,6 +35,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { bankWithdrawalCurrency } from '@/ctx/bank-withdrawal';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -275,6 +277,10 @@ export default function HomeScreen() {
                     />
                   </BalanceCard>
                   <SavingsNudge onPress={() => router.navigate('/savings')} />
+                  {(view?.holdings.inWallet(bankWithdrawalCurrency) ?? 0n) > 0n && (
+                    <Button label="Withdraw to bank" onPress={() => router.push('/withdraw')} />
+                  )}
+                  <LatestBankWithdrawal wallet={wallet} />
                 </View>
                 <View style={[styles.column, wide && styles.columnWide]}>
                   <NextStep view={view} topMerchant={topMerchant} onAddMoney={addMoney} onOpenMerchant={openMerchant} />

@@ -2,16 +2,10 @@ import { MuxedAccount, scValToNative, StrKey, xdr } from '@stellar/stellar-sdk';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import {
-  ctx,
-  type BuiltTransaction,
-  type GiftCard,
-  type SmartWalletIntent,
-  type SponsoredResult,
-} from '@/ctx/client';
+import { ctx, type BuiltTransaction, type SmartWalletIntent, type SponsoredResult } from '@/ctx/client';
 import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
-import type { SignedTransfer } from '@/ctx/payment-state';
+import type { PaymentState, SignedTransfer } from '@/ctx/payment-state';
 import { network, type Token } from '@/stellar/network';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
@@ -24,6 +18,7 @@ import { passkey } from '@/wallet/passkey';
 import { PaymentSearch } from '@/wallet/payment-search';
 import { Savings } from '@/wallet/savings';
 import { SavingsTopUp } from '@/wallet/savings-top-up';
+import { SentPaymentCheck, type Payable, type SentTransaction } from '@/wallet/sent-payment-check';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 import { VaultCall, type SentVaultCall } from '@/wallet/vault-call';
 import { WalletPin } from '@/wallet/wallet-pin';
@@ -153,17 +148,17 @@ export class SmartWallet {
     }
   }
 
-  async pay(giftCard: GiftCard, timer: BuyTimer | null = null): Promise<SignedPayment> {
-    const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
-    if (!token || !giftCard.paymentCryptoAmount) {
-      throw new Error('The order has no Stellar price this wallet can pay');
+  async pay(payable: Payable, timer: BuyTimer | null = null): Promise<SignedPayment> {
+    const token = network.tokens.find((candidate) => candidate.currency === payable.paymentCryptoCurrency);
+    if (!token || !payable.paymentCryptoAmount) {
+      throw new Error('The payment has no Stellar price this wallet can pay');
     }
-    const intent: SmartWalletIntent = { intent: 'pay', paymentId: giftCard.paymentId };
+    const intent: SmartWalletIntent = { intent: 'pay', paymentId: payable.paymentId };
     const built = await ctx.buildTransaction(this.id, intent);
     timer?.mark('payment built');
     const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId]);
     timer?.mark('ledger read');
-    const transfer = this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
+    const transfer = this.requirePayment(call, token, units.parse(payable.paymentCryptoAmount));
     const signed = await this.sign(call);
     timer?.mark('signed');
     return {
@@ -177,7 +172,16 @@ export class SmartWallet {
     };
   }
 
-  paymentLanded(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
+  sentPaymentFailure(payable: Payable, sent: SentTransaction): Promise<PaymentState | null> {
+    return new SentPaymentCheck({
+      tokens: network.tokens,
+      transaction: (hash) => soroban.transaction(hash),
+      latestLedger: () => soroban.latestLedger(),
+      landed: (token, expected, expiryLedger) => this.paymentLanded(token, expected, expiryLedger),
+    }).failure(payable, sent);
+  }
+
+  private paymentLanded(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
     return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
   }
 

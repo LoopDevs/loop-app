@@ -15,6 +15,11 @@ export type CountryChoice = {
 };
 
 export class Profile {
+  static readonly fullNameHint = 'First and last name';
+  static readonly bankNameHint = 'Enter your first and last name as on your bank account';
+
+  readonly name?: string;
+  readonly accountName: string;
   readonly email?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
@@ -24,6 +29,8 @@ export class Profile {
   readonly stableCurrencies: string[];
 
   constructor(user: UserJson, company: MeJson['company']) {
+    this.name = user.name;
+    this.accountName = Profile.nameWords(user.name ?? '').join(' ');
     this.email = user.email;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
@@ -61,6 +68,19 @@ export class Profile {
       return { country: choice.country };
     }
     return null;
+  }
+
+  hasFullName(): boolean {
+    return Profile.nameUpdate(this.accountName) !== null;
+  }
+
+  static nameUpdate(input: string): UserUpdate | null {
+    const words = Profile.nameWords(input);
+    return words.length >= 2 ? { name: words.join(' ') } : null;
+  }
+
+  private static nameWords(name: string): string[] {
+    return name.split(/\s+/).filter((word) => word !== '');
   }
 
   passkeyLabel(): string {
