@@ -7,6 +7,7 @@ import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { base64 } from '@/wallet/base64';
 import { deviceSigner } from '@/wallet/device-signer';
+import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 
@@ -30,8 +31,7 @@ type ContextRule = {
 export class SmartWallet {
   static readonly passkeyRuleId = 0;
   static readonly deviceRuleId = 1;
-  static readonly vaultCurrency = 'XLM.USDC';
-  static readonly withdrawSlippageBasisPoints = 100n;
+  static readonly vaultCurrency = Holdings.savingsCurrency;
 
   private constructor(
     readonly id: string,
@@ -204,9 +204,7 @@ export class SmartWallet {
     if (amount !== shares || from !== this.address || minimums.length !== 1) {
       throw new Error('The withdrawal does not match the request');
     }
-    const value = await this.valueOf(shares);
-    const floor = (value * (10_000n - SmartWallet.withdrawSlippageBasisPoints)) / 10_000n;
-    if (minimums[0] < floor) {
+    if (minimums[0] < Holdings.floorOf(await this.valueOf(shares))) {
       throw new Error('The withdrawal minimum is too low');
     }
   }

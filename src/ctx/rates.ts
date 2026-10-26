@@ -1,0 +1,68 @@
+import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
+import { units } from '../stellar/units.ts';
+
+const pricePattern = /^(\d+)(?:\.(\d+))?$/;
+
+export class Rates {
+  static readonly source = 'https://rates.ctx.com/rates';
+  static readonly usd = 'USD';
+  static readonly one = units.parse('1');
+
+  private readonly usdPrices: ReadonlyMap<string, bigint>;
+
+  constructor(usdPrices: ReadonlyMap<string, bigint>) {
+    this.usdPrices = usdPrices;
+  }
+
+  static fromPrices(prices: Record<string, string | null>): Rates {
+    const parsed = new Map<string, bigint>();
+    for (const [currency, price] of Object.entries(prices)) {
+      const value = price === null ? null : Rates.parsePrice(price);
+      if (value !== null && value > 0n) {
+        parsed.set(currency, value);
+      }
+    }
+    return new Rates(parsed);
+  }
+
+  static async fetch(currencies: readonly PaymentCurrency[]): Promise<Rates> {
+    const priced = currencies.filter((currency) => !Rates.isUsdPegged(currency));
+    const prices = await Promise.all(priced.map((currency) => Rates.fetchUsdPrice(currency)));
+    return Rates.fromPrices(Object.fromEntries(priced.map((currency, index) => [currency, prices[index]])));
+  }
+
+  usdPrice(currency: string): bigint | null {
+    if (Rates.isUsdPegged(currency)) {
+      return Rates.one;
+    }
+    return this.usdPrices.get(currency) ?? null;
+  }
+
+  private static isUsdPegged(currency: string): boolean {
+    return currency === Rates.usd || (Object.hasOwn(stablePeg, currency) && stablePeg[currency as PaymentCurrency] === Rates.usd);
+  }
+
+  private static parsePrice(price: string): bigint | null {
+    const match = pricePattern.exec(price.trim());
+    if (!match) {
+      return null;
+    }
+    const [, whole, fraction = ''] = match;
+    return units.parse(fraction ? `${whole}.${fraction.slice(0, units.decimals)}` : whole);
+  }
+
+  private static async fetchUsdPrice(currency: PaymentCurrency): Promise<string | null> {
+    const market = stablePeg[currency] ?? currency;
+    try {
+      const response = await fetch(`${Rates.source}?source=ctx&symbol=${market}${Rates.usd}`);
+      if (!response.ok) {
+        return null;
+      }
+      const quotes: unknown = await response.json();
+      const price = Array.isArray(quotes) ? (quotes[0] as { price?: unknown } | undefined)?.price : undefined;
+      return typeof price === 'string' ? price : null;
+    } catch {
+      return null;
+    }
+  }
+}
