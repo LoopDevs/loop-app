@@ -1,11 +1,9 @@
 import 'react-native-get-random-values';
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceUnavailable } from '@/components/service-unavailable';
@@ -14,8 +12,6 @@ import { ctx } from '@/ctx/client';
 import type { BlockingServiceState } from '@/ctx/service-state';
 import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
 import { useAppSwitcherProtection } from '@/native/screen-privacy';
-
-SplashScreen.preventAutoHideAsync();
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -26,7 +22,6 @@ export default function TabLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <ToastProvider>
-        <AnimatedSplashOverlay />
         {blocked ? <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} /> : <AppTabs />}
         <OfflineBanner />
       </ToastProvider>

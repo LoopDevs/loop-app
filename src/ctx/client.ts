@@ -101,6 +101,8 @@ export type GiftCard = {
   cardFiatAmount: string;
   cardFiatCurrency: string;
   paymentId: string;
+  paymentStatus: 'unpaid' | 'paid' | 'error' | 'refunded' | 'cancelled' | 'expired';
+  paymentMethod: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
   paymentCryptoTxId?: string;
@@ -167,7 +169,7 @@ export type ServiceStatus = {
 
 type ServiceStateListener = (state: BlockingServiceState) => void;
 
-export type UserUpdate ={ country: string } | { stableCurrency: string };
+export type UserUpdate = { country: string } | { stableCurrency: string };
 
 export type SponsoredResult = {
   hash: string;

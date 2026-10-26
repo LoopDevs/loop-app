@@ -11,6 +11,7 @@ import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import {
   giftCardStatusLabel,
   historyHiddenStatuses,
+  outcomeText,
   pollIntervalMs,
   settledStatuses,
 } from '@/ctx/gift-card-status';
@@ -81,8 +82,8 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         continue;
       }
       if (isCurrent()) {
-        const { status } = current;
-        setOrder((held) => held && { ...held, status });
+        const { status, paymentStatus } = current;
+        setOrder((held) => held && { ...held, status, paymentStatus });
       }
     }
   }, []);
@@ -313,6 +314,7 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
   const card = `${money.ctx(order.cardFiatAmount, order.cardFiatCurrency)} ${order.merchantName}`;
   const price = money.payment(order.paymentCryptoAmount ?? '', order.paymentCryptoCurrency ?? '');
   const payable = canPay(order, payment);
+  const outcome = outcomeText(order);
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">{card}</ThemedText>
@@ -321,6 +323,7 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
         <ThemedText type="small">Price held until {dates.time(order.paymentUrlExpiration)}</ThemedText>
       )}
       <ThemedText type="small">{orderStatus(order, payment)}</ThemedText>
+      {outcome && <ThemedText type="small">{outcome}</ThemedText>}
       {payment.kind === 'notSent' && payment.detail !== '' && <ThemedText type="small">{payment.detail}</ThemedText>}
       {payable && <Button label={`Pay ${price}`} onPress={onPay} disabled={busy} />}
       {needsNewPrice(order, payment) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}
