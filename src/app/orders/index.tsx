@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { giftCardStatusLabel } from '@/ctx/gift-card-status';
+import { dates, money } from '@/money';
 
 export default function OrdersScreen() {
   const router = useRouter();
@@ -47,8 +48,8 @@ export default function OrdersScreen() {
             <ThemedView type="backgroundElement" style={styles.row}>
               <ThemedText type="smallBold">{item.merchantName}</ThemedText>
               <ThemedText type="small">
-                {item.cardFiatAmount} {item.cardFiatCurrency} · {giftCardStatusLabel(item.status)} ·{' '}
-                {new Date(item.created).toLocaleDateString()}
+                {money.ctx(item.cardFiatAmount, item.cardFiatCurrency)} · {giftCardStatusLabel(item.status)} ·{' '}
+                {dates.day(item.created)}
               </ThemedText>
             </ThemedView>
           </Pressable>

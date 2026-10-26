@@ -8,8 +8,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { money } from '@/money';
 import { network } from '@/stellar/network';
-import { units } from '@/stellar/units';
 import { type Balances, SmartWallet } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'email' | 'code' | 'no-wallet' | 'wallet';
@@ -146,11 +146,11 @@ export default function HomeScreen() {
               </ThemedText>
               {balances?.tokens.map(({ token, amount }) => (
                 <ThemedText key={token.currency}>
-                  {token.symbol}: {units.format(amount)}
+                  {token.symbol}: {money.token(amount, token.currency)}
                 </ThemedText>
               ))}
               {balances && (
-                <ThemedText>Savings: {units.format(balances.vaultValue)} USDC</ThemedText>
+                <ThemedText>Savings: {money.token(balances.vaultValue, 'XLM.USDC')}</ThemedText>
               )}
               <Button label="Refresh" onPress={refreshBalances} disabled={busy} />
               {network.friendbotUrl && (

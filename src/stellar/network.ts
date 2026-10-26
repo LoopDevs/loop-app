@@ -2,6 +2,13 @@ import { Networks } from '@stellar/stellar-sdk';
 
 export type PaymentCurrency = 'XLM' | 'XLM.USDC' | 'XLM.EURC' | 'XLM.GBPLOOP';
 
+export const stablePeg: Record<PaymentCurrency, 'USD' | 'EUR' | 'GBP' | null> = {
+  XLM: null,
+  'XLM.USDC': 'USD',
+  'XLM.EURC': 'EUR',
+  'XLM.GBPLOOP': 'GBP',
+};
+
 export type Token = {
   currency: PaymentCurrency;
   symbol: string;

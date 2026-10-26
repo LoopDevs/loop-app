@@ -16,6 +16,7 @@ import {
   sendFailureState,
   type PaymentState,
 } from '@/ctx/payment-state';
+import { dates, money } from '@/money';
 import { network, type PaymentCurrency } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
 import type { SmartWallet } from '@/wallet/smart-wallet';
@@ -311,15 +312,15 @@ type OrderViewProps = {
 };
 
 function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderViewProps) {
-  const card = `${order.cardFiatAmount} ${order.cardFiatCurrency} ${order.merchantName}`;
-  const price = `${order.paymentCryptoAmount} ${order.paymentCryptoCurrency}`;
+  const card = `${money.ctx(order.cardFiatAmount, order.cardFiatCurrency)} ${order.merchantName}`;
+  const price = money.payment(order.paymentCryptoAmount ?? '', order.paymentCryptoCurrency ?? '');
   const payable = canPay(order, payment);
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">{card}</ThemedText>
       <ThemedText>Price: {price}</ThemedText>
       {payable && order.paymentUrlExpiration && (
-        <ThemedText type="small">Price held until {new Date(order.paymentUrlExpiration).toLocaleTimeString()}</ThemedText>
+        <ThemedText type="small">Price held until {dates.time(order.paymentUrlExpiration)}</ThemedText>
       )}
       <ThemedText type="small">{orderStatus(order, payment)}</ThemedText>
       {payment.kind === 'notSent' && payment.detail !== '' && <ThemedText type="small">{payment.detail}</ThemedText>}
