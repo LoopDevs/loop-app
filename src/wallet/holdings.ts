@@ -11,6 +11,8 @@ export type Holding = {
   estimates?: Readonly<Record<string, string>>;
 };
 
+export type Coverage = { kind: 'wallet' } | { kind: 'savings'; fromSavings: bigint } | { kind: 'short' };
+
 export class Holdings {
   static readonly withdrawSlippageBasisPoints = 100n;
   static readonly shownUnit = units.parse('0.01');
@@ -56,9 +58,24 @@ export class Holdings {
     return Holdings.floorOf(this.balances.vaultValue);
   }
 
+  inWallet(currency: string): bigint {
+    return this.balances.tokens.find(({ token }) => token.currency === currency)?.amount ?? 0n;
+  }
+
   spendable(currency: string): bigint {
-    const inWallet = this.balances.tokens.find(({ token }) => token.currency === currency)?.amount ?? 0n;
+    const inWallet = this.inWallet(currency);
     return currency === Savings.currency ? inWallet + this.savings() : inWallet;
+  }
+
+  coverage(currency: string, price: bigint): Coverage {
+    const inWallet = this.inWallet(currency);
+    if (inWallet >= price) {
+      return { kind: 'wallet' };
+    }
+    if (currency === Savings.currency &&this.spendable(currency) >= price) {
+      return { kind: 'savings', fromSavings: price - inWallet };
+    }
+    return { kind: 'short' };
   }
 
   valueIn(amount: bigint, currency: string, stable: string): bigint | null {

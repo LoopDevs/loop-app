@@ -39,8 +39,13 @@ class Soroban {
   }
 
   async transactionStatus(hash: string): Promise<'pending' | 'success' | 'failed'> {
-    const { status } = await this.server.getTransaction(hash);
+    const { status } = await this.transaction(hash);
     return chainOutcome(status);
+  }
+
+  async transaction(hash: string): Promise<{ status: string; latestLedger: number }> {
+    const { status, latestLedger } = await this.server.getTransaction(hash);
+    return { status, latestLedger };
   }
 
   async wasmHash(contractId: string): Promise<string> {
