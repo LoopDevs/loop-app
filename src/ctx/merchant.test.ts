@@ -186,3 +186,30 @@ test('a whole-units merchant rejects cents', () => {
   assert.equal(merchant.amountProblem('25.50', 'en-US'), 'Enter a whole amount, like 25');
   assert.equal(merchant.amountProblem('25.00', 'en-US'), null);
 });
+
+test('a website label drops the scheme, www and trailing slash', () => {
+  assert.equal(new Merchant({ ...json, website: 'https://www.aerie.com/' }).websiteLabel(), 'aerie.com');
+  assert.equal(new Merchant({ ...json, website: 'aerie.com/gift' }).websiteLabel(), 'aerie.com/gift');
+  assert.equal(new Merchant(json).websiteLabel(), undefined);
+});
+
+test('where to use and delivery read the redeem location and type', () => {
+  const merchant = new Merchant({ ...json, redeemLocation: 'physical', redeemType: 'url' });
+  assert.equal(merchant.whereToUse(), 'In store');
+  assert.equal(merchant.deliveryLabel(), 'A link to redeem');
+  assert.equal(new Merchant({ ...json, redeemLocation: 'any' }).whereToUse(), 'Online and in store');
+});
+
+test('an empty redeem location or type has no label', () => {
+  const merchant = new Merchant({ ...json, redeemLocation: '', redeemType: '' });
+  assert.equal(merchant.redeemLocation, undefined);
+  assert.equal(merchant.whereToUse(), null);
+  assert.equal(merchant.deliveryLabel(), null);
+});
+
+test('amounts show the range, or each fixed value', () => {
+  assert.equal(new Merchant(json).amountsLabel('en-US'), '$5 – $500');
+  const fixed = new Merchant({ ...json, denominationType: 'fixed', denominationValues: ['10.00', '25.50'] });
+  assert.equal(fixed.amountsLabel('en-US'), '$10, $25.50');
+  assert.equal(new Merchant({ ...json, denominationType: 'fixed', denominationValues: [] }).amountsLabel(), null);
+});

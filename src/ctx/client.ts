@@ -63,6 +63,10 @@ export type MerchantLinkJson = {
   userDiscountBasisPoints?: number;
 };
 
+export type MerchantRedeemLocation = 'any' | 'physical' | 'online';
+
+export type MerchantRedeemType = 'barcode' | 'url';
+
 export type MerchantJson = {
   id: string;
   slug: string;
@@ -75,6 +79,8 @@ export type MerchantJson = {
   cardImageUrl?: string;
   website?: string;
   categories?: string[];
+  redeemLocation?: MerchantRedeemLocation | '';
+  redeemType?: MerchantRedeemType | '';
   info?: GiftCardInfo;
   userDiscount: number;
   link?: MerchantLinkJson;
@@ -125,7 +131,7 @@ export type GiftCard = {
   pin?: string;
   redeemUrl?: string;
   redeemUrlChallenge?: string;
-  redeemType?: 'barcode' | 'url';
+  redeemType?: MerchantRedeemType;
   barcodeUrl?: string;
   barcodeType?: string;
   info?: GiftCardInfo;

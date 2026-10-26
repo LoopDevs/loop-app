@@ -1,7 +1,14 @@
 import { money } from '../money.ts';
 import { units } from '../stellar/units.ts';
 import { invalidAmountMessage, normalizeAmount } from './amount-input.ts';
-import type { GiftCard, GiftCardInfo, MerchantJson, MerchantLinkJson } from './client.ts';
+import type {
+  GiftCard,
+  GiftCardInfo,
+  MerchantJson,
+  MerchantLinkJson,
+  MerchantRedeemLocation,
+  MerchantRedeemType,
+} from './client.ts';
 
 const basisPointsPerWhole = 10_000n;
 const hueCount = 360;
@@ -9,6 +16,15 @@ const hueCount = 360;
 export class Merchant {
   static readonly quickAmountChoices = ['10', '25', '50', '100', '200', '500'];
   static readonly quickAmountCount = 4;
+  static readonly redeemLocationLabels: Record<MerchantRedeemLocation, string> = {
+    any: 'Online and in store',
+    online: 'Online',
+    physical: 'In store',
+  };
+  static readonly redeemTypeLabels: Record<MerchantRedeemType, string> = {
+    barcode: 'A code and barcode',
+    url: 'A link to redeem',
+  };
 
   readonly id: string;
   readonly slug: string;
@@ -21,6 +37,8 @@ export class Merchant {
   readonly cardImageUrl?: string;
   readonly website?: string;
   readonly categories: string[];
+  readonly redeemLocation?: MerchantRedeemLocation;
+  readonly redeemType?: MerchantRedeemType;
   readonly info?: GiftCardInfo;
   readonly userDiscount: number;
   readonly link?: MerchantLinkJson;
@@ -37,6 +55,8 @@ export class Merchant {
     this.cardImageUrl = json.cardImageUrl;
     this.website = json.website;
     this.categories = json.categories ?? [];
+    this.redeemLocation = json.redeemLocation || undefined;
+    this.redeemType = json.redeemType || undefined;
     this.info = json.info;
     this.userDiscount = json.userDiscount;
     this.link = json.link;
@@ -114,7 +134,33 @@ export class Merchant {
     return category.charAt(0).toUpperCase() + category.slice(1);
   }
 
-  websiteUrl():`${string}:${string}` | undefined {
+  websiteLabel(): string | undefined {
+    return this.website
+      ?.trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .replace(/\/+$/, '');
+  }
+
+  whereToUse(): string | null {
+    return this.redeemLocation ? (Merchant.redeemLocationLabels[this.redeemLocation] ?? null) : null;
+  }
+
+  deliveryLabel(): string | null {
+    return this.redeemType ? (Merchant.redeemTypeLabels[this.redeemType] ?? null) : null;
+  }
+
+  amountsLabel(locale?: string): string | null {
+    if (this.denominationType !== 'fixed') {
+      return this.rangeLabel(locale);
+    }
+    if (this.denominationValues.length === 0) {
+      return null;
+    }
+    return this.denominationValues.map((amount) => this.shortAmount(amount, locale)).join(', ');
+  }
+
+  websiteUrl(): `${string}:${string}` | undefined {
     if (!this.website) {
       return undefined;
     }
