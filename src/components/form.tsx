@@ -4,6 +4,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { haptics } from '@/native/haptics';
 
 export function Field(props: React.ComponentProps<typeof TextInput>) {
   const theme = useTheme();
@@ -27,8 +28,12 @@ type ButtonProps = {
 
 export function Button({ label, onPress, disabled = false, selected = false }: ButtonProps) {
   const theme = useTheme();
+  const press = () => {
+    haptics.tap();
+    onPress();
+  };
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={{ opacity: disabled ? 0.4 : 1 }}>
+    <Pressable onPress={press} disabled={disabled} style={{ opacity: disabled ? 0.4 : 1 }}>
       <ThemedView
         type="backgroundElement"
         style={[styles.button, selected && { borderColor: theme.text }]}>

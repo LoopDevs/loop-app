@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
+import { useToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { ctx, CtxError, type GiftCard, type Merchant } from '@/ctx/client';
@@ -21,6 +22,7 @@ import {
   type PaymentState,
 } from '@/ctx/payment-state';
 import { dates, money } from '@/money';
+import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
 import type { SmartWallet } from '@/wallet/smart-wallet';
@@ -42,6 +44,7 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   const [currency, setCurrency] = useState<PaymentCurrency>(network.tokens[0].currency);
   const [order, setOrder] = useState<GiftCard | null>(null);
   const [payment, setPayment] = useState<PaymentState>({ kind: 'ready' });
+  const toast = useToast();
 
   const findMerchants = useCallback(
     () =>
@@ -203,8 +206,12 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
         const next = await sendPayment(order);
         setPayment(next);
         if (next.kind === 'confirming') {
+          haptics.success();
+          toast('Payment sent');
           onPaid();
           void followOrder(order, next.txId);
+        } else {
+          haptics.error();
         }
       });
     } finally {
