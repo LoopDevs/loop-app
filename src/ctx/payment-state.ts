@@ -20,6 +20,8 @@ type PayRejection = {
 
 const paymentClosedMessage = 'payment is no longer open';
 
+export const rateLimitedMessage = 'Too many requests. Wait a few minutes and try again.';
+
 export function resumedPaymentState(giftCard: GiftCardPayment): PaymentState {
   if (giftCard.status === 'unpaid' && giftCard.paymentCryptoTxId) {
     return { kind: 'confirming', txId: giftCard.paymentCryptoTxId };
@@ -30,6 +32,9 @@ export function resumedPaymentState(giftCard: GiftCardPayment): PaymentState {
 export function rejectedPaymentState(rejection: PayRejection): PaymentState | null {
   if (rejection.status === 409 && rejection.errorName === 'ErrPaymentAlreadySubmitted') {
     return { kind: 'confirming', txId: rejection.txId };
+  }
+  if (rejection.status === 429) {
+    return { kind: 'notSent', detail: rateLimitedMessage };
   }
   if (rejection.status !== 400) {
     return null;
