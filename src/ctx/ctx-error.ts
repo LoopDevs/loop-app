@@ -19,11 +19,17 @@ export class CtxError extends Error {
     return CtxError.field(this.body, name);
   }
 
+  static readonly savingsUnavailableMessage = "Savings isn't available right now.";
+
   private static displayMessage(status: number, body: string): string {
     if (status === 429) {
       return rateLimitedMessage;
     }
-    const state = serviceState(CtxError.field(body, 'error'));
+    const name = CtxError.field(body, 'error');
+    if (name === 'ErrSavingsUnavailable') {
+      return CtxError.savingsUnavailableMessage;
+    }
+    const state = serviceState(name);
     return state ? serviceStateMessages[state] : `CTX ${status}: ${body}`;
   }
 

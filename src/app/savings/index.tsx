@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -19,12 +19,13 @@ import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
 import { Layout, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
-import { useBusyAction } from '@/hooks/use-busy-action';
+import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
-import { Savings } from '@/wallet/savings';
+import { units } from '@/stellar/units';
+import { Savings, type DepositInput } from '@/wallet/savings';
 import { UnlinkedDevice } from '@/wallet/smart-wallet';
 
 const quickAmounts = ['25', '50', '100'];
@@ -39,19 +40,23 @@ export default function SavingsScreen() {
   const { busy, message, setMessage, run } = useBusyAction();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [adding, setAdding] = useState(false);
+  const depositing = useRef(false);
   const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
+  const walletUsdc = view?.holdings.inWallet(Savings.currency) ?? 0n;
+
+  const reloadIfUnlinked = (error: unknown): never => {
+    if (error instanceof UnlinkedDevice) {
+      reload();
+    }
+    throw error;
+  };
 
   const withdraw = () =>
     run(async () => {
       if (!wallet || vaultShares === 0n) {
         return;
       }
-      const result = await wallet.withdraw(vaultShares).catch((error: unknown) => {
-        if (error instanceof UnlinkedDevice) {
-          reload();
-        }
-        throw error;
-      });
+      const result = await wallet.withdraw(vaultShares).catch(reloadIfUnlinked);
       if (result.error) {
         setMessage(result.error);
       } else {
@@ -59,6 +64,36 @@ export default function SavingsScreen() {
       }
       await refresh();
     });
+
+  const deposit = (amount: bigint, input: DepositInput) => {
+    if (depositing.current) {
+      return;
+    }
+    depositing.current = true;
+    return run(async () => {
+      if (!wallet) {
+        return;
+      }
+      const { sent, outcome } = await Savings.sendDeposit(
+        () => wallet.deposit(amount).catch(reloadIfUnlinked),
+        wallet.vaultCall(),
+        input,
+      );
+      const refreshError = await refresh().then(
+        () => '',
+        (error: unknown) => errorMessage(error),
+      );
+      const text = Savings.depositMessage(outcome, amount, sent.hash);
+      if (outcome === 'success' && !refreshError) {
+        toast(text);
+        setAdding(false);
+        return;
+      }
+      setMessage(refreshError ? `${text}\n${refreshError}` : text);
+    }).finally(() => {
+      depositing.current = false;
+    });
+  };
 
   const confirmWithdraw = () => {
     const prompt = 'Move your savings back to your balance?';
@@ -114,7 +149,15 @@ export default function SavingsScreen() {
             </View>
           </View>
 
-          {adding && <AddToSavings onClose={() => setAdding(false)} />}
+          {adding && (
+            <AddToSavings
+              walletUsdc={walletUsdc}
+              busy={busy}
+              ready={state === 'ready'}
+              onDeposit={deposit}
+              onClose={() => setAdding(false)}
+            />
+          )}
 
           {state === 'setup' && (
             <Notice
@@ -201,10 +244,30 @@ function SavingsFacts() {
   );
 }
 
-function AddToSavings({ onClose }: { onClose: () => void }) {
+type AddToSavingsProps = {
+  walletUsdc: bigint;
+  busy: boolean;
+  ready: boolean;
+  onDeposit: (amount: bigint, input: DepositInput) => void;
+  onClose: () => void;
+};
+
+function AddToSavings({ walletUsdc, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
   const theme = useTheme();
   const [input, setInput] = useState('');
   const amount = normalizeAmount(input);
+  const depositAmount = Savings.depositAmount(input, walletUsdc);
+  const allOfIt = units.format(walletUsdc, units.decimals);
+  const deposit = () => {
+    if (depositAmount === null) {
+      return;
+    }
+    const sentInput = input;
+    onDeposit(depositAmount, {
+      clear: () => setInput(''),
+      restore: () => setInput(sentInput),
+    });
+  };
   return (
     <Animated.View
       entering={FadeInDown.duration(Motion.state)}
@@ -225,11 +288,26 @@ function AddToSavings({ onClose }: { onClose: () => void }) {
             <Button label={money.fiat(quick, 'USD')} selected={amount === quick} onPress={() => setInput(quick)} />
           </View>
         ))}
+        <View style={styles.chip}>
+          <Button
+            label="Max"
+            selected={input !== '' && input === allOfIt}
+            onPress={() => setInput(allOfIt)}
+            disabled={walletUsdc === 0n}
+          />
+        </View>
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        Adding money to savings yourself is coming soon. Your cashback already goes into savings.
+        {ready
+          ? `You have ${money.token(walletUsdc, Savings.currency)} in your balance to add.`
+          : 'Finish setting up Loop on Home to start saving.'}
       </ThemedText>
-      <Button label="Coming soon" variant="primary" onPress={onClose} disabled />
+      <Button
+        label={busy ? 'Adding…' : 'Add to savings'}
+        variant="primary"
+        onPress={deposit}
+        disabled={busy || !ready || depositAmount === null}
+      />
       <Button label="Close" variant="quiet" onPress={onClose} />
     </Animated.View>
   );
