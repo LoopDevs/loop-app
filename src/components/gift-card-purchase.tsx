@@ -9,6 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal';
+import { InFlightPayments } from '@/ctx/in-flight-payments';
 import {
   giftCardStatusLabel,
   historyHiddenStatuses,
@@ -32,8 +33,10 @@ import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
+import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
-import type { Holdings } from '@/wallet/holdings';
+import type { Coverage, Holdings } from '@/wallet/holdings';
+import { SavingsTopUp, type PendingWithdrawal, type TopUpOutcome } from '@/wallet/savings-top-up';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
 type Props = {
@@ -42,6 +45,8 @@ type Props = {
 };
 
 const sentPayments = new Map<string, string>();
+const pendingTopUps = new Map<string, PendingWithdrawal>();
+const inFlightPayments = new InFlightPayments();
 
 export function GiftCardPurchase({ merchant, wallet }: Props) {
   const router = useRouter();
@@ -75,7 +80,9 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     refresh().catch((error: unknown) => setMessage(errorMessage(error)));
   }, [refresh, setMessage]);
 
-  usePreventRemove(payment.kind === 'sending', () => toast('Wait until the payment is sent'));
+  usePreventRemove(payment.kind === 'sending' || payment.kind === 'movingSavings', () =>
+    toast('Wait until the payment is sent'),
+  );
 
   const stopFollowing = () => {
     following.current += 1;
@@ -108,7 +115,16 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const resumeOrder = useCallback(
     () =>
       run(async () => {
-        const giftCard = await ctx.activeGiftCard(merchant.id);
+        let giftCard = await ctx.activeGiftCard(merchant.id);
+        while (giftCard && inFlightPayments.has(giftCard.paymentId)) {
+          setOrder(giftCard);
+          setPayment({ kind: 'sending' });
+          await inFlightPayments.settled(giftCard.paymentId);
+          if (!mounted.current) {
+            return;
+          }
+          giftCard = (await ctx.activeGiftCard(merchant.id)) ?? giftCard;
+        }
         if (!giftCard) {
           return;
         }
@@ -222,17 +238,67 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     }
   };
 
+  const topUpFromSavings = async (giftCard: GiftCard, price: bigint): Promise<boolean> => {
+    setPayment({ kind: 'movingSavings' });
+    let outcome: TopUpOutcome;
+    try {
+      outcome = await wallet
+        .savingsTopUp()
+        .run(price, PriceWindow.of(giftCard), pendingTopUps.get(wallet.address));
+    } catch (error) {
+      setPayment({ kind: 'ready' });
+      throw error;
+    } finally {
+      refresh().catch((error: unknown) => setMessage(errorMessage(error)));
+    }
+    if (outcome.kind === 'stillMoving') {
+      pendingTopUps.set(wallet.address, outcome.withdrawal);
+    } else {
+      pendingTopUps.delete(wallet.address);
+    }
+    if (outcome.kind === 'covered') {
+      return true;
+    }
+    const text = SavingsTopUp.message(outcome, tokenSymbol(SavingsTopUp.currency));
+    if (outcome.kind === 'priceClosing' || outcome.kind === 'priceExpired') {
+      setPayment({ kind: 'priceExpired' });
+      setMessage(text);
+    } else {
+      setPayment({ kind: 'notSent', detail: text });
+    }
+    return false;
+  };
+
   const pay = async () => {
-    if (paying.current || !order || !canPay(order, payment)) {
+    if (paying.current || !order || !canPay(order, payment) || inFlightPayments.has(order.paymentId)) {
       return;
     }
+    const coverage = orderCoverage(order, view?.holdings ?? null);
+    const toppingUp = coverage?.kind === 'savings' || hasPendingTopUp(order, wallet);
+    if (coverage?.kind === 'short' && !toppingUp) {
+      return;
+    }
+    const topUpPrice = toppingUp ? orderPrice(order) : null;
     paying.current = true;
     try {
       await run(async () => {
-        setPayment({ kind: 'sending' });
-        const next = await holdCriticalReload(() => sendPayment(order));
-        if (next.kind === 'confirming' && next.txId) {
-          sentPayments.set(order.paymentId, next.txId);
+        const task = inFlightPayments.start(order.paymentId, () =>
+          holdCriticalReload(async () => {
+            if (topUpPrice !== null && !(await topUpFromSavings(order, topUpPrice))) {
+              return null;
+            }
+            setPayment({ kind: 'sending' });
+            const sent = await sendPayment(order);
+            if (sent.kind === 'confirming' && sent.txId) {
+              sentPayments.set(order.paymentId, sent.txId);
+            }
+            return sent;
+          }),
+        );
+        const next = task && (await task);
+        if (!next) {
+          haptics.error();
+          return;
         }
         setPayment(next);
         if (next.kind === 'confirming') {
@@ -276,6 +342,8 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       <View style={styles.section}>
         <OrderView
           order={order}
+          coverage={orderCoverage(order, view?.holdings ?? null)}
+          topUpPending={hasPendingTopUp(order, wallet)}
           payment={payment}
           busy={busy}
           onPay={pay}
@@ -335,7 +403,7 @@ function firstAmount(merchant: Merchant): string {
   return merchant.denominationType === 'fixed' ? (merchant.denominations[0] ?? '') : '';
 }
 
-function tokenSymbol(currency: PaymentCurrency): string {
+function tokenSymbol(currency: string): string {
   return network.tokens.find((token) => token.currency === currency)?.symbol ?? currency;
 }
 
@@ -343,8 +411,40 @@ function tokenLabel(token: Token, holdings: Holdings | null): string {
   return holdings ? `${token.symbol} ${money.token(holdings.spendable(token.currency), token.currency)}` : token.symbol;
 }
 
+function orderPrice(order: GiftCard): bigint | null {
+  if (!order.paymentCryptoAmount) {
+    return null;
+  }
+  try {
+    return units.parse(order.paymentCryptoAmount);
+  } catch {
+    return null;
+  }
+}
+
+function orderCoverage(order: GiftCard, holdings: Holdings | null): Coverage | null {
+  const price = orderPrice(order);
+  if (!holdings || price === null || !order.paymentCryptoCurrency) {
+    return null;
+  }
+  return holdings.coverage(order.paymentCryptoCurrency, price);
+}
+
+function hasPendingTopUp(order: GiftCard, wallet: SmartWallet): boolean {
+  return order.paymentCryptoCurrency === SavingsTopUp.currency && pendingTopUps.has(wallet.address);
+}
+
+function payLabel(price: string, coverage: Coverage | null): string {
+  if (coverage?.kind !== 'savings') {
+    return `Pay ${price}`;
+  }
+  return `Pay ${price} (uses ${money.token(coverage.fromSavings, SavingsTopUp.currency)} from savings)`;
+}
+
 type OrderViewProps = {
   order: GiftCard;
+  coverage: Coverage | null;
+  topUpPending: boolean;
   payment: PaymentState;
   busy: boolean;
   onPay: () => void;
@@ -352,7 +452,7 @@ type OrderViewProps = {
   onDone: () => void;
 };
 
-function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderViewProps) {
+function OrderView({ order, coverage, topUpPending, payment, busy, onPay, onNewPrice, onDone }: OrderViewProps) {
   const card = `${money.ctx(order.cardFiatAmount, order.cardFiatCurrency)} ${order.merchantName}`;
   const price = money.payment(order.paymentCryptoAmount ?? '', order.paymentCryptoCurrency ?? '');
   const priceWindow = PriceWindow.of(order);
@@ -360,6 +460,8 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
   const shown: PaymentState =
     priceWindow && priceWindow.isClosed(now) && canPay(order, payment) ? { kind: 'priceExpired' } : payment;
   const payable = canPay(order, shown);
+  const short = payable && coverage?.kind === 'short' && !topUpPending;
+  const symbol = tokenSymbol(order.paymentCryptoCurrency ?? '');
   const outcome = outcomeText(order);
   return (
     <View style={styles.section}>
@@ -369,7 +471,8 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
       <ThemedText type="small">{orderStatus(order, shown)}</ThemedText>
       {outcome && <ThemedText type="small">{outcome}</ThemedText>}
       {shown.kind === 'notSent' && shown.detail !== '' && <ThemedText type="small">{shown.detail}</ThemedText>}
-      {payable && <Button label={`Pay ${price}`} onPress={onPay} disabled={busy} />}
+      {short && <ThemedText type="small">{SavingsTopUp.notEnough(symbol)}</ThemedText>}
+      {payable && <Button label={payLabel(price, coverage)} onPress={onPay} disabled={busy || short} />}
       {needsNewPrice(order, shown) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}
       <Button label={payable ? 'Cancel' : 'Done'} onPress={onDone} disabled={busy} />
     </View>
@@ -396,6 +499,8 @@ function orderStatus(order: GiftCard, payment: PaymentState): string {
     return giftCardStatusLabel(order.status);
   }
   switch (payment.kind) {
+    case 'movingSavings':
+      return 'Moving from savings';
     case 'sending':
       return 'Sending payment';
     case 'confirming':
