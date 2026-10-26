@@ -1,4 +1,4 @@
-import { ScrollViewStyleReset } from 'expo-router/html';
+import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
 import type { PropsWithChildren } from 'react';
 
 import { PageLayout } from '@/hooks/page-layout';
@@ -10,8 +10,9 @@ const firstPaintCss = [
 ].join('');
 
 export default function Root({ children }: PropsWithChildren) {
+  const { htmlAttributes, bodyAttributes, headNodes, bodyNodes } = useServerDocumentContext();
   return (
-    <html lang="en">
+    <html lang="en" {...htmlAttributes}>
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
@@ -21,8 +22,12 @@ export default function Root({ children }: PropsWithChildren) {
         <script dangerouslySetInnerHTML={{ __html: PageLayout.pendingScript() }} />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: firstPaintCss }} />
+        {headNodes}
       </head>
-      <body>{children}</body>
+      <body {...bodyAttributes}>
+        {children}
+        {bodyNodes}
+      </body>
     </html>
   );
 }
