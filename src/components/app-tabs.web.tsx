@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import {
   Tabs,
   TabList,
@@ -7,7 +7,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CountryMenu } from '@/components/country-menu';
@@ -21,6 +21,10 @@ import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   const { wide } = usePageLayout();
+  const pathname = usePathname();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
   return (
     <Tabs style={styles.shell}>
       {wide ? null : <TabSlot style={styles.slot} />}

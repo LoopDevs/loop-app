@@ -1,5 +1,5 @@
 import * as Linking from "expo-linking";
-import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useRef, useState } from "react";
@@ -18,7 +18,7 @@ import Animated, {
 
 import { Button, Notice } from "@/components/form";
 import { statusTone } from "@/components/gift-card-details";
-import { useScrimScroll } from "@/components/home-panel";
+import { useScrimScroll, useScrollToTopOnFocus } from "@/components/home-panel";
 import { PageHeader } from "@/components/page-header";
 import { PressScale } from "@/components/press-scale";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
@@ -60,7 +60,7 @@ export default function WalletScreen() {
   const { scrollRef, onScroll, scrim } =
     useScrimScroll<FlatList<GiftCard>>();
   const wideScrollRef = useRef<ScrollViewInstance>(null);
-  useScrollToTop(wideScrollRef);
+  useScrollToTopOnFocus(wideScrollRef);
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
