@@ -1,4 +1,4 @@
-import { support } from '../constants/support.ts';
+import { loopLinks } from '../constants/loop-links.ts';
 import { dates } from '../money.ts';
 import type { GiftCard } from './client.ts';
 
@@ -23,6 +23,6 @@ export const orderHelp = {
   mailto(giftCard: GiftCard): string {
     const subject = encodeURIComponent(orderHelp.subject(giftCard));
     const body = encodeURIComponent(orderHelp.body(giftCard));
-    return `mailto:${support.email}?subject=${subject}&body=${body}`;
+    return `mailto:${loopLinks.supportEmail}?subject=${subject}&body=${body}`;
   },
 };

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { loopLinks } from '../constants/loop-links.ts';
 import type { GiftCard } from './client.ts';
 import { orderHelp } from './order-help.ts';
 
@@ -24,7 +25,7 @@ const fulfilled: GiftCard = {
 
 test('the mail draft is addressed to support with the order id as subject', () => {
   const draft = orderHelp.mailto(fulfilled);
-  assert.ok(draft.startsWith('mailto:support@loopfinance.io?'));
+  assert.ok(draft.startsWith(`mailto:${loopLinks.supportEmail}?`));
   const params = new URLSearchParams(draft.slice(draft.indexOf('?') + 1));
   assert.equal(params.get('subject'), 'Loop order g1');
 });
