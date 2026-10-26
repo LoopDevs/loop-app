@@ -9,6 +9,7 @@ import {
   type SmartWalletIntent,
   type SponsoredResult,
 } from '@/ctx/client';
+import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
 import { network, type Token } from '@/stellar/network';
@@ -151,20 +152,27 @@ export class SmartWallet {
     }
   }
 
-  async pay(giftCard: GiftCard): Promise<SignedPayment> {
+  async pay(giftCard: GiftCard, timer: BuyTimer | null = null): Promise<SignedPayment> {
     const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
     if (!token || !giftCard.paymentCryptoAmount) {
       throw new Error('The order has no Stellar price this wallet can pay');
     }
     const intent: SmartWalletIntent = { intent: 'pay', paymentId: giftCard.paymentId };
     const built = await ctx.buildTransaction(this.id, intent);
+    timer?.mark('payment built');
     const call = await this.verifiedCall(built);
+    timer?.mark('ledger read');
     const transfer = this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
     const signed = await this.sign(call);
+    timer?.mark('signed');
     return {
       expiryLedger: built.expiryLedger,
       transfer,
-      sponsor: () => ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed }),
+      sponsor: async () => {
+        const result = await ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed });
+        timer?.mark('submitted');
+        return result;
+      },
     };
   }
 

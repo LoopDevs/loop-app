@@ -66,7 +66,6 @@ export default function HomeScreen() {
   const [giftCardsRefreshKey, setGiftCardsRefreshKey] = useState(0);
   const [search, setSearch] = useState('');
   const walletLoadStarted = useRef(false);
-  const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -80,18 +79,11 @@ export default function HomeScreen() {
     setScreen(loaded ? 'wallet' : 'no-wallet');
   }, []);
 
-  const openActiveOrder = useCallback(async () => {
-    const activeOrder = await ctx.activeGiftCard().catch(() => null);
-    if (activeOrder && homeFocused.current) {
-      router.push(`/shop/${activeOrder.merchantId}`, { withAnchor: true });
-    }
-  }, [router]);
-
   const loadWallet = useCallback(async () => {
     walletLoadStarted.current = true;
     try {
       const loaded = await SmartWallet.load();
-      await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
+      showWallet(loaded);
     } catch (error) {
       if (error instanceof UnlinkedDevice) {
         setUnlinkedWallet(error.wallet);
@@ -101,7 +93,7 @@ export default function HomeScreen() {
       walletLoadStarted.current = false;
       throw error;
     }
-  }, [showWallet, openActiveOrder]);
+  }, [showWallet]);
 
   const loadProfileCountry = useCallback(async () => {
     const profile = await ctx.me().catch(() => null);
@@ -129,11 +121,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      homeFocused.current = true;
       readSession();
-      return () => {
-        homeFocused.current = false;
-      };
     }, [readSession]),
   );
   useOnSignIn(readSession);
