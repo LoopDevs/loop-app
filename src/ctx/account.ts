@@ -42,7 +42,7 @@ export class Account {
         (payout): OnTheWayItem => ({
           key: `payout:${payout.id}`,
           currency: payout.currency,
-          amount: payout.amount,
+          amount: payout.netAmount(),
           label: payout.statusLabel(),
           destination: payout.destinationLabel(),
           heldBySavings: false,

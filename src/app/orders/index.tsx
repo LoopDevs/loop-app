@@ -8,8 +8,14 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
-import { giftCardStatusLabel, historyHiddenStatuses, outcomeText } from '@/ctx/gift-card-status';
+import {
+  giftCardStatusLabel,
+  isHiddenFromHistory,
+  outcomeText,
+  unpaidStatuses,
+} from '@/ctx/gift-card-status';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { dates, money } from '@/money';
 
 const ordersPerPage = 20;
@@ -21,35 +27,54 @@ export default function OrdersScreen() {
   const [pages, setPages] = useState(0);
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<{ message: string; page: number } | null>(null);
+  const [signedIn, setSignedIn] = useState(true);
   const loadedPages = useRef(0);
+  const readSession = useSessionOwner();
 
-  const load = useCallback(async (next: number) => {
-    setLoading(true);
-    setFailure(null);
-    try {
-      const { result, pagination } = await ctx.giftCards({
-        notStatus: historyHiddenStatuses,
-        perPage: ordersPerPage,
-        page: next,
-      });
-      setGiftCards((shown) => (next === 1 ? result : [...shown, ...result]));
-      setPage(next);
-      setPages(pagination.pages);
-      loadedPages.current = next;
-    } catch (error) {
-      setFailure({ message: error instanceof Error ? error.message : String(error), page: next });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (requested: number, keepPaged = false) => {
+      setLoading(true);
+      setFailure(null);
+      try {
+        const { userId, changed } = await readSession();
+        if (changed || !userId) {
+          setGiftCards([]);
+          setPage(0);
+          setPages(0);
+          loadedPages.current = 0;
+        }
+        setSignedIn(userId !== null);
+        if (!userId) {
+          return;
+        }
+        if (keepPaged && !changed && loadedPages.current > 1) {
+          return;
+        }
+        const next = changed ? 1 : requested;
+        const { result, pagination } = await ctx.giftCards({
+          notStatus: unpaidStatuses,
+          perPage: ordersPerPage,
+          page: next,
+        });
+        const shownResult = result.filter((giftCard) => !isHiddenFromHistory(giftCard));
+        setGiftCards((shown) => (next === 1 ? shownResult : [...shown, ...shownResult]));
+        setPage(next);
+        setPages(pagination.pages);
+        loadedPages.current = next;
+      } catch (error) {
+        setFailure({ message: error instanceof Error ? error.message : String(error), page: requested });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [readSession],
+  );
 
   const reload = useCallback(() => load(1), [load]);
 
   const reloadUnlessPaged = useCallback(() => {
-    if (loadedPages.current <= 1) {
-      reload();
-    }
-  }, [reload]);
+    load(1, true);
+  }, [load]);
 
   useFocusEffect(reloadUnlessPaged);
   useAppRefresh(reloadUnlessPaged);
@@ -64,7 +89,12 @@ export default function OrdersScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading && page <= 1} onRefresh={reload} />}
         ListEmptyComponent={
-          failure ? undefined : loading ? (
+          failure ? undefined : !signedIn ? (
+            <>
+              <ThemedText type="small">Sign in to see your orders.</ThemedText>
+              <Button label="Sign in" onPress={() => router.navigate('/')} />
+            </>
+          ) : loading ? (
             <OrderRowsSkeleton />
           ) : (
             <>
