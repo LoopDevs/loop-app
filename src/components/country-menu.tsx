@@ -1,12 +1,12 @@
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { type ComponentRef, useRef, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { Brand, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Market } from '@/ctx/market';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -16,10 +16,24 @@ import { haptics } from '@/native/haptics';
 export function CountryMenu() {
   const { country, choose } = useMarket();
   const [open, setOpen] = useState(false);
-  const { wide, gutter } = usePageLayout();
+  const [anchor, setAnchor] = useState({ top: 0, right: 0 });
+  const triggerRef = useRef<ComponentRef<typeof View>>(null);
+  const { wide } = usePageLayout();
+  const { width: windowWidth } = useWindowDimensions();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
+
+  const show = () => {
+    if (!wide || !triggerRef.current) {
+      setOpen(true);
+      return;
+    }
+    triggerRef.current.measureInWindow((x, y, width, height) => {
+      setAnchor({ top: y + height + Spacing.two, right: windowWidth - (x + width) });
+      setOpen(true);
+    });
+  };
 
   const pick = (picked: string) => {
     haptics.tap();
@@ -29,16 +43,18 @@ export function CountryMenu() {
 
   return (
     <>
-      <PressScale
-        onPress={() => setOpen(true)}
-        accessibilityRole="button"
-        accessibilityLabel={`Shopping in ${Market.countryName(country)}. Change country`}
-        style={styles.trigger}>
-        <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={Brand.onRoyal} />
-        <Text style={styles.triggerText} maxFontSizeMultiplier={1.3}>
-          {country}
-        </Text>
-      </PressScale>
+      <View ref={triggerRef} collapsable={false}>
+        <PressScale
+          onPress={show}
+          accessibilityRole="button"
+          accessibilityLabel={`Shopping in ${Market.countryName(country)}. Change country`}
+          style={styles.trigger}>
+          <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={Brand.onRoyal} />
+          <Text style={styles.triggerText} maxFontSizeMultiplier={1.3}>
+            {country}
+          </Text>
+        </PressScale>
+      </View>
       <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
         <Pressable
           style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}
@@ -51,7 +67,7 @@ export function CountryMenu() {
               styles.menu,
               { backgroundColor: theme.backgroundElement, borderColor: theme.border },
               wide
-                ? { marginTop: Layout.headerHeight - Spacing.two, marginRight: gutter, width: 320 }
+                ? { position: 'absolute', top: anchor.top, right: anchor.right, width: 320 }
                 : { paddingBottom: insets.bottom + Spacing.two },
             ]}>
             <Pressable accessible={false}>
@@ -114,9 +130,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(10, 22, 64, 0.32)',
   },
-  backdropWide: {
-    alignItems: 'flex-end',
-  },
+  backdropWide: {},
   backdropNarrow: {
     justifyContent: 'flex-end',
   },

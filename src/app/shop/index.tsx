@@ -273,6 +273,7 @@ export default function ShopScreen() {
           <View>
             <PageHeader
               title="Shop"
+              width={wide ? 'page' : 'content'}
               accessory={
                 profile.country ? (
                   <CountryButton
@@ -359,6 +360,7 @@ export default function ShopScreen() {
 
 function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpen: (merchant: Merchant) => void }) {
   const { country } = useMarket();
+  const { wide } = usePageLayout();
   const catalog = useCatalog(country);
   const [search, setSearch] = useState(initialSearch);
   const { onScroll, scrim, backdrop } = useScrimScroll();
@@ -371,7 +373,7 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
         scrollEventThrottle={16}
         contentContainerStyle={styles.simpleContent}
         keyboardShouldPersistTaps="handled">
-        <PageHeader title="Shop" accessory={<CountryMenu />} />
+        <PageHeader title="Shop" width="page" accessory={wide ? null : <CountryMenu />} />
         <PageWidth style={styles.storeBody}>
           {search.trim() === '' && <TopCashback catalog={catalog} onOpen={onOpen} />}
           <MerchantCatalog

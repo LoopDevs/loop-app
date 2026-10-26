@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Brand, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Brand, FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
+import { usePageLayout } from '@/hooks/use-page-layout';
 
 type PageHeaderProps = {
   title: string;
@@ -10,14 +11,24 @@ type PageHeaderProps = {
   accessory?: ReactNode;
   children?: ReactNode;
   belowNavigationHeader?: boolean;
+  width?: 'content' | 'page';
 };
 
-export function PageHeader({ title, detail, accessory, children, belowNavigationHeader = false }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  detail,
+  accessory,
+  children,
+  belowNavigationHeader = false,
+  width = 'content',
+}: PageHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { gutter } = usePageLayout();
   const topInset = belowNavigationHeader ? 0 : insets.top;
+  const pageWidth = width === 'page' ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
   return (
     <View style={[styles.panel, { paddingTop: topInset + Spacing.three }]}>
-      <View style={styles.inner}>
+      <View style={[styles.inner, pageWidth]}>
         <View style={styles.titleRow}>
           <View style={styles.titleBlock}>
             <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
