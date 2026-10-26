@@ -1,4 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useCallback, useRef, useState } from 'react';
 import {
   Pressable,
@@ -9,11 +10,13 @@ import {
   View,
 } from 'react-native';
 
-import { Button } from '@/components/form';
+import { Notice } from '@/components/form';
+import { ListGroup, ListRow } from '@/components/list-row';
+import { PageHeader } from '@/components/page-header';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import type { Account, OnTheWayItem } from '@/ctx/account';
 import { ctx, type CashbackDestination } from '@/ctx/client';
 import { Profile } from '@/ctx/profile';
@@ -21,6 +24,7 @@ import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useProfile } from '@/hooks/use-profile';
 import { useSessionOwner } from '@/hooks/use-session-owner';
+import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { Savings } from '@/wallet/savings';
 
@@ -34,8 +38,11 @@ const destinationCopy: Record<CashbackDestination, { label: string; detail: stri
 
 const savingsNote = `Loop savings holds ${Profile.currencyLabel(Savings.currency)}. Cashback in another currency stays with Loop; switch to Account to have it paid to your wallet.`;
 
+const destinationFooter = 'Your choice applies to future cashback. Cashback already paid out stays where it is.';
+
 export default function CashbackScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const scroll = useRef<ScrollViewInstance>(null);
   const destinationY = useRef(0);
   const { profile, setProfile } = useProfile();
@@ -93,21 +100,30 @@ export default function CashbackScreen() {
   const showDestination = () => scroll.current?.scrollTo({ y: destinationY.current, animated: true });
 
   const items = profile && account ? account.onTheWay(profile) : [];
+  const destinations = profile ? profile.cashbackDestinations() : [];
 
   return (
     <ThemedView style={styles.container}>
+      <StatusBar style="light" />
       <ScrollView
         ref={scroll}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={loading && profile !== null} onRefresh={load} />}>
+        refreshControl={
+          <RefreshControl refreshing={loading && profile !== null} onRefresh={load} tintColor={theme.accent} />
+        }>
+        <PageHeader title="Cashback" belowNavigationHeader />
+
         {failure !== '' && (
-          <>
-            <ThemedText type="small">{failure}</ThemedText>
-            <Button label="Retry" onPress={load} disabled={loading} />
-          </>
+          <View style={styles.section}>
+            <Notice message={failure} actionLabel="Retry" onAction={load} disabled={loading} />
+          </View>
         )}
 
-        {!profile && failure === '' && <OrderRowsSkeleton />}
+        {!profile && failure === '' && (
+          <View style={styles.section}>
+            <OrderRowsSkeleton />
+          </View>
+        )}
 
         {profile && (
           <View
@@ -115,52 +131,47 @@ export default function CashbackScreen() {
             onLayout={(event) => {
               destinationY.current = event.nativeEvent.layout.y;
             }}>
-            <ThemedText type="smallBold">Where cashback goes</ThemedText>
-            {profile.cashbackDestinations().length === 1 ? (
-              <ThemedText type="small">
-                {destinationCopy.account.label}: {destinationCopy.account.detail}
-              </ThemedText>
-            ) : (
-              profile.cashbackDestinations().map((destination) => (
-                <View key={destination} style={styles.option}>
-                  <Button
+            <ListGroup title="Where cashback goes" footer={destinationFooter}>
+              {destinations.length === 1 ? (
+                <ListRow label={destinationCopy.account.label} detail={destinationCopy.account.detail} />
+              ) : (
+                destinations.map((destination) => (
+                  <ListRow
+                    key={destination}
                     label={destinationCopy[destination].label}
+                    detail={destinationCopy[destination].detail}
+                    accessibilityRole="radio"
+                    trailing="check"
                     selected={profile.cashbackDestination === destination}
                     disabled={busy || loading}
                     onPress={() => choose(destination)}
                   />
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {destinationCopy[destination].detail}
-                  </ThemedText>
-                  {destination === 'savings' && (
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {savingsNote}
-                    </ThemedText>
-                  )}
-                </View>
-              ))
-            )}
-            <ThemedText type="small" themeColor="textSecondary">
-              Your choice applies to future cashback. Cashback already paid out stays where it is.
-            </ThemedText>
-            {message !== '' && (
-              <ThemedText type="small" selectable>
-                {message}
+                ))
+              )}
+            </ListGroup>
+            {destinations.includes('savings') && (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
+                {savingsNote}
               </ThemedText>
             )}
+            {message !== '' && <Notice message={message} />}
           </View>
         )}
 
         {profile && account && (
           <View style={styles.section}>
-            <ThemedText type="smallBold">On the way</ThemedText>
-            {items.length === 0 ? (
-              <ThemedText type="small">Nothing on the way right now.</ThemedText>
-            ) : (
-              items.map((item) => <OnTheWayRow key={item.key} item={item} onShowDestination={showDestination} />)
-            )}
-            <Pressable onPress={() => router.navigate('/orders')}>
-              <ThemedText type="link">Cashback still settling is shown on each order</ThemedText>
+            <ListGroup title="On the way">
+              {items.length === 0 ? (
+                <ListRow label="Nothing on the way right now." />
+              ) : (
+                items.map((item) => <OnTheWayRow key={item.key} item={item} onShowDestination={showDestination} />)
+              )}
+            </ListGroup>
+            <Pressable
+              onPress={() => router.navigate('/orders')}
+              accessibilityRole="link"
+              style={styles.note}>
+              <ThemedText type="linkPrimary">Cashback still settling is shown on each order</ThemedText>
             </Pressable>
           </View>
         )}
@@ -176,13 +187,13 @@ type OnTheWayRowProps = {
 
 function OnTheWayRow({ item, onShowDestination }: OnTheWayRowProps) {
   const status = item.destination ? `${item.destination} · ${item.label}` : item.label;
-  const row = (
-    <ThemedView type="backgroundElement" style={styles.row}>
-      <ThemedText type="smallBold">{money.ctx(item.amount, item.currency)}</ThemedText>
-      <ThemedText type="small">{status}</ThemedText>
-    </ThemedView>
+  return (
+    <ListRow
+      label={money.ctx(item.amount, item.currency)}
+      detail={status}
+      onPress={item.heldBySavings ? onShowDestination : undefined}
+    />
   );
-  return item.heldBySavings ? <Pressable onPress={onShowDestination}>{row}</Pressable> : row;
 }
 
 const styles = StyleSheet.create({
@@ -190,19 +201,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingBottom: BottomTabInset + Spacing.five,
     gap: Spacing.four,
   },
   section: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
     gap: Spacing.two,
   },
-  option: {
-    gap: Spacing.one,
-  },
-  row: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    gap: Spacing.one,
+  note: {
+    paddingHorizontal: Spacing.one,
   },
 });

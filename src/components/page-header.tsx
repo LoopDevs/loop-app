@@ -9,12 +9,14 @@ type PageHeaderProps = {
   detail?: string;
   accessory?: ReactNode;
   children?: ReactNode;
+  belowNavigationHeader?: boolean;
 };
 
-export function PageHeader({ title, detail, accessory, children }: PageHeaderProps) {
+export function PageHeader({ title, detail, accessory, children, belowNavigationHeader = false }: PageHeaderProps) {
   const insets = useSafeAreaInsets();
+  const topInset = belowNavigationHeader ? 0 : insets.top;
   return (
-    <View style={[styles.panel, { paddingTop: insets.top + Spacing.three }]}>
+    <View style={[styles.panel, { paddingTop: topInset + Spacing.three }]}>
       <View style={styles.inner}>
         <View style={styles.titleRow}>
           <View style={styles.titleBlock}>

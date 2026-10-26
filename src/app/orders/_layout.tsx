@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-import { FontFamily } from '@/constants/theme';
+import { Brand, FontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export const unstable_settings = {
@@ -19,7 +19,17 @@ export default function OrdersLayout() {
     <Stack>
       <Stack.Screen name="index" options={{ title: 'Orders', headerShown: false }} />
       <Stack.Screen name="[id]" options={{ title: 'Gift card', ...header }} />
-      <Stack.Screen name="cashback" options={{ title: 'Cashback', ...header }} />
+      <Stack.Screen
+        name="cashback"
+        options={{
+          title: '',
+          headerStyle: { backgroundColor: Brand.royal },
+          headerTintColor: Brand.onRoyal,
+          headerTitleStyle: { fontFamily: FontFamily.semibold },
+          headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+        }}
+      />
     </Stack>
   );
 }
