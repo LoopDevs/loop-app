@@ -1,6 +1,15 @@
+import { ctxReportMessage } from '@/ctx/ctx-report';
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
+import { Payout, type PayoutJson } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
+import {
+  blockingServiceState,
+  serviceState,
+  serviceStateMessages,
+  type BlockingServiceState,
+} from '@/ctx/service-state';
+import { errorReporting } from '@/ops/error-reporting';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -95,6 +104,8 @@ export type GiftCard = {
   cardFiatAmount: string;
   cardFiatCurrency: string;
   paymentId: string;
+  paymentStatus: 'unpaid' | 'paid' | 'error' | 'refunded' | 'cancelled' | 'expired';
+  paymentMethod: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
   paymentCryptoTxId?: string;
@@ -141,10 +152,16 @@ export type GiftCardQuery = {
   perPage?: number;
 };
 
+export type OAuthIdentityJson = {
+  provider: string;
+};
+
 export type UserJson = {
   id: string;
+  email?: string;
   country?: string;
   stableCurrency?: string;
+  oauthIdentities?: OAuthIdentityJson[];
 };
 
 export type MeJson = {
@@ -155,7 +172,29 @@ export type MeJson = {
   };
 };
 
+export type ServiceStatus = {
+  maintenance: boolean;
+};
+
+type ServiceStateListener = (state: BlockingServiceState) => void;
+
 export type UserUpdate = { country: string } | { stableCurrency: string };
+
+export type BalanceJson = {
+  currency: string;
+  amount: string;
+  estimates?: Record<string, string>;
+};
+
+type AccountJson = {
+  wallet: BalanceJson[] | null;
+  payouts: PayoutJson[] | null;
+};
+
+export type Account = {
+  wallet: BalanceJson[];
+  payouts: Payout[];
+};
 
 export type SponsoredResult = {
   hash: string;
@@ -168,7 +207,7 @@ export class CtxError extends Error {
     readonly status: number,
     readonly body: string,
   ) {
-    super(status === 429 ? rateLimitedMessage : `CTX ${status}: ${body}`);
+    super(CtxError.displayMessage(status, body));
   }
 
   errorName(): string | undefined {
@@ -176,8 +215,20 @@ export class CtxError extends Error {
   }
 
   bodyField(name: string): string | undefined {
+    return CtxError.field(this.body, name);
+  }
+
+  private static displayMessage(status: number, body: string): string {
+    if (status === 429) {
+      return rateLimitedMessage;
+    }
+    const state = serviceState(CtxError.field(body, 'error'));
+    return state ? serviceStateMessages[state] : `CTX ${status}: ${body}`;
+  }
+
+  private static field(body: string, name: string): string | undefined {
     try {
-      const parsed: unknown = JSON.parse(this.body);
+      const parsed: unknown = JSON.parse(body);
       if (parsed && typeof parsed === 'object') {
         const value = (parsed as Record<string, unknown>)[name];
         return typeof value === 'string' ? value : undefined;
@@ -192,11 +243,31 @@ export class CtxError extends Error {
 class CtxClient {
   private accessToken: string | null = null;
   private refreshInFlight: Promise<string | null> | null = null;
+  private sessionGeneration = 0;
+  private serviceStateListener: ServiceStateListener | null = null;
 
   constructor(
     private readonly baseUrl: string,
     private readonly clientId: string,
   ) {}
+
+  onServiceState(listener: ServiceStateListener): () => void {
+    this.serviceStateListener = listener;
+    return () => {
+      if (this.serviceStateListener === listener) {
+        this.serviceStateListener = null;
+      }
+    };
+  }
+
+  async status(): Promise<ServiceStatus> {
+    const { maintenance } = await this.send<{ maintenance?: boolean }>('GET', '/status');
+    return { maintenance: maintenance === true };
+  }
+
+  async hasSession(): Promise<boolean> {
+    return this.accessToken !== null || (await tokenStore.readRefreshToken()) !== null;
+  }
 
   async requestCode(email: string): Promise<void> {
     await this.send('POST', '/login', { email });
@@ -204,6 +275,7 @@ class CtxClient {
 
   async verifyCode(email: string, code: string): Promise<void> {
     const tokens = await this.send<TokenPair>('POST', '/verify-email', { email, code });
+    this.sessionGeneration += 1;
     await this.storeTokens(tokens);
   }
 
@@ -212,8 +284,8 @@ class CtxClient {
   }
 
   async signOut(): Promise<void> {
-    this.accessToken = null;
-    await tokenStore.clear();
+    await this.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
+    await this.clearSession();
   }
 
   async userId(): Promise<string> {
@@ -226,6 +298,14 @@ class CtxClient {
 
   updateUser(update: UserUpdate): Promise<UserJson> {
     return this.userRequest('PUT', '', update);
+  }
+
+  async account(): Promise<Account> {
+    const json = await this.userRequest<AccountJson>('GET', '/account');
+    return {
+      wallet: json.wallet ?? [],
+      payouts: (json.payouts ?? []).map((payout) => new Payout(payout)),
+    };
   }
 
   async merchants({ country, name, ids, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
@@ -338,10 +418,15 @@ class CtxClient {
     return accessToken;
   }
 
-  private async sessionRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async sessionRequest<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    reportServiceState = true,
+  ): Promise<T> {
     const accessToken = await this.requireAccessToken();
     try {
-      return await this.authorized<T>(accessToken, method, path, body);
+      return await this.authorized<T>(accessToken, method, path, body, reportServiceState);
     } catch (error) {
       if (!(error instanceof CtxError) || error.status !== 401) {
         throw error;
@@ -351,14 +436,24 @@ class CtxClient {
       if (!refreshed) {
         throw error;
       }
-      return this.authorized<T>(refreshed, method, path, body);
+      return this.authorized<T>(refreshed, method, path, body, reportServiceState);
     }
   }
 
-  private authorized<T>(accessToken: string, method: string, path: string, body?: unknown): Promise<T> {
-    return this.send<T>(method, path, body, {
-      Authorization: `Bearer ${accessToken}`,
-    });
+  private authorized<T>(
+    accessToken: string,
+    method: string,
+    path: string,
+    body: unknown,
+    reportServiceState: boolean,
+  ): Promise<T> {
+    return this.send<T>(
+      method,
+      path,
+      body,
+      { Authorization: `Bearer ${accessToken}` },
+      reportServiceState,
+    );
   }
 
   private refresh(): Promise<string | null> {
@@ -371,21 +466,34 @@ class CtxClient {
   }
 
   private async rotateRefreshToken(): Promise<string | null> {
+    const generation = this.sessionGeneration;
     const refreshToken = await tokenStore.readRefreshToken();
     if (!refreshToken) {
       return null;
     }
     try {
       const tokens = await this.send<TokenPair>('POST', '/refresh-token', { refreshToken });
+      if (generation !== this.sessionGeneration) {
+        return null;
+      }
       await this.storeTokens(tokens);
       return tokens.accessToken;
     } catch (error) {
+      if (generation !== this.sessionGeneration) {
+        return null;
+      }
       if (error instanceof CtxError && error.status === 401) {
-        await this.signOut();
+        await this.clearSession();
         return null;
       }
       throw error;
     }
+  }
+
+  private async clearSession(): Promise<void> {
+    this.sessionGeneration += 1;
+    this.accessToken = null;
+    await tokenStore.clear();
   }
 
   private async storeTokens(tokens: TokenPair): Promise<void> {
@@ -403,6 +511,7 @@ class CtxClient {
     path: string,
     body?: unknown,
     headers: Record<string, string> = {},
+    reportServiceState = true,
   ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
@@ -415,7 +524,16 @@ class CtxClient {
     });
     const text = await response.text();
     if (!response.ok) {
-      throw new CtxError(response.status, text);
+      const error = new CtxError(response.status, text);
+      const blocking = blockingServiceState(error.errorName());
+      if (blocking && reportServiceState) {
+        this.serviceStateListener?.(blocking);
+      }
+      const report = ctxReportMessage(response.status, error.errorName());
+      if (report) {
+        errorReporting.reportMessage(report);
+      }
+      throw error;
     }
     return (text ? JSON.parse(text) : {}) as T;
   }

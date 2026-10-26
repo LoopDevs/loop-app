@@ -7,6 +7,7 @@ import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { base64 } from '@/wallet/base64';
 import { deviceSigner } from '@/wallet/device-signer';
+import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 
@@ -30,15 +31,16 @@ type ContextRule = {
 export class SmartWallet {
   static readonly passkeyRuleId = 0;
   static readonly deviceRuleId = 1;
-  static readonly vaultCurrency = 'XLM.USDC';
-  static readonly withdrawSlippageBasisPoints = 100n;
+  static readonly vaultCurrency = Holdings.savingsCurrency;
 
   private constructor(
     readonly id: string,
     readonly address: string,
+    readonly userId: string,
   ) {}
 
   static async load(): Promise<SmartWallet | null> {
+    const userId = await ctx.userId();
     const links = await ctx.wallets();
     const link = links.find(
       (candidate) => candidate.sponsored && candidate.chain === 'XLM' && candidate.status === 'active',
@@ -46,7 +48,7 @@ export class SmartWallet {
     if (!link) {
       return null;
     }
-    const wallet = new SmartWallet(link.id, link.address);
+    const wallet = new SmartWallet(link.id, link.address, userId);
     await wallet.verify();
     return wallet;
   }
@@ -56,20 +58,21 @@ export class SmartWallet {
     if (existing) {
       return existing;
     }
-    const devicePublicKey = await deviceSigner.create();
+    const userId = await ctx.userId();
+    const devicePublicKey = await deviceSigner.create(userId);
     const created = await passkey.create(label);
     const link = await ctx.deployWallet({
       credentialId: created.credentialId,
       passkeyPublicKey: base64.encode(created.publicKey),
       devicePublicKey,
     });
-    const wallet = new SmartWallet(link.id, link.address);
+    const wallet = new SmartWallet(link.id, link.address, userId);
     await wallet.verify(created.publicKey);
     return wallet;
   }
 
   async verify(passkeyPublicKey?: Uint8Array): Promise<void> {
-    const devicePublicKey = await deviceSigner.publicKey();
+    const devicePublicKey = await deviceSigner.publicKey(this.userId);
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
     }
@@ -138,11 +141,11 @@ export class SmartWallet {
     call: SponsoredCall,
     onSending?: () => void,
   ): Promise<SponsoredResult> {
-    const devicePublicKey = await deviceSigner.publicKey();
+    const devicePublicKey = await deviceSigner.publicKey(this.userId);
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
     }
-    const signature = await deviceSigner.sign(call.digest);
+    const signature = await deviceSigner.sign(this.userId, call.digest);
     onSending?.();
     return ctx.sponsorTransaction(this.id, intent, {
       transaction,
@@ -204,9 +207,7 @@ export class SmartWallet {
     if (amount !== shares || from !== this.address || minimums.length !== 1) {
       throw new Error('The withdrawal does not match the request');
     }
-    const value = await this.valueOf(shares);
-    const floor = (value * (10_000n - SmartWallet.withdrawSlippageBasisPoints)) / 10_000n;
-    if (minimums[0] < floor) {
+    if (minimums[0] < Holdings.floorOf(await this.valueOf(shares))) {
       throw new Error('The withdrawal minimum is too low');
     }
   }

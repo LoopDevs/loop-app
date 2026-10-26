@@ -1,19 +1,22 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
+import { HoldingsSummary } from '@/components/holdings-summary';
 import { BalanceSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { loopLinks } from '@/constants/loop-links';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
-import { money } from '@/money';
+import { useHoldings } from '@/hooks/use-holdings';
 import { network } from '@/stellar/network';
-import { type Balances, SmartWallet } from '@/wallet/smart-wallet';
+import { SmartWallet } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'email' | 'code' | 'no-wallet' | 'wallet';
 
@@ -23,26 +26,57 @@ export default function HomeScreen() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
-  const [balances, setBalances] = useState<Balances | null>(null);
+  const { view, refresh } = useHoldings(wallet);
   const { busy, message, setMessage, run } = useBusyAction();
   const [refreshing, setRefreshing] = useState(false);
+  const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
+  const walletLoadStarted = useRef(false);
+  const homeFocused = useRef(false);
 
-  const showWallet = useCallback(async (loaded: SmartWallet | null) => {
+  const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
     setScreen(loaded ? 'wallet' : 'no-wallet');
-    setBalances(loaded ? await loaded.balances() : null);
   }, []);
 
-  const loadWallet = useCallback(async () => {
-    await showWallet(await SmartWallet.load());
-  }, [showWallet]);
+  const openActiveOrder = useCallback(async () => {
+    const activeOrder = await ctx.activeGiftCard().catch(() => null);
+    if (activeOrder && homeFocused.current) {
+      router.push(`/shop/${activeOrder.merchantId}`, { withAnchor: true });
+    }
+  }, [router]);
 
-  useEffect(() => {
-    ctx
-      .isSignedIn()
-      .then((signedIn) => (signedIn ? loadWallet() : setScreen('email')))
-      .catch((error) => setMessage(errorMessage(error)));
-  }, [loadWallet, setMessage]);
+  const loadWallet = useCallback(async () => {
+    const loaded = await SmartWallet.load();
+    await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
+  }, [showWallet, openActiveOrder]);
+
+  const readSession = useCallback(async () => {
+    try {
+      if (await ctx.isSignedIn()) {
+        if (screen === 'loading' && !walletLoadStarted.current) {
+          walletLoadStarted.current = true;
+          await loadWallet();
+        }
+        return;
+      }
+      walletLoadStarted.current = false;
+      setWallet(null);
+      setScreen((current) => (current === 'code' ? current : 'email'));
+    } catch (error) {
+      walletLoadStarted.current = false;
+      setMessage(errorMessage(error));
+    }
+  }, [screen, loadWallet, setMessage]);
+
+  useFocusEffect(
+    useCallback(() => {
+      homeFocused.current = true;
+      readSession();
+      return () => {
+        homeFocused.current = false;
+      };
+    }, [readSession]),
+  );
 
   const requestCode = () =>
     run(async () => {
@@ -58,7 +92,7 @@ export default function HomeScreen() {
 
   const createWallet = () =>
     run(async () => {
-      await showWallet(await SmartWallet.create(email.trim() || 'Loop wallet'));
+      showWallet(await SmartWallet.create(email.trim() || 'Loop wallet'));
     });
 
   const refreshBalances = useCallback(async () => {
@@ -66,11 +100,11 @@ export default function HomeScreen() {
       return;
     }
     try {
-      setBalances(await wallet.balances());
+      await refresh();
     } catch (error) {
       setMessage(errorMessage(error));
     }
-  }, [wallet, setMessage]);
+  }, [wallet, refresh, setMessage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -91,28 +125,20 @@ export default function HomeScreen() {
         return;
       }
       await wallet.fundWithFriendbot();
-      setBalances(await wallet.balances());
+      await refresh();
     });
 
   const withdraw = () =>
     run(async () => {
-      if (!wallet || !balances || balances.vaultShares === 0n) {
+      if (!wallet || vaultShares === 0n) {
         return;
       }
-      const result = await wallet.withdraw(balances.vaultShares);
+      const result = await wallet.withdraw(vaultShares);
       const outcome = result.error
         ? `${result.status}: ${result.error}`
         : `${result.status} ${result.hash}`;
       setMessage(outcome);
-      setBalances(await wallet.balances());
-    });
-
-  const signOut = () =>
-    run(async () => {
-      await ctx.signOut();
-      setWallet(null);
-      setBalances(null);
-      setScreen('email');
+      await refresh();
     });
 
   return (
@@ -162,15 +188,7 @@ export default function HomeScreen() {
               <ThemedText type="code" selectable>
                 {wallet.address}
               </ThemedText>
-              {!balances && <BalanceSkeleton />}
-              {balances?.tokens.map(({ token, amount }) => (
-                <ThemedText key={token.currency}>
-                  {token.symbol}: {money.token(amount, token.currency)}
-                </ThemedText>
-              ))}
-              {balances && (
-                <ThemedText>Savings: {money.token(balances.vaultValue, 'XLM.USDC')}</ThemedText>
-              )}
+              {view ? <HoldingsSummary view={view} /> : <BalanceSkeleton />}
               <Button label="Refresh" onPress={refreshBalances} disabled={busy} />
               {network.friendbotUrl && (
                 <Button label="Fund with testnet XLM" onPress={fund} disabled={busy} />
@@ -178,14 +196,24 @@ export default function HomeScreen() {
               <Button
                 label="Withdraw savings"
                 onPress={withdraw}
-                disabled={busy || !balances || balances.vaultShares === 0n}
+                disabled={busy || vaultShares === 0n}
               />
               <Button label="Shop gift cards" onPress={() => router.navigate('/shop')} />
             </>
           )}
 
-          {(screen === 'no-wallet' || screen === 'wallet') && (
-            <Button label="Sign out" onPress={signOut} disabled={busy} />
+          {(screen === 'email' || screen === 'code') && (
+            <ThemedText type="small" themeColor="textSecondary">
+              By continuing you agree to Loop&apos;s{' '}
+              <ExternalLink href={loopLinks.terms} style={styles.link}>
+                Terms
+              </ExternalLink>{' '}
+              and{' '}
+              <ExternalLink href={loopLinks.privacy} style={styles.link}>
+                Privacy Policy
+              </ExternalLink>
+              .
+            </ThemedText>
           )}
 
           {message !== '' && (
@@ -214,5 +242,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.four,
     paddingBottom: BottomTabInset + Spacing.three,
     gap: Spacing.three,
+  },
+  link: {
+    textDecorationLine: 'underline',
   },
 });
