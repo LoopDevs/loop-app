@@ -1,6 +1,7 @@
 import { ctxReportMessage } from '@/ctx/ctx-report';
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
+import { Payout, type PayoutJson } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
 import {
   blockingServiceState,
@@ -179,6 +180,22 @@ type ServiceStateListener = (state: BlockingServiceState) => void;
 
 export type UserUpdate = { country: string } | { stableCurrency: string };
 
+export type BalanceJson = {
+  currency: string;
+  amount: string;
+  estimates?: Record<string, string>;
+};
+
+type AccountJson = {
+  wallet: BalanceJson[] | null;
+  payouts: PayoutJson[] | null;
+};
+
+export type Account = {
+  wallet: BalanceJson[];
+  payouts: Payout[];
+};
+
 export type SponsoredResult = {
   hash: string;
   status: string;
@@ -281,6 +298,14 @@ class CtxClient {
 
   updateUser(update: UserUpdate): Promise<UserJson> {
     return this.userRequest('PUT', '', update);
+  }
+
+  async account(): Promise<Account> {
+    const json = await this.userRequest<AccountJson>('GET', '/account');
+    return {
+      wallet: json.wallet ?? [],
+      payouts: (json.payouts ?? []).map((payout) => new Payout(payout)),
+    };
   }
 
   async merchants({ country, name, ids, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {

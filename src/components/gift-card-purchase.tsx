@@ -8,6 +8,7 @@ import { useToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
+import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal';
 import {
   giftCardStatusLabel,
   historyHiddenStatuses,
@@ -23,12 +24,16 @@ import {
   sendFailureState,
   type PaymentState,
 } from '@/ctx/payment-state';
-import { useBusyAction } from '@/hooks/use-busy-action';
-import { dates, money } from '@/money';
+import { PriceWindow } from '@/ctx/price-window';
+import { Rates } from '@/ctx/rates';
+import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
+import { useHoldings } from '@/hooks/use-holdings';
+import { money } from '@/money';
 import { haptics } from '@/native/haptics';
-import { network, type PaymentCurrency } from '@/stellar/network';
+import { network, type PaymentCurrency, type Token } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
 import { holdCriticalReload } from '@/updates/update-checker';
+import type { Holdings } from '@/wallet/holdings';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
 type Props = {
@@ -43,10 +48,17 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const { busy, message, setMessage, run } = useBusyAction();
   const [amount, setAmount] = useState(firstAmount(merchant));
   const [amountError, setAmountError] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<PaymentCurrency>(network.tokens[0].currency);
+  const [chosenCurrency, setChosenCurrency] = useState<PaymentCurrency | null>(null);
+  const [refusedCurrencies, setRefusedCurrencies] = useState<ReadonlySet<PaymentCurrency>>(new Set());
   const [order, setOrder] = useState<GiftCard | null>(null);
   const [payment, setPayment] = useState<PaymentState>({ kind: 'ready' });
+  const { view, refresh } = useHoldings(wallet);
   const toast = useToast();
+
+  const currencies = network.tokens.map((token) => token.currency);
+  const stable = view?.stable ?? Rates.usd;
+  const currency =
+    chosenCurrency ?? view?.holdings.preferredCurrency(currencies, stable, refusedCurrencies) ?? null;
 
   const following = useRef(0);
   const paying = useRef(false);
@@ -58,6 +70,10 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       mounted.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    refresh().catch((error: unknown) => setMessage(errorMessage(error)));
+  }, [refresh, setMessage]);
 
   usePreventRemove(payment.kind === 'sending', () => toast('Wait until the payment is sent'));
 
@@ -126,21 +142,37 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const createOrder = () =>
     run(async () => {
+      const payWith = currency;
+      if (!payWith) {
+        return;
+      }
       try {
         showNewOrder(
           await ctx.orderGiftCard({
             merchantId: merchant.id,
             fiatAmount: amount.trim(),
             fiatCurrency: merchant.currency,
-            cryptoCurrency: currency,
+            cryptoCurrency: payWith,
           }),
         );
       } catch (error) {
-        const message = error instanceof CtxError ? amountErrorMessage(error.errorName(), merchant) : null;
-        if (!message) {
+        if (!(error instanceof CtxError)) {
           throw error;
         }
-        setAmountError(message);
+        const amountMessage = amountErrorMessage(error.errorName(), merchant);
+        if (amountMessage) {
+          setAmountError(amountMessage);
+          return;
+        }
+        const refusal = currencyRefusalMessage(error.errorName(), tokenSymbol(payWith));
+        if (!refusal) {
+          throw error;
+        }
+        if (refusesCurrency(error.errorName())) {
+          setRefusedCurrencies((refused) => new Set([...refused, payWith]));
+          setChosenCurrency(null);
+        }
+        setMessage(refusal);
       }
     });
 
@@ -286,13 +318,14 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         {network.tokens.map((token) => (
           <Button
             key={token.currency}
-            label={token.symbol}
-            onPress={() => setCurrency(token.currency)}
+            label={tokenLabel(token, view?.holdings ?? null)}
+            onPress={() => setChosenCurrency(token.currency)}
             selected={currency === token.currency}
+            disabled={refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n}
           />
         ))}
       </View>
-      <Button label="Get price" onPress={createOrder} disabled={busy || !amount.trim()} />
+      <Button label="Get price" onPress={createOrder} disabled={busy || !amount.trim() || !currency} />
       {errorText}
     </View>
   );
@@ -300,6 +333,14 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
 function firstAmount(merchant: Merchant): string {
   return merchant.denominationType === 'fixed' ? (merchant.denominations[0] ?? '') : '';
+}
+
+function tokenSymbol(currency: PaymentCurrency): string {
+  return network.tokens.find((token) => token.currency === currency)?.symbol ?? currency;
+}
+
+function tokenLabel(token: Token, holdings: Holdings | null): string {
+  return holdings ? `${token.symbol} ${money.token(holdings.spendable(token.currency), token.currency)}` : token.symbol;
 }
 
 type OrderViewProps = {
@@ -314,23 +355,37 @@ type OrderViewProps = {
 function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderViewProps) {
   const card = `${money.ctx(order.cardFiatAmount, order.cardFiatCurrency)} ${order.merchantName}`;
   const price = money.payment(order.paymentCryptoAmount ?? '', order.paymentCryptoCurrency ?? '');
-  const payable = canPay(order, payment);
+  const priceWindow = PriceWindow.of(order);
+  const now = useClock(priceWindow?.expiresAt);
+  const shown: PaymentState =
+    priceWindow && priceWindow.isClosed(now) && canPay(order, payment) ? { kind: 'priceExpired' } : payment;
+  const payable = canPay(order, shown);
   const outcome = outcomeText(order);
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">{card}</ThemedText>
       <ThemedText>Price: {price}</ThemedText>
-      {payable && order.paymentUrlExpiration && (
-        <ThemedText type="small">Price held until {dates.time(order.paymentUrlExpiration)}</ThemedText>
-      )}
-      <ThemedText type="small">{orderStatus(order, payment)}</ThemedText>
+      {payable && priceWindow && <ThemedText type="small">Pay within {priceWindow.remaining(now)}</ThemedText>}
+      <ThemedText type="small">{orderStatus(order, shown)}</ThemedText>
       {outcome && <ThemedText type="small">{outcome}</ThemedText>}
-      {payment.kind === 'notSent' && payment.detail !== '' && <ThemedText type="small">{payment.detail}</ThemedText>}
+      {shown.kind === 'notSent' && shown.detail !== '' && <ThemedText type="small">{shown.detail}</ThemedText>}
       {payable && <Button label={`Pay ${price}`} onPress={onPay} disabled={busy} />}
-      {needsNewPrice(order, payment) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}
+      {needsNewPrice(order, shown) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}
       <Button label={payable ? 'Cancel' : 'Done'} onPress={onDone} disabled={busy} />
     </View>
   );
+}
+
+function useClock(until: number | undefined): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (until === undefined) {
+      return;
+    }
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [until]);
+  return now;
 }
 
 function orderStatus(order: GiftCard, payment: PaymentState): string {
