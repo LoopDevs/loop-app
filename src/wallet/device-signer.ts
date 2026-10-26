@@ -12,7 +12,7 @@ const biometricOptions: SecureStore.SecureStoreOptions = {
   authenticationPrompt: 'Approve with Face ID',
 };
 const biometricsHelp: Partial<Record<typeof Platform.OS, string>> = {
-  ios: 'Turn on Face ID or Touch ID in Settings, then try again.',
+  ios: 'Set up Face ID or Touch ID in Settings, or unlock it with your passcode, then try again.',
   android: 'Add a fingerprint in Settings, then try again.',
 };
 
@@ -27,6 +27,7 @@ export const deviceSigner = {
     }
     const secret = randomBytes(32);
     const publicKey = base64.encode(ed25519.getPublicKey(secret));
+    await SecureStore.deleteItemAsync(secretKey);
     await SecureStore.setItemAsync(secretKey, base64.encode(secret), biometricOptions);
     await SecureStore.setItemAsync(publicKeyKey, publicKey);
     return publicKey;
