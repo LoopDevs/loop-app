@@ -1,5 +1,6 @@
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
+import { Profile } from '@/ctx/profile';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -120,6 +121,22 @@ export type GiftCardQuery = {
   perPage?: number;
 };
 
+export type UserJson = {
+  id: string;
+  country?: string;
+  stableCurrency?: string;
+};
+
+export type MeJson = {
+  user: UserJson;
+  company?: {
+    countries?: string[];
+    stableCurrencies?: string[];
+  };
+};
+
+export type UserUpdate = { country: string } | { stableCurrency: string };
+
 export type SponsoredResult = {
   hash: string;
   status: string;
@@ -179,8 +196,16 @@ class CtxClient {
     await tokenStore.clear();
   }
 
-  async merchants(name: string): Promise<Merchant[]> {
-    const query = new URLSearchParams({ enabled: '1', perPage: '20', order: 'name' });
+  async me(): Promise<Profile> {
+    return Profile.fromMe(await this.sessionRequest<MeJson>('GET', '/me'));
+  }
+
+  updateUser(update: UserUpdate): Promise<UserJson> {
+    return this.userRequest('PUT', '', update);
+  }
+
+  async merchants(name: string, country: string): Promise<Merchant[]> {
+    const query = new URLSearchParams({ enabled: '1', perPage: '20', order: 'name', country });
     if (name.trim()) {
       query.set('name', name.trim());
     }

@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { CountryPicker } from '@/components/country-picker';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -15,6 +16,7 @@ import {
   settledStatuses,
 } from '@/ctx/gift-card-status';
 import type { Merchant } from '@/ctx/merchant';
+import { type CountryChoice, Profile } from '@/ctx/profile';
 import {
   canPay,
   needsNewPrice,
@@ -45,15 +47,52 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   const [currency, setCurrency] = useState<PaymentCurrency>(network.tokens[0].currency);
   const [order, setOrder] = useState<GiftCard | null>(null);
   const [payment, setPayment] = useState<PaymentState>({ kind: 'ready' });
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [changingCountry, setChangingCountry] = useState(false);
   const toast = useToast();
 
   const findMerchants = useCallback(
     () =>
       run(async () => {
-        setMerchants(await ctx.merchants(search));
+        if (profile?.country) {
+          setMerchants(await ctx.merchants(search, profile.country));
+        }
       }),
-    [run, search],
+    [run, search, profile],
   );
+
+  const loadProfile = useCallback(
+    () =>
+      run(async () => {
+        const loaded = await ctx.me();
+        setProfile(loaded);
+        if (loaded.country && !loaded.needsSetup()) {
+          setMerchants(await ctx.merchants('', loaded.country));
+        }
+      }),
+    [run],
+  );
+
+  const chooseCountry = (choice: CountryChoice) =>
+    run(async () => {
+      if (!profile) {
+        return;
+      }
+      let current = profile;
+      const sent = new Set<string>();
+      let update = current.nextUpdate(choice);
+      while (update && !sent.has(Object.keys(update)[0])) {
+        sent.add(Object.keys(update)[0]);
+        current = current.withUser(await ctx.updateUser(update));
+        setProfile(current);
+        update = current.nextUpdate(choice);
+      }
+      setChangingCountry(false);
+      if (current.country && !current.needsSetup()) {
+        setSearch('');
+        setMerchants(await ctx.merchants('', current.country));
+      }
+    });
 
   const following = useRef(0);
   const paying = useRef(false);
@@ -104,12 +143,12 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   );
 
   useEffect(() => {
-    ctx.merchants('').then(setMerchants, () => setMerchants([]));
+    loadProfile();
     resumeOrder();
     return () => {
       following.current += 1;
     };
-  }, [resumeOrder]);
+  }, [loadProfile, resumeOrder]);
 
   const chooseMerchant = (chosen: Merchant) => {
     setMerchant(chosen);
@@ -295,9 +334,34 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
     );
   }
 
+  if (!profile) {
+    return busy ? null : <Button label="Load gift cards" onPress={loadProfile} />;
+  }
+
+  if (profile.needsSetup() || changingCountry) {
+    return (
+      <View style={styles.section}>
+        <ThemedText type="smallBold">Buy a gift card</ThemedText>
+        <CountryPicker
+          profile={profile}
+          busy={busy}
+          onChoose={chooseCountry}
+          onCancel={profile.needsSetup() ? undefined : () => setChangingCountry(false)}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">Buy a gift card</ThemedText>
+      {profile.country && (
+        <Button
+          label={`${Profile.countryFlag(profile.country)} ${profile.country}`}
+          onPress={() => setChangingCountry(true)}
+          disabled={busy}
+        />
+      )}
       <Field
         value={search}
         onChangeText={setSearch}
