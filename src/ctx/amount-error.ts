@@ -1,6 +1,6 @@
-import type { Merchant } from './client';
+import type { MerchantJson } from './client';
 
-type AmountRules = Pick<Merchant, 'currency' | 'denominations'>;
+type AmountRules = Pick<MerchantJson, 'currency' | 'denominations'>;
 
 export function amountErrorMessage(errorName: string | undefined, merchant: AmountRules): string | null {
   const [min, max] = merchant.denominations;

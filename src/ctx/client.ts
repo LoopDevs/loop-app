@@ -1,3 +1,4 @@
+import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
@@ -38,7 +39,12 @@ export type SignedTransaction = {
   devicePublicKey: string;
 };
 
-export type Merchant = {
+export type MerchantLinkJson = {
+  userDiscountOverride?: boolean;
+  userDiscountBasisPoints?: number;
+};
+
+export type MerchantJson = {
   id: string;
   name: string;
   currency: string;
@@ -46,6 +52,7 @@ export type Merchant = {
   denominations: string[];
   logoUrl?: string;
   userDiscount: number;
+  link?: MerchantLinkJson;
 };
 
 export type GiftCardOrderIn = {
@@ -53,6 +60,10 @@ export type GiftCardOrderIn = {
   fiatAmount: string;
   fiatCurrency: string;
   cryptoCurrency: PaymentCurrency;
+};
+
+type GiftCardOrderBody = GiftCardOrderIn & {
+  rewardType: 'cashback';
 };
 
 export type GiftCard = {
@@ -173,12 +184,13 @@ class CtxClient {
     if (name.trim()) {
       query.set('name', name.trim());
     }
-    const { result } = await this.send<{ result: Merchant[] }>('GET', `/merchants?${query}`);
-    return result;
+    const { result } = await this.send<{ result: MerchantJson[] }>('GET', `/merchants?${query}`);
+    return result.map((json) => new Merchant(json));
   }
 
   orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
-    return this.sessionRequest('POST', '/gift-cards', order);
+    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
+    return this.sessionRequest('POST', '/gift-cards', body);
   }
 
   giftCard(id: string): Promise<GiftCard> {
