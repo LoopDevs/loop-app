@@ -10,6 +10,8 @@ import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { OrderRowsSkeleton } from '@/components/skeleton';
+import { SplitLayout } from '@/components/split-layout';
+import { PageWidth } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Brand, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -18,6 +20,7 @@ import { ctx, type CashbackDestination } from '@/ctx/client';
 import { Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { useProfile } from '@/hooks/use-profile';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { money } from '@/money';
@@ -38,6 +41,7 @@ const destinationFooter = 'Your choice applies to future cashback. Cashback alre
 
 export default function CashbackScreen() {
   const router = useRouter();
+  const { wide } = usePageLayout();
   const scroll = useAnimatedRef<Animated.ScrollView>();
   const { onScroll, backdrop } = useScrimScroll();
   const destinationY = useRef(0);
@@ -100,6 +104,59 @@ export default function CashbackScreen() {
   const items = profile && account ? account.onTheWay(profile) : [];
   const destinations = profile ? profile.cashbackDestinations() : [];
 
+  const statusSection =
+    failure === signInFailure ? (
+      <Notice message={failure} tone="neutral" actionLabel="Sign in" onAction={() => openSignIn(signInFailure)} />
+    ) : failure !== '' ? (
+      <Notice message={failure} actionLabel="Retry" onAction={load} disabled={loading} />
+    ) : (
+      <OrderRowsSkeleton />
+    );
+
+  const destinationSection = profile && (
+    <>
+      <ListGroup title="Where cashback goes" footer={destinationFooter}>
+        {destinations.length === 1 ? (
+          <ListRow label={destinationCopy.account.label} detail={destinationCopy.account.detail} />
+        ) : (
+          destinations.map((destination) => (
+            <ListRow
+              key={destination}
+              label={destinationCopy[destination].label}
+              detail={destinationCopy[destination].detail}
+              accessibilityRole="radio"
+              trailing="check"
+              selected={profile.cashbackDestination === destination}
+              disabled={busy || loading}
+              onPress={() => choose(destination)}
+            />
+          ))
+        )}
+      </ListGroup>
+      {destinations.includes('savings') && (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
+          {savingsNote}
+        </ThemedText>
+      )}
+      {message !== '' && <Notice message={message} />}
+    </>
+  );
+
+  const onTheWaySection = profile && account && (
+    <>
+      <ListGroup title="On the way">
+        {items.length === 0 ? (
+          <ListRow label="Nothing on the way right now." />
+        ) : (
+          items.map((item) => <OnTheWayRow key={item.key} item={item} onShowDestination={showDestination} />)
+        )}
+      </ListGroup>
+      <Pressable onPress={() => router.navigate('/orders')} accessibilityRole="link" style={[styles.note, styles.link]}>
+        <ThemedText type="linkPrimary">Cashback still settling is shown on each order</ThemedText>
+      </Pressable>
+    </>
+  );
+
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
@@ -108,82 +165,43 @@ export default function CashbackScreen() {
         ref={scroll}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, wide && styles.wideContent]}
         refreshControl={
           <RefreshControl refreshing={loading && profile !== null} onRefresh={load} tintColor={Brand.onRoyal} />
         }>
-        <PageHeader title="Cashback" belowNavigationHeader />
+        <PageHeader
+          title="Cashback"
+          detail={wide ? 'Choose where your cashback goes and see what is on the way.' : undefined}
+          belowNavigationHeader
+          width={wide ? 'page' : 'content'}
+        />
 
-        {failure !== '' && (
-          <View style={styles.section}>
-            {failure === signInFailure ? (
-              <Notice
-                message={failure}
-                tone="neutral"
-                actionLabel="Sign in"
-                onAction={() => openSignIn(signInFailure)}
-              />
+        {wide ? (
+          <PageWidth style={styles.widePage}>
+            {profile && failure !== '' && <View style={styles.wideStatus}>{statusSection}</View>}
+            {destinationSection ? (
+              <SplitLayout asideWidth={440} aside={onTheWaySection || null}>
+                {destinationSection}
+              </SplitLayout>
             ) : (
-              <Notice message={failure} actionLabel="Retry" onAction={load} disabled={loading} />
+              <View style={styles.wideStatus}>{statusSection}</View>
             )}
-          </View>
-        )}
-
-        {!profile && failure === '' && (
-          <View style={styles.section}>
-            <OrderRowsSkeleton />
-          </View>
-        )}
-
-        {profile && (
-          <View
-            style={styles.section}
-            onLayout={(event) => {
-              destinationY.current = event.nativeEvent.layout.y;
-            }}>
-            <ListGroup title="Where cashback goes" footer={destinationFooter}>
-              {destinations.length === 1 ? (
-                <ListRow label={destinationCopy.account.label} detail={destinationCopy.account.detail} />
-              ) : (
-                destinations.map((destination) => (
-                  <ListRow
-                    key={destination}
-                    label={destinationCopy[destination].label}
-                    detail={destinationCopy[destination].detail}
-                    accessibilityRole="radio"
-                    trailing="check"
-                    selected={profile.cashbackDestination === destination}
-                    disabled={busy || loading}
-                    onPress={() => choose(destination)}
-                  />
-                ))
-              )}
-            </ListGroup>
-            {destinations.includes('savings') && (
-              <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-                {savingsNote}
-              </ThemedText>
+          </PageWidth>
+        ) : (
+          <>
+            {!profile && <View style={styles.section}>{statusSection}</View>}
+            {profile && failure !== '' && <View style={styles.section}>{statusSection}</View>}
+            {destinationSection && (
+              <View
+                style={styles.section}
+                onLayout={(event) => {
+                  destinationY.current = event.nativeEvent.layout.y;
+                }}>
+                {destinationSection}
+              </View>
             )}
-            {message !== '' && <Notice message={message} />}
-          </View>
-        )}
-
-        {profile && account && (
-          <View style={styles.section}>
-            <ListGroup title="On the way">
-              {items.length === 0 ? (
-                <ListRow label="Nothing on the way right now." />
-              ) : (
-                items.map((item) => <OnTheWayRow key={item.key} item={item} onShowDestination={showDestination} />)
-              )}
-            </ListGroup>
-            <Pressable
-              onPress={() => router.navigate('/orders')}
-              accessibilityRole="link"
-              style={[styles.note, styles.link]}>
-              <ThemedText type="linkPrimary">Cashback still settling is shown on each order</ThemedText>
-            </Pressable>
-          </View>
+            {onTheWaySection && <View style={styles.section}>{onTheWaySection}</View>}
+          </>
         )}
       </Animated.ScrollView>
     </ThemedView>
@@ -214,12 +232,22 @@ const styles = StyleSheet.create({
     paddingBottom: BottomTabInset + Spacing.five,
     gap: Spacing.four,
   },
+  wideContent: {
+    paddingBottom: Spacing.six,
+    gap: Spacing.five,
+  },
   section: {
     width: '100%',
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
     gap: Spacing.two,
+  },
+  widePage: {
+    gap: Spacing.four,
+  },
+  wideStatus: {
+    maxWidth: 560,
   },
   note: {
     paddingHorizontal: Spacing.one,
