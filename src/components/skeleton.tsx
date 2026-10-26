@@ -9,13 +9,21 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const shimmerMs = 800;
 const orderRowCount = 6;
+const merchantTileCount = 6;
+const coverAspect = 1.586;
 
-export function Skeleton({ width, height }: { width: DimensionValue; height: number }) {
+type SkeletonProps = {
+  width: DimensionValue;
+  height?: number;
+  aspectRatio?: number;
+};
+
+export function Skeleton({ width, height, aspectRatio }: SkeletonProps) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const opacity = useSharedValue(1);
@@ -25,7 +33,7 @@ export function Skeleton({ width, height }: { width: DimensionValue; height: num
       opacity.set(1);
       return;
     }
-    opacity.set(withRepeat(withTiming(0.4, { duration: shimmerMs }), -1, true));
+    opacity.set(withRepeat(withTiming(0.45, { duration: shimmerMs }), -1, true));
     return () => cancelAnimation(opacity);
   }, [reducedMotion, opacity]);
 
@@ -33,7 +41,11 @@ export function Skeleton({ width, height }: { width: DimensionValue; height: num
 
   return (
     <Animated.View
-      style={[styles.block, { width, height, backgroundColor: theme.backgroundElement }, animated]}
+      style={[
+        styles.block,
+        { width, height, aspectRatio, backgroundColor: theme.backgroundElement },
+        animated,
+      ]}
     />
   );
 }
@@ -53,7 +65,20 @@ export function OrderRowsSkeleton() {
   return (
     <View style={styles.stack} accessible accessibilityLabel="Loading orders">
       {Array.from({ length: orderRowCount }, (_, index) => (
-        <Skeleton key={index} width="100%" height={64} />
+        <Skeleton key={index} width="100%" height={72} />
+      ))}
+    </View>
+  );
+}
+
+export function MerchantGridSkeleton() {
+  return (
+    <View style={styles.grid} accessible accessibilityLabel="Loading gift cards">
+      {Array.from({ length: merchantTileCount }, (_, index) => (
+        <View key={index} style={styles.gridCell}>
+          <Skeleton width="100%" aspectRatio={coverAspect} />
+          <Skeleton width="60%" height={14} />
+        </View>
       ))}
     </View>
   );
@@ -61,10 +86,10 @@ export function OrderRowsSkeleton() {
 
 export function OrderDetailSkeleton() {
   return (
-    <View style={styles.stack} accessible accessibilityLabel="Loading order">
-      <Skeleton width="60%" height={20} />
+    <View style={styles.stack} accessible accessibilityLabel="Loading">
+      <Skeleton width="100%" aspectRatio={coverAspect} />
+      <Skeleton width="60%" height={24} />
       <Skeleton width="35%" height={16} />
-      <Skeleton width="50%" height={16} />
       <Skeleton width="100%" height={120} />
     </View>
   );
@@ -72,9 +97,20 @@ export function OrderDetailSkeleton() {
 
 const styles = StyleSheet.create({
   block: {
-    borderRadius: Spacing.two,
+    borderRadius: Radius.tile,
   },
   stack: {
+    gap: Spacing.two,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: Spacing.four,
+    columnGap: Spacing.three,
+  },
+  gridCell: {
+    width: '47%',
+    flexGrow: 1,
     gap: Spacing.two,
   },
 });

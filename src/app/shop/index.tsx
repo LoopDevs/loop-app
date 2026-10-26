@@ -1,27 +1,43 @@
 import { useFocusEffect, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { CountryPicker } from '@/components/country-picker';
-import { Button, Field } from '@/components/form';
+import { Button, Field, Notice } from '@/components/form';
+import { useScrimScroll } from '@/components/home-panel';
 import { MerchantStrip, MerchantTile } from '@/components/merchant-tile';
-import { OrderRowsSkeleton } from '@/components/skeleton';
+import { PageHeader } from '@/components/page-header';
+import { PressScale } from '@/components/press-scale';
+import { MerchantGridSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import {
+  BottomTabInset,
+  Brand,
+  FontFamily,
+  MaxContentWidth,
+  Motion,
+  Radius,
+  Spacing,
+} from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
-import { type CountryChoice, Profile } from '@/ctx/profile';
+import type { CountryChoice } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
 import { useProfile } from '@/hooks/use-profile';
+import { useTheme } from '@/hooks/use-theme';
 
 const merchantsPerPage = 20;
 const searchDelayMs = 300;
 const stripSize = 10;
 const cashbackScanSize = 500;
 const recentOrdersScanned = 50;
+const staggeredTiles = 8;
 
 async function loadTopCashback(country: string): Promise<Merchant[]> {
   const { result } = await ctx.merchants({ country, perPage: cashbackScanSize });
@@ -68,6 +84,8 @@ export default function ShopScreen() {
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
   const listedCountry = useRef<string | undefined>(undefined);
+  const reduceMotion = useReducedMotion();
+  const { onScroll, scrim } = useScrimScroll();
 
   const loadAccount = useCallback(
     () =>
@@ -185,124 +203,218 @@ export default function ShopScreen() {
     }
   };
 
-  const errorText = account.message !== '' && (
-    <ThemedText type="small" selectable>
-      {account.message}
-    </ThemedText>
+  const accountError = account.message !== '' && (
+    <Notice message={account.message} actionLabel="Try again" onAction={loadAccount} disabled={busy} />
   );
 
   if (signedIn === false) {
     return (
-      <ThemedView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
-          <ThemedText>Sign in to shop gift cards.</ThemedText>
-          <Button label="Sign in" onPress={() => router.navigate('/')} />
-        </ScrollView>
-      </ThemedView>
+      <SimplePage title="Shop">
+        <ThemedText type="heading">Sign in to shop gift cards</ThemedText>
+        <ThemedText themeColor="textSecondary">
+          Every gift card you buy with Loop earns cashback.
+        </ThemedText>
+        <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
+      </SimplePage>
     );
   }
 
   if (!profile) {
     return (
-      <ThemedView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
-          {busy || signedIn === null ? (
-            <OrderRowsSkeleton />
-          ) : (
-            <Button label="Retry" onPress={loadAccount} />
-          )}
-          {errorText}
-        </ScrollView>
-      </ThemedView>
+      <SimplePage title="Shop">
+        {account.message === '' ? <MerchantGridSkeleton /> : accountError}
+      </SimplePage>
     );
   }
 
   if (profile.needsSetup() || changingCountry) {
     return (
-      <ThemedView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
-          <CountryPicker
-            profile={profile}
-            busy={busy}
-            onChoose={chooseCountry}
-            onCancel={profile.needsSetup() ? undefined : () => setChangingCountry(false)}
-          />
-          {errorText}
-        </ScrollView>
-      </ThemedView>
+      <SimplePage title={profile.needsSetup() ? 'Where do you shop?' : 'Change country'}>
+        <CountryPicker
+          profile={profile}
+          busy={busy}
+          onChoose={chooseCountry}
+          onCancel={profile.needsSetup() ? undefined : () => setChangingCountry(false)}
+        />
+        {accountError}
+      </SimplePage>
     );
   }
 
+  const searching = query !== '';
+
   return (
     <ThemedView style={styles.container}>
-      <FlatList
+      <StatusBar style="light" />
+      <Animated.FlatList
         data={merchants}
         keyExtractor={(merchant) => merchant.id}
         numColumns={2}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         columnWrapperStyle={styles.columns}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={
-          <ThemedView style={styles.header}>
-            {activeOrder && (
-              <Button
-                label={`Continue your ${activeOrder.merchantName} order`}
-                onPress={() => router.push(`/shop/${activeOrder.merchantId}`)}
+          <View>
+            <PageHeader
+              title="Shop"
+              accessory={
+                profile.country ? (
+                  <CountryButton
+                    country={profile.country}
+                    disabled={busy}
+                    onPress={() => setChangingCountry(true)}
+                  />
+                ) : null
+              }>
+              <Field
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search gift cards"
+                returnKeyType="search"
+                clearButtonMode="while-editing"
               />
-            )}
-            {profile.country && (
-              <Button
-                label={`${Profile.countryFlag(profile.country)} ${profile.country}`}
-                onPress={() => setChangingCountry(true)}
+            </PageHeader>
+            <View style={[styles.body, styles.header]}>
+              {activeOrder && (
+                <ActiveOrderCard
+                  merchantName={activeOrder.merchantName}
+                  onPress={() => router.push(`/shop/${activeOrder.merchantId}`)}
+                />
+              )}
+              {accountError}
+              {!searching && (
+                <>
+                  <MerchantStrip title="Favourites" merchants={shownFavourites} onOpen={openMerchant} />
+                  <MerchantStrip title="Bought recently" merchants={recentlyBought} onOpen={openMerchant} />
+                  <MerchantStrip title="Top cashback" merchants={topCashback} onOpen={openMerchant} />
+                </>
+              )}
+              <ThemedText type="heading" accessibilityRole="header">
+                {searching ? `Results for “${query}”` : 'All gift cards'}
+              </ThemedText>
+            </View>
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.body}>
+            {busy ? (
+              <MerchantGridSkeleton />
+            ) : listing.message === '' ? (
+              <EmptyResults searching={searching} onClear={() => setSearch('')} />
+            ) : null}
+          </View>
+        }
+        ListFooterComponent={
+          <View style={[styles.body, styles.footer]}>
+            {listing.message !== '' && (
+              <Notice
+                message={listing.message}
+                actionLabel="Try again"
+                onAction={() => loadMerchants(retryPage.current)}
                 disabled={busy}
               />
             )}
-            <Field
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search gift cards"
-              returnKeyType="search"
-            />
-            {query === '' && (
-              <>
-                <MerchantStrip title="Favourites" merchants={shownFavourites} onOpen={openMerchant} />
-                <MerchantStrip title="Bought recently" merchants={recentlyBought} onOpen={openMerchant} />
-                <MerchantStrip title="Top cashback" merchants={topCashback} onOpen={openMerchant} />
-                <ThemedText type="smallBold">All gift cards</ThemedText>
-              </>
+            {merchants.length > 0 && listing.busy && page > 0 && (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.loadingMore}>
+                Loading more gift cards
+              </ThemedText>
             )}
-          </ThemedView>
-        }
-        ListEmptyComponent={
-          busy ? (
-            <OrderRowsSkeleton />
-          ) : listing.message === '' ? (
-            <ThemedText type="small">No gift cards found.</ThemedText>
-          ) : undefined
-        }
-        ListFooterComponent={
-          <>
-            {errorText}
-            {account.message !== '' && <Button label="Retry" onPress={loadAccount} disabled={busy} />}
-            {listing.message !== '' && (
-              <>
-                <ThemedText type="small" selectable>
-                  {listing.message}
-                </ThemedText>
-                <Button label="Retry" onPress={() => loadMerchants(retryPage.current)} disabled={busy} />
-              </>
-            )}
-          </>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.cell}>
-            <MerchantTile merchant={item} onPress={() => openMerchant(item)} />
           </View>
+        }
+        renderItem={({ item, index }) => (
+          <Animated.View
+            entering={
+              reduceMotion
+                ? undefined
+                : FadeInDown.duration(Motion.state)
+                    .delay((index % merchantsPerPage < staggeredTiles ? index % merchantsPerPage : 0) * Motion.stagger)
+                    .easing(Motion.easeOut)
+            }
+            style={styles.cell}>
+            <MerchantTile merchant={item} onPress={() => openMerchant(item)} />
+          </Animated.View>
         )}
       />
+      <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
+  );
+}
+
+function SimplePage({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <ThemedView style={styles.container}>
+      <StatusBar style="light" />
+      <ScrollView contentContainerStyle={styles.simpleContent} keyboardShouldPersistTaps="handled">
+        <PageHeader title={title} />
+        <View style={[styles.body, styles.simpleBody]}>{children}</View>
+      </ScrollView>
+    </ThemedView>
+  );
+}
+
+function CountryButton({
+  country,
+  disabled,
+  onPress,
+}: {
+  country: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <PressScale
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`Shopping in ${country}. Change country`}
+      style={[styles.countryButton, disabled && styles.disabled]}>
+      <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={Brand.onRoyal} />
+      <Text style={styles.countryText} maxFontSizeMultiplier={1.3}>
+        {country}
+      </Text>
+    </PressScale>
+  );
+}
+
+function ActiveOrderCard({ merchantName, onPress }: { merchantName: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <PressScale
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Continue your ${merchantName} order`}
+      style={[styles.activeOrder, { backgroundColor: theme.backgroundElement, borderColor: theme.accent }]}>
+      <View style={styles.activeOrderText}>
+        <ThemedText type="smallBold">Order in progress</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Continue your {merchantName} order
+        </ThemedText>
+      </View>
+      <SymbolView
+        name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+        size={18}
+        tintColor={theme.accent}
+      />
+    </PressScale>
+  );
+}
+
+function EmptyResults({ searching, onClear }: { searching: boolean; onClear: () => void }) {
+  return (
+    <View style={styles.empty}>
+      <ThemedText type="heading">{searching ? 'No matches' : 'No gift cards here yet'}</ThemedText>
+      <ThemedText themeColor="textSecondary">
+        {searching
+          ? 'Try a shorter name, or check the spelling.'
+          : 'Gift cards for your country show here as soon as they are available.'}
+      </ThemedText>
+      {searching && <Button label="Clear search" onPress={onClear} />}
+    </View>
   );
 }
 
@@ -310,20 +422,75 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    padding: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
-    gap: Spacing.two,
+  listContent: {
+    paddingBottom: BottomTabInset + Spacing.five,
+    gap: Spacing.four,
+  },
+  simpleContent: {
+    paddingBottom: BottomTabInset + Spacing.five,
+  },
+  body: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
+  },
+  simpleBody: {
+    paddingTop: Spacing.four,
+    gap: Spacing.three,
   },
   header: {
-    gap: Spacing.two,
-    marginBottom: Spacing.two,
+    paddingTop: Spacing.four,
+    gap: Spacing.four,
+  },
+  footer: {
+    gap: Spacing.three,
   },
   columns: {
-    gap: Spacing.two,
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
+    gap: Spacing.three,
   },
   cell: {
     flex: 1,
     maxWidth: '50%',
+  },
+  countryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 44,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.control,
+    backgroundColor: Brand.navy,
+  },
+  countryText: {
+    color: Brand.onRoyal,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  activeOrder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.three,
+    minHeight: 64,
+    borderRadius: Radius.control,
+    borderWidth: 1,
+  },
+  activeOrderText: {
+    flex: 1,
+  },
+  empty: {
+    gap: Spacing.two,
+    paddingVertical: Spacing.four,
+  },
+  loadingMore: {
+    textAlign: 'center',
   },
 });
