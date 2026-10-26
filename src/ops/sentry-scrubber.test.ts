@@ -40,9 +40,12 @@ test('free text loses every sensitive class', () => {
     'pin: 4821',
     '"number":"6035 1234 5678 9012"',
     'refreshToken=abc',
+    '"idToken":"def"',
+    'identityToken=ghi',
   ].join(' | ');
   const scrubbed = SentryScrubber.scrubString(text);
-  for (const leaked of [jwt, refreshToken, email, secretSeed, signedXdr, redeemUrl, '4821', '6035', 'abc']) {
+  const leaks = [jwt, refreshToken, email, secretSeed, signedXdr, redeemUrl, '4821', '6035', 'abc', 'def', 'ghi'];
+  for (const leaked of leaks) {
     assert.ok(!scrubbed.includes(leaked), `leaked ${leaked}`);
   }
 });
@@ -76,6 +79,7 @@ test('breadcrumbs keep method, status and a route template only', () => {
 test('route templates drop query strings and unknown segments', () => {
   assert.equal(SentryScrubber.routeTemplate('/users/abc/gift-cards/xyz?x=1'), '/users/:id/gift-cards/:id');
   assert.equal(SentryScrubber.routeTemplate('https://h.example.com/me#frag'), '/me');
+  assert.equal(SentryScrubber.routeTemplate('/login/oauth'), '/login/oauth');
 });
 
 test('events lose user, request data, headers and unlisted extra keys', () => {

@@ -62,6 +62,10 @@ export class Profile {
     return null;
   }
 
+  passkeyLabel(): string {
+    return this.email?.trim() || 'Loop wallet';
+  }
+
   savesCashback(): boolean {
     return this.cashbackDestination === 'savings';
   }
