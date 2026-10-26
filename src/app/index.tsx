@@ -15,7 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
 import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset, Brand, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
@@ -172,7 +172,7 @@ export default function HomeScreen() {
     });
 
   const [depositOpen, setDepositOpen] = useState(false);
-  const { onScroll, scrim } = useScrimScroll();
+  const { onScroll, scrim, backdrop } = useScrimScroll();
 
   const copyAddress = async () => {
     if (!wallet) {
@@ -216,6 +216,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
+      <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -223,7 +224,7 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={
           screen === 'wallet' ? (
-            <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={theme.accent} />
+            <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={Brand.onRoyal} />
           ) : undefined
         }>
         <HomePanel view={screen === 'wallet' ? view : null} signedIn={signedIn || screen === 'loading'}>

@@ -1,22 +1,17 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useRef, useState } from 'react';
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  type ScrollViewInstance,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedRef } from 'react-native-reanimated';
 
 import { Notice } from '@/components/form';
+import { useScrimScroll } from '@/components/home-panel';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Brand, MaxContentWidth, Spacing } from '@/constants/theme';
 import type { Account, OnTheWayItem } from '@/ctx/account';
 import { ctx, type CashbackDestination } from '@/ctx/client';
 import { Profile } from '@/ctx/profile';
@@ -24,7 +19,6 @@ import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useProfile } from '@/hooks/use-profile';
 import { useSessionOwner } from '@/hooks/use-session-owner';
-import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { Savings } from '@/wallet/savings';
 
@@ -42,8 +36,8 @@ const destinationFooter = 'Your choice applies to future cashback. Cashback alre
 
 export default function CashbackScreen() {
   const router = useRouter();
-  const theme = useTheme();
-  const scroll = useRef<ScrollViewInstance>(null);
+  const scroll = useAnimatedRef<Animated.ScrollView>();
+  const { onScroll, backdrop } = useScrimScroll();
   const destinationY = useRef(0);
   const { profile, setProfile } = useProfile();
   const destinationWrites = useRef(0);
@@ -105,11 +99,14 @@ export default function CashbackScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView
+      <Animated.View pointerEvents="none" style={backdrop} />
+      <Animated.ScrollView
         ref={scroll}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={loading && profile !== null} onRefresh={load} tintColor={theme.accent} />
+          <RefreshControl refreshing={loading && profile !== null} onRefresh={load} tintColor={Brand.onRoyal} />
         }>
         <PageHeader title="Cashback" belowNavigationHeader />
 
@@ -175,7 +172,7 @@ export default function CashbackScreen() {
             </Pressable>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </ThemedView>
   );
 }

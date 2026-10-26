@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { CountryPicker } from '@/components/country-picker';
@@ -85,7 +85,7 @@ export default function ShopScreen() {
   const retryPage = useRef(1);
   const listedCountry = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
-  const { onScroll, scrim } = useScrimScroll();
+  const { onScroll, scrim, backdrop } = useScrimScroll();
 
   const loadAccount = useCallback(
     () =>
@@ -246,6 +246,7 @@ export default function ShopScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
+      <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.FlatList
         data={merchants}
         keyExtractor={(merchant) => merchant.id}
@@ -347,13 +348,20 @@ export default function ShopScreen() {
 }
 
 function SimplePage({ title, children }: { title: string; children: React.ReactNode }) {
+  const { onScroll, scrim, backdrop } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView contentContainerStyle={styles.simpleContent} keyboardShouldPersistTaps="handled">
+      <Animated.View pointerEvents="none" style={backdrop} />
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.simpleContent}
+        keyboardShouldPersistTaps="handled">
         <PageHeader title={title} />
         <View style={[styles.body, styles.simpleBody]}>{children}</View>
-      </ScrollView>
+      </Animated.ScrollView>
+      <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
   );
 }

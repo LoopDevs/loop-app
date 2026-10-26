@@ -1,11 +1,12 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { Button, Notice } from '@/components/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
+import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
 import { OrderDetailSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
@@ -40,6 +41,7 @@ export default function GiftCardScreen() {
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
   const readSession = useSessionOwner();
+  const { onScroll, backdrop } = useScrimScroll();
 
   useFocusEffect(
     useCallback(() => {
@@ -104,7 +106,8 @@ export default function GiftCardScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <Animated.View pointerEvents="none" style={backdrop} />
+      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.content}>
         {(!giftCard || message !== '') && (
           <View style={[styles.body, styles.status]}>
             {!giftCard && !message && <OrderDetailSkeleton />}
@@ -120,7 +123,7 @@ export default function GiftCardScreen() {
           </View>
         )}
         {giftCard && <GiftCardSummary giftCard={giftCard} />}
-      </ScrollView>
+      </Animated.ScrollView>
     </ThemedView>
   );
 }

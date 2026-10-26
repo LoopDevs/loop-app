@@ -31,9 +31,8 @@ const staggeredRows = 8;
 
 export default function OrdersScreen() {
   const router = useRouter();
-  const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const { onScroll, scrim } = useScrimScroll();
+  const { onScroll, scrim, backdrop } = useScrimScroll();
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
@@ -96,6 +95,7 @@ export default function OrdersScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
+      <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.FlatList
         data={giftCards}
         keyExtractor={(giftCard) => giftCard.id}
@@ -103,7 +103,7 @@ export default function OrdersScreen() {
         scrollEventThrottle={16}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={loading && page <= 1 && giftCards.length > 0} onRefresh={reload} tintColor={theme.accent} />
+          <RefreshControl refreshing={loading && page <= 1 && giftCards.length > 0} onRefresh={reload} tintColor={Brand.onRoyal} />
         }
         ListHeaderComponent={
           <PageHeader

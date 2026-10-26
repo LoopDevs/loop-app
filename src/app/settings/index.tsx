@@ -4,11 +4,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useCallback, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { AppLockToggle } from '@/components/app-lock';
 import { CountryPicker } from '@/components/country-picker';
 import { Button, Notice } from '@/components/form';
+import { useScrimScroll } from '@/components/home-panel';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
 import { OrderRowsSkeleton } from '@/components/skeleton';
@@ -29,6 +31,7 @@ export default function SettingsScreen() {
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
   const profileUserId = useRef<string | null>(null);
+  const { onScroll, scrim, backdrop } = useScrimScroll();
 
   const loadAccount = useCallback(
     () =>
@@ -88,7 +91,8 @@ export default function SettingsScreen() {
     return (
       <ThemedView style={styles.container}>
         <StatusBar style="light" />
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <Animated.View pointerEvents="none" style={backdrop} />
+        <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scroll}>
           <PageHeader title="Change country" />
           <View style={styles.body}>
             <CountryPicker
@@ -99,7 +103,8 @@ export default function SettingsScreen() {
             />
             {errorText}
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
+        <Animated.View pointerEvents="none" style={scrim} />
       </ThemedView>
     );
   }
@@ -109,7 +114,8 @@ export default function SettingsScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <Animated.View pointerEvents="none" style={backdrop} />
+      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scroll}>
         <PageHeader title="Settings" detail={profile?.email ?? undefined} />
         <View style={styles.body}>
           {signedIn === null && <OrderRowsSkeleton />}
@@ -217,7 +223,8 @@ export default function SettingsScreen() {
             Version {Constants.expoConfig?.version}
           </ThemedText>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+      <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
   );
 }

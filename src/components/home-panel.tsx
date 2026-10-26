@@ -34,8 +34,12 @@ export function useScrimScroll() {
   const fade = useAnimatedStyle(() => ({
     opacity: interpolate(offset.value, [0, scrimFadeDistance], [0, 1], 'clamp'),
   }));
+  const overscroll = useAnimatedStyle(() => ({
+    height: Math.max(0, -offset.value),
+  }));
   const scrim = [styles.scrim, { height: insets.top }, webBlur, fade];
-  return { onScroll, scrim };
+  const backdrop = [styles.backdrop, overscroll];
+  return { onScroll, scrim, backdrop };
 }
 
 const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(16px)' } as object) : null;
@@ -158,6 +162,13 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Brand.royal,
   },
   scrim: {
     position: 'absolute',

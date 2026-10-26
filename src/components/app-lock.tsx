@@ -4,10 +4,11 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
+import { ListGroup, ListRow } from '@/components/list-row';
 import { Wordmark } from '@/components/wordmark';
 import { Brand, FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useBusyAction } from '@/hooks/use-busy-action';
+import { useTheme } from '@/hooks/use-theme';
 import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
 import { useRecentsProtection } from '@/native/screen-privacy';
@@ -32,6 +33,7 @@ export function AppLockToggle() {
   const { isOn, turnOn, turnOff } = useContext(AppLockContext);
   const { busy, message, run } = useBusyAction();
   const [enrolled, setEnrolled] = useState(false);
+  const theme = useTheme();
 
   useFocusEffect(
     useCallback(() => {
@@ -57,19 +59,17 @@ export function AppLockToggle() {
   const toggle = (next: boolean) => run(next ? turnOn : turnOff);
 
   return (
-    <View style={styles.section}>
-      <ThemedText type="smallBold">Security</ThemedText>
-      <View style={styles.toggleRow}>
-        <ThemedText style={styles.toggleLabel}>Lock Loop with Face ID / fingerprint</ThemedText>
+    <ListGroup title="Security" footer={message}>
+      <ListRow label="Lock Loop with Face ID / fingerprint">
         <Switch
           value={isOn}
           onValueChange={toggle}
           disabled={busy}
+          trackColor={{ true: theme.accent }}
           accessibilityLabel="Lock Loop with Face ID / fingerprint"
         />
-      </View>
-      {message !== '' && <ThemedText type="small">{message}</ThemedText>}
-    </View>
+      </ListRow>
+    </ListGroup>
   );
 }
 
@@ -237,17 +237,6 @@ function LockView({ showUnlock, message, onUnlock }: LockViewProps) {
 
 const styles = StyleSheet.create({
   fill: {
-    flex: 1,
-  },
-  section: {
-    gap: Spacing.two,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-  },
-  toggleLabel: {
     flex: 1,
   },
   lock: {
