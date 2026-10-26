@@ -105,3 +105,13 @@ export const Motion = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+export const Layout = {
+  wideMinWidth: 960,
+  pageMaxWidth: 1240,
+  narrowGutter: Spacing.three,
+  wideGutter: Spacing.five,
+  headerHeight: 72,
+  formMaxWidth: 420,
+  sheetWidth: 440,
+} as const;

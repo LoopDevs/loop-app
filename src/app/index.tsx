@@ -5,37 +5,45 @@ import { useCallback, useRef, useState } from 'react';
 import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-import { ExternalLink } from '@/components/external-link';
-import { Button, Field, Notice } from '@/components/form';
+import { CountryMenu } from '@/components/country-menu';
+import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
 import { HomeGiftCards } from '@/components/home-gift-cards';
 import { HomePanel, useScrimScroll } from '@/components/home-panel';
-import { SocialSignInButtons } from '@/components/social-sign-in-buttons';
+import { SignInButton, useOnSignIn } from '@/components/sign-in';
+import {
+  HowLoopWorks,
+  MerchantCatalog,
+  PageWidth,
+  SiteFooter,
+  StorefrontHero,
+  TopCashback,
+  useCatalog,
+} from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
-import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, Brand, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset, Brand, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
+import { useMarket } from '@/hooks/use-market';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { socialSignIn } from '@/native/social-sign-in';
-import type { SocialProvider } from '@/session/social-sign-in';
 import { network } from '@/stellar/network';
 import { SmartWallet } from '@/wallet/smart-wallet';
 
-type Screen = 'loading' | 'email' | 'code' | 'no-wallet' | 'wallet';
+type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'wallet';
 
-const preWalletScreens: Screen[] = ['loading', 'email', 'code'];
+const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
 export default function HomeScreen() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>('loading');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const { view, refresh } = useHoldings(wallet);
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
@@ -44,6 +52,7 @@ export default function HomeScreen() {
   const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
   const walletLoadStarted = useRef(false);
   const homeFocused = useRef(false);
+  const { wide } = usePageLayout();
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -68,22 +77,28 @@ export default function HomeScreen() {
     }
   }, [showWallet, openActiveOrder]);
 
+  const loadProfileCountry = useCallback(async () => {
+    const profile = await ctx.me().catch(() => null);
+    setProfileCountry(profile && !profile.needsSetup() ? profile.country : undefined);
+  }, []);
+
   const readSession = useCallback(async () => {
     try {
       if (await ctx.isSignedIn()) {
         if (preWalletScreens.includes(screen) && !walletLoadStarted.current) {
+          loadProfileCountry();
           await loadWallet();
         }
         return;
       }
       walletLoadStarted.current = false;
       setWallet(null);
-      setScreen((current) => (current === 'code' ? current : 'email'));
+      setScreen('signed-out');
     } catch (error) {
       walletLoadStarted.current = false;
       setMessage(errorMessage(error));
     }
-  }, [screen, loadWallet, setMessage]);
+  }, [screen, loadWallet, loadProfileCountry, setMessage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,42 +109,7 @@ export default function HomeScreen() {
       };
     }, [readSession]),
   );
-
-  const requestCode = () =>
-    run(async () => {
-      await ctx.requestCode(email.trim());
-      setScreen('code');
-    });
-
-  const verifyCode = () =>
-    run(async () => {
-      if (!(await ctx.isSignedIn())) {
-        await ctx.verifyCode(email.trim(), code.trim());
-      }
-      await loadWallet();
-    });
-
-  const resendCode = () =>
-    run(async () => {
-      await ctx.requestCode(email.trim());
-      toast('Code sent');
-    });
-
-  const changeEmail = () => {
-    setCode('');
-    setMessage('');
-    setScreen('email');
-  };
-
-  const signInWith = (provider: SocialProvider) =>
-    run(async () => {
-      const idToken = await socialSignIn.idToken(provider);
-      if (!idToken) {
-        return;
-      }
-      await ctx.signInWithOAuth(provider, idToken);
-      await loadWallet();
-    });
+  useOnSignIn(readSession);
 
   const createWallet = () =>
     run(async () => {
@@ -210,8 +190,25 @@ export default function HomeScreen() {
       await refresh();
     });
 
-  const signedIn = screen === 'wallet';
   const theme = useTheme();
+  const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
+
+  if (screen === 'signed-out') {
+    return (
+      <ThemedView style={styles.container}>
+        <StatusBar style="light" />
+        <Animated.View pointerEvents="none" style={backdrop} />
+        <Animated.ScrollView
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.storeScroll}
+          keyboardShouldPersistTaps="handled">
+          <SignedOutStore onOpen={openMerchant} />
+        </Animated.ScrollView>
+        <Animated.View pointerEvents="none" style={scrim} />
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -227,7 +224,7 @@ export default function HomeScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={Brand.onRoyal} />
           ) : undefined
         }>
-        <HomePanel view={screen === 'wallet' ? view : null} signedIn={signedIn || screen === 'loading'}>
+        <HomePanel view={screen === 'wallet' ? view : null}>
           {screen === 'wallet' && wallet && (
             <HomeActions
               depositOpen={depositOpen}
@@ -240,7 +237,7 @@ export default function HomeScreen() {
           )}
         </HomePanel>
 
-        <View style={styles.content}>
+        <View style={[styles.content, wide && styles.contentWide]}>
           {screen === 'wallet' && wallet && depositOpen && (
             <Animated.View
               entering={FadeInDown.duration(Motion.state)}
@@ -259,69 +256,8 @@ export default function HomeScreen() {
             </Animated.View>
           )}
 
-          {screen === 'email' && (
-            <Animated.View entering={FadeIn.duration(Motion.state)} style={styles.sheet}>
-              <ThemedText type="subtitle">Sign in to Loop</ThemedText>
-              <SocialSignInButtons
-                providers={socialSignIn.providers()}
-                disabled={busy}
-                onPress={signInWith}
-              />
-              <Field
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email"
-                keyboardType="email-address"
-                autoComplete="email"
-                textContentType="emailAddress"
-                returnKeyType="send"
-                onSubmitEditing={() => email.trim() && !busy && requestCode()}
-              />
-              <Button
-                label={busy ? 'Sending code…' : 'Send code'}
-                variant="primary"
-                onPress={requestCode}
-                disabled={busy || !email.trim()}
-              />
-            </Animated.View>
-          )}
-
-          {screen === 'code' && (
-            <Animated.View entering={FadeIn.duration(Motion.state)} style={styles.sheet}>
-              <ThemedText type="subtitle">Check your email</ThemedText>
-              <ThemedText themeColor="textSecondary">
-                We sent a code to {email.trim()}. Enter it below.
-              </ThemedText>
-              <Field
-                value={code}
-                onChangeText={setCode}
-                placeholder="Code"
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={() => code.trim() && !busy && verifyCode()}
-              />
-              <Button
-                label={busy ? 'Signing in…' : 'Sign in'}
-                variant="primary"
-                onPress={verifyCode}
-                disabled={busy || !code.trim()}
-              />
-              <View style={styles.row}>
-                <View style={styles.rowItem}>
-                  <Button label="Resend code" variant="quiet" onPress={resendCode} disabled={busy} />
-                </View>
-                <View style={styles.rowItem}>
-                  <Button label="Change email" variant="quiet" onPress={changeEmail} disabled={busy} />
-                </View>
-              </View>
-            </Animated.View>
-          )}
-
           {screen === 'no-wallet' && (
-            <Animated.View entering={FadeIn.duration(Motion.state)} style={styles.sheet}>
+            <Animated.View entering={FadeIn.duration(Motion.state)} style={[styles.sheet, styles.form]}>
               <ThemedText type="subtitle">Set up your wallet</ThemedText>
               <ThemedText themeColor="textSecondary">
                 Your wallet holds your money and cashback. A passkey on this device keeps it
@@ -340,25 +276,79 @@ export default function HomeScreen() {
             <HomeGiftCards refreshKey={giftCardsRefreshKey} onOpen={(slug) => router.push(`/shop/${slug}`)} />
           )}
 
-          {(screen === 'email' || screen === 'code') && (
-            <ThemedText type="small" themeColor="textSecondary">
-              By continuing you agree to Loop&apos;s{' '}
-              <ExternalLink href={loopLinks.terms} style={styles.link}>
-                Terms
-              </ExternalLink>{' '}
-              and{' '}
-              <ExternalLink href={loopLinks.privacy} style={styles.link}>
-                Privacy Policy
-              </ExternalLink>
-              .
-            </ThemedText>
-          )}
-
           {message !== '' && <Notice message={message} />}
+
+          {wide && screen === 'wallet' && profileCountry && (
+            <SignedInStore country={profileCountry} onOpen={openMerchant} />
+          )}
         </View>
+        {wide && <SiteFooter />}
       </Animated.ScrollView>
       <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
+  );
+}
+
+function SignedOutStore({ onOpen }: { onOpen: (merchant: Merchant) => void }) {
+  const router = useRouter();
+  const { country } = useMarket();
+  const { wide } = usePageLayout();
+  const catalog = useCatalog(country);
+  const [search, setSearch] = useState('');
+  const searchShop = () => {
+    const q = search.trim();
+    if (q) {
+      router.navigate({ pathname: '/shop', params: { q } });
+    }
+  };
+  return (
+    <>
+      <StorefrontHero
+        catalog={catalog}
+        country={country}
+        search={search}
+        onSearch={setSearch}
+        onSubmitSearch={searchShop}
+        onOpen={onOpen}
+        accessory={
+          wide ? null : (
+            <View style={styles.heroActions}>
+              <CountryMenu />
+              <SignInButton />
+            </View>
+          )
+        }
+      />
+      <PageWidth style={styles.storeBody}>
+        <TopCashback catalog={catalog} onOpen={onOpen} />
+        <MerchantCatalog
+          country={country}
+          categories={catalog?.categories ?? []}
+          search={search}
+          onSearch={setSearch}
+          onOpen={onOpen}
+        />
+      </PageWidth>
+      <HowLoopWorks />
+      <SiteFooter />
+    </>
+  );
+}
+
+function SignedInStore({ country, onOpen }: { country: string; onOpen: (merchant: Merchant) => void }) {
+  const catalog = useCatalog(country);
+  const [search, setSearch] = useState('');
+  return (
+    <View style={styles.signedInStore}>
+      <TopCashback catalog={catalog} onOpen={onOpen} />
+      <MerchantCatalog
+        country={country}
+        categories={catalog?.categories ?? []}
+        search={search}
+        onSearch={setSearch}
+        onOpen={onOpen}
+      />
+    </View>
   );
 }
 
@@ -369,6 +359,18 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: BottomTabInset + Spacing.five,
   },
+  storeScroll: {
+    paddingBottom: BottomTabInset,
+  },
+  storeBody: {
+    paddingVertical: Spacing.six,
+    gap: Spacing.six,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
   content: {
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -377,21 +379,24 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.four,
     gap: Spacing.four,
   },
+  contentWide: {
+    maxWidth: Layout.pageMaxWidth,
+    paddingHorizontal: Layout.wideGutter,
+    paddingBottom: Spacing.six,
+  },
+  signedInStore: {
+    paddingTop: Spacing.five,
+    gap: Spacing.six,
+  },
   sheet: {
     gap: Spacing.three,
+  },
+  form: {
+    maxWidth: Layout.formMaxWidth,
   },
   deposit: {
     padding: Spacing.three,
     borderRadius: Radius.control,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  rowItem: {
-    flex: 1,
-  },
-  link: {
-    textDecorationLine: 'underline',
+    maxWidth: Layout.formMaxWidth * 1.5,
   },
 });

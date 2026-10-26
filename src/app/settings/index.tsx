@@ -13,6 +13,7 @@ import { Button, Notice } from '@/components/form';
 import { useScrimScroll } from '@/components/home-panel';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
+import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -56,6 +57,8 @@ export default function SettingsScreen() {
     }, [loadAccount]),
   );
   useAppRefresh(loadAccount);
+  useOnSignIn(loadAccount);
+  const { openSignIn, check } = useSignIn();
 
   const chooseCountry = (choice: CountryChoice) =>
     run(async () => {
@@ -68,6 +71,7 @@ export default function SettingsScreen() {
       await ctx.signOut();
       setSignedIn(false);
       setProfile(null);
+      await check();
       router.navigate('/');
     });
 
@@ -131,7 +135,7 @@ export default function SettingsScreen() {
           {signedIn === false && (
             <View style={styles.signedOut}>
               <ThemedText type="heading">You&apos;re signed out</ThemedText>
-              <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
+              <Button label="Sign in" variant="primary" onPress={() => openSignIn()} />
             </View>
           )}
 

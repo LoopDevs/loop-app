@@ -1,23 +1,27 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { CountryMenu } from '@/components/country-menu';
 import { CountryPicker } from '@/components/country-picker';
 import { Button, Field, Notice } from '@/components/form';
 import { useScrimScroll } from '@/components/home-panel';
 import { MerchantStrip, MerchantTile } from '@/components/merchant-tile';
 import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/press-scale';
+import { useOnSignIn } from '@/components/sign-in';
 import { MerchantGridSkeleton } from '@/components/skeleton';
+import { MerchantCatalog, PageWidth, SiteFooter, TopCashback, useCatalog } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
   BottomTabInset,
   Brand,
   FontFamily,
+  Layout,
   MaxContentWidth,
   Motion,
   Radius,
@@ -29,6 +33,8 @@ import type { CountryChoice } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
+import { useMarket } from '@/hooks/use-market';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -72,8 +78,10 @@ export default function ShopScreen() {
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
-  const [search, setSearch] = useState('');
+  const { q } = useLocalSearchParams<{ q?: string }>();
+  const [search, setSearch] = useState(q ?? '');
   const [query, setQuery] = useState('');
+  const { columns, wide, gutter } = usePageLayout();
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
@@ -108,6 +116,15 @@ export default function ShopScreen() {
     }, [loadAccount]),
   );
   useAppRefresh(loadAccount);
+  useOnSignIn(loadAccount);
+
+  const [linkedQuery, setLinkedQuery] = useState(q);
+  if (q !== linkedQuery) {
+    setLinkedQuery(q);
+    if (q !== undefined) {
+      setSearch(q);
+    }
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => setQuery(search.trim()), searchDelayMs);
@@ -208,15 +225,7 @@ export default function ShopScreen() {
   );
 
   if (signedIn === false) {
-    return (
-      <SimplePage title="Shop">
-        <ThemedText type="heading">Sign in to shop gift cards</ThemedText>
-        <ThemedText themeColor="textSecondary">
-          Every gift card you buy with Loop earns cashback.
-        </ThemedText>
-        <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
-      </SimplePage>
-    );
+    return <SignedOutShop initialSearch={search} onOpen={openMerchant} />;
   }
 
   if (!profile) {
@@ -249,11 +258,12 @@ export default function ShopScreen() {
       <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.FlatList
         data={merchants}
+        key={columns}
         keyExtractor={(merchant) => merchant.id}
-        numColumns={2}
+        numColumns={columns}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        columnWrapperStyle={styles.columns}
+        columnWrapperStyle={[styles.columns, wide && { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter }]}
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -337,11 +347,43 @@ export default function ShopScreen() {
                     .delay((index % merchantsPerPage < staggeredTiles ? index % merchantsPerPage : 0) * Motion.stagger)
                     .easing(Motion.easeOut)
             }
-            style={styles.cell}>
+            style={[styles.cell, { maxWidth: `${100 / columns}%` }]}>
             <MerchantTile merchant={item} onPress={() => openMerchant(item)} />
           </Animated.View>
         )}
       />
+      <Animated.View pointerEvents="none" style={scrim} />
+    </ThemedView>
+  );
+}
+
+function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpen: (merchant: Merchant) => void }) {
+  const { country } = useMarket();
+  const catalog = useCatalog(country);
+  const [search, setSearch] = useState(initialSearch);
+  const { onScroll, scrim, backdrop } = useScrimScroll();
+  return (
+    <ThemedView style={styles.container}>
+      <StatusBar style="light" />
+      <Animated.View pointerEvents="none" style={backdrop} />
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.simpleContent}
+        keyboardShouldPersistTaps="handled">
+        <PageHeader title="Shop" accessory={<CountryMenu />} />
+        <PageWidth style={styles.storeBody}>
+          {search.trim() === '' && <TopCashback catalog={catalog} onOpen={onOpen} />}
+          <MerchantCatalog
+            country={country}
+            categories={catalog?.categories ?? []}
+            search={search}
+            onSearch={setSearch}
+            onOpen={onOpen}
+          />
+        </PageWidth>
+        <SiteFooter />
+      </Animated.ScrollView>
       <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
   );
@@ -464,7 +506,10 @@ const styles = StyleSheet.create({
   },
   cell: {
     flex: 1,
-    maxWidth: '50%',
+  },
+  storeBody: {
+    paddingVertical: Spacing.five,
+    gap: Spacing.six,
   },
   countryButton: {
     flexDirection: 'row',

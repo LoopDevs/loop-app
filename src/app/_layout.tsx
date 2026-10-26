@@ -11,12 +11,14 @@ import AppTabs from '@/components/app-tabs';
 import { CrashFallback } from '@/components/crash-fallback';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceUnavailable } from '@/components/service-unavailable';
+import { SignInProvider } from '@/components/sign-in';
 import { ToastProvider } from '@/components/toast';
 import { FontAssets } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { BlockingServiceState } from '@/ctx/service-state';
 import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MarketProvider } from '@/hooks/use-market';
 import { useAppSwitcherProtection } from '@/native/screen-privacy';
 import { errorReporting } from '@/ops/error-reporting';
 import { useUpdateChecks } from '@/updates/use-update-checks';
@@ -46,8 +48,16 @@ export default function TabLayout() {
       <ErrorBoundary fallback={({ resetError }) => <CrashFallback onRetry={resetError} />}>
         <AppLockProvider>
           <ToastProvider>
-            {blocked ? <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} /> : <AppTabs />}
-            <OfflineBanner />
+            <MarketProvider>
+              <SignInProvider>
+                {blocked ? (
+                  <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} />
+                ) : (
+                  <AppTabs />
+                )}
+                <OfflineBanner />
+              </SignInProvider>
+            </MarketProvider>
           </ToastProvider>
         </AppLockProvider>
       </ErrorBoundary>

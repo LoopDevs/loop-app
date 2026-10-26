@@ -10,6 +10,7 @@ import { statusTone } from '@/components/gift-card-details';
 import { useScrimScroll } from '@/components/home-panel';
 import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/press-scale';
+import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -89,6 +90,8 @@ export default function OrdersScreen() {
 
   useFocusEffect(reloadUnlessPaged);
   useAppRefresh(reloadUnlessPaged);
+  useOnSignIn(reload);
+  const { openSignIn } = useSignIn();
 
   const canLoadMore = page > 0 && page < pages;
 
@@ -135,7 +138,7 @@ export default function OrdersScreen() {
                 title="Sign in to see your orders"
                 detail="Gift cards you buy show here with their codes."
                 action="Sign in"
-                onAction={() => router.navigate('/')}
+                onAction={() => openSignIn('Sign in to see your orders and gift card codes.')}
               />
             ) : loading ? (
               <OrderRowsSkeleton />

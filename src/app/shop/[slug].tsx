@@ -14,11 +14,13 @@ import { OrderDetailSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import { BottomTabInset, Brand, FontFamily, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { useOnSignIn, useSignIn } from '@/components/sign-in';
+import { BottomTabInset, Brand, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { SmartWallet } from '@/wallet/smart-wallet';
@@ -31,7 +33,10 @@ export default function MerchantScreen() {
   const { busy, message, run } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
   const { favourites, toggle: toggleFavourite } = useFavourites();
+  const { openSignIn } = useSignIn();
+  const { wide, gutter } = usePageLayout();
 
   const loadedSlug = useRef<string | undefined>(undefined);
 
@@ -42,9 +47,14 @@ export default function MerchantScreen() {
           loadedSlug.current = slug;
           setMerchant(null);
         }
-        const [loadedMerchant, loadedWallet] = await Promise.all([ctx.merchant(slug), SmartWallet.load()]);
+        const isSignedIn = await ctx.isSignedIn();
+        const [loadedMerchant, loadedWallet] = await Promise.all([
+          ctx.merchant(slug),
+          isSignedIn ? SmartWallet.load() : null,
+        ]);
         setMerchant(loadedMerchant);
         setWallet(loadedWallet);
+        setSignedIn(isSignedIn);
       }),
     [run, slug],
   );
@@ -54,6 +64,7 @@ export default function MerchantScreen() {
       load();
     }, [load]),
   );
+  useOnSignIn(load);
 
   if (!merchant) {
     return (
@@ -78,6 +89,32 @@ export default function MerchantScreen() {
   const { info } = merchant;
   const websiteUrl = merchant.websiteUrl();
   const favourite = favourites.has(merchant.id);
+  const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and earn ${merchant.rateLabel()}` : '';
+  const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
+
+  const buyCard = wallet ? (
+    <GiftCardPurchase merchant={merchant} wallet={wallet} />
+  ) : signedIn ? (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="heading">Set up your wallet first</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Your wallet pays for gift cards and holds your cashback.
+      </ThemedText>
+      <Button label="Create wallet" variant="primary" onPress={() => router.navigate('/')} />
+    </View>
+  ) : (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="heading">Buy a {merchant.name} gift card</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Sign in to choose an amount{earnLine}. Cashback goes into a wallet only you control.
+      </ThemedText>
+      <Button
+        label="Sign in to buy"
+        variant="primary"
+        onPress={() => openSignIn(`Sign in to buy a ${merchant.name} gift card${earnLine}.`)}
+      />
+    </View>
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -87,12 +124,12 @@ export default function MerchantScreen() {
         <View style={styles.panel}>
           <Animated.View
             entering={reduceMotion ? undefined : FadeIn.duration(Motion.transition).easing(Motion.easeOut)}
-            style={styles.inner}>
-            <View>
+            style={[styles.inner, pageWidth, wide && styles.innerWide]}>
+            <View style={wide && styles.coverWide}>
               <MerchantCover merchant={merchant} />
               <CashbackPill merchant={merchant} />
             </View>
-            <View style={styles.titleRow}>
+            <View style={[styles.titleRow, wide && styles.titleRowWide]}>
               <View style={styles.titleBlock}>
                 <Text style={styles.name} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
                   {merchant.name}
@@ -105,25 +142,20 @@ export default function MerchantScreen() {
               </View>
               <FavouriteButton
                 favourite={favourite}
-                onPress={() => toggleFavourite(merchant.id)}
+                onPress={() =>
+                  signedIn
+                    ? toggleFavourite(merchant.id)
+                    : openSignIn(`Sign in to save ${merchant.name} to your favourites.`)
+                }
               />
             </View>
           </Animated.View>
         </View>
 
-        <View style={styles.content}>
-          {wallet ? (
-            <GiftCardPurchase merchant={merchant} wallet={wallet} />
-          ) : (
-            <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-              <ThemedText type="heading">Set up your wallet first</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Your wallet pays for gift cards and holds your cashback.
-              </ThemedText>
-              <Button label="Create wallet" variant="primary" onPress={() => router.navigate('/')} />
-            </View>
-          )}
+        <View style={[styles.content, pageWidth, wide && styles.contentWide]}>
+          {wide ? <View style={styles.buyColumn}>{buyCard}</View> : buyCard}
 
+          <View style={[styles.details, wide && styles.detailsWide]}>
           {(info?.description || websiteUrl) && (
             <View style={styles.section}>
               <ThemedText type="heading" accessibilityRole="header">
@@ -156,6 +188,7 @@ export default function MerchantScreen() {
               )}
             </View>
           )}
+          </View>
         </View>
       </ScrollView>
     </ThemedView>
@@ -253,6 +286,35 @@ const styles = StyleSheet.create({
     borderRadius: Radius.control,
     padding: Spacing.three,
     gap: Spacing.three,
+  },
+  contentWide: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    paddingTop: Spacing.five,
+    gap: Spacing.six,
+  },
+  buyColumn: {
+    width: Layout.sheetWidth,
+  },
+  details: {
+    gap: Spacing.five,
+  },
+  detailsWide: {
+    flex: 1,
+  },
+  innerWide: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.two,
+    gap: Spacing.five,
+  },
+  coverWide: {
+    width: 360,
+  },
+  titleRowWide: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   section: {
     gap: Spacing.three,

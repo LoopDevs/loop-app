@@ -8,6 +8,7 @@ import { Notice } from '@/components/form';
 import { useScrimScroll } from '@/components/home-panel';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
+import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { OrderRowsSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -32,6 +33,7 @@ const destinationCopy: Record<CashbackDestination, { label: string; detail: stri
 
 const savingsNote = `Loop savings holds ${Profile.currencyLabel(Savings.currency)}. Cashback in another currency stays with Loop; switch to Account to have it paid to your wallet.`;
 
+const signInFailure = 'Sign in to see your cashback.';
 const destinationFooter = 'Your choice applies to future cashback. Cashback already paid out stays where it is.';
 
 export default function CashbackScreen() {
@@ -58,7 +60,7 @@ export default function CashbackScreen() {
         setAccount(null);
       }
       if (!userId) {
-        setFailure('Sign in to see your cashback.');
+        setFailure(signInFailure);
         return;
       }
       const [me, loaded] = await Promise.all([ctx.me(), ctx.account()]);
@@ -79,6 +81,8 @@ export default function CashbackScreen() {
     }, [load]),
   );
   useAppRefresh(load);
+  useOnSignIn(load);
+  const { openSignIn } = useSignIn();
 
   const choose = (destination: CashbackDestination) => {
     const update = profile?.destinationUpdate(destination);
@@ -112,7 +116,16 @@ export default function CashbackScreen() {
 
         {failure !== '' && (
           <View style={styles.section}>
-            <Notice message={failure} actionLabel="Retry" onAction={load} disabled={loading} />
+            {failure === signInFailure ? (
+              <Notice
+                message={failure}
+                tone="neutral"
+                actionLabel="Sign in"
+                onAction={() => openSignIn(signInFailure)}
+              />
+            ) : (
+              <Notice message={failure} actionLabel="Retry" onAction={load} disabled={loading} />
+            )}
           </View>
         )}
 

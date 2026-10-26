@@ -10,8 +10,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Odometer } from '@/components/odometer';
 import { Wordmark } from '@/components/wordmark';
-import { Brand, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Brand, FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
 import type { HoldingsView } from '@/hooks/use-holdings';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
 import { Savings } from '@/wallet/savings';
@@ -46,23 +47,17 @@ const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(16px)' } as obj
 
 type HomePanelProps = {
   view: HoldingsView | null;
-  signedIn: boolean;
   children?: ReactNode;
 };
 
-export function HomePanel({ view, signedIn, children }: HomePanelProps) {
+export function HomePanel({ view, children }: HomePanelProps) {
   const insets = useSafeAreaInsets();
+  const { wide, gutter } = usePageLayout();
   return (
-    <View style={[styles.panel, { paddingTop: insets.top + Spacing.three }]}>
-      <View style={styles.inner}>
-        <Wordmark height={22} />
-        {signedIn ? (
-          <Balance view={view} />
-        ) : (
-          <Text style={styles.pitch} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
-            Gift cards that pay you back.
-          </Text>
-        )}
+    <View style={[styles.panel, { paddingTop: insets.top + (wide ? Spacing.five : Spacing.three) }]}>
+      <View style={[styles.inner, wide && { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter }]}>
+        {!wide && <Wordmark height={22} />}
+        <Balance view={view} />
         {children}
       </View>
     </View>
@@ -128,14 +123,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
     gap: Spacing.four,
-  },
-  pitch: {
-    color: Brand.onRoyal,
-    fontFamily: FontFamily.bold,
-    fontSize: 40,
-    lineHeight: 44,
-    letterSpacing: -1,
-    paddingBottom: Spacing.three,
   },
   balanceBlock: {
     gap: Spacing.three,

@@ -110,3 +110,12 @@ test('merchants sort by the cashback rate shown, overrides included', () => {
     ['overridden', 'high', 'low'],
   );
 });
+
+test('categories list the most common first and skip merchants without any', () => {
+  const merchants = [
+    new Merchant({ ...json, id: 'a', categories: ['food'] }),
+    new Merchant({ ...json, id: 'b', categories: ['fashion', 'food'] }),
+    new Merchant({ ...json, id: 'c' }),
+  ];
+  assert.deepEqual(Merchant.categoriesOf(merchants), ['food', 'fashion']);
+});

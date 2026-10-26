@@ -16,6 +16,7 @@ export class Merchant {
   readonly logoUrl?: string;
   readonly cardImageUrl?: string;
   readonly website?: string;
+  readonly categories: string[];
   readonly info?: GiftCardInfo;
   readonly userDiscount: number;
   readonly link?: MerchantLinkJson;
@@ -31,6 +32,7 @@ export class Merchant {
     this.logoUrl = json.logoUrl;
     this.cardImageUrl = json.cardImageUrl;
     this.website = json.website;
+    this.categories = json.categories ?? [];
     this.info = json.info;
     this.userDiscount = json.userDiscount;
     this.link = json.link;
@@ -53,7 +55,19 @@ export class Merchant {
     return [...merchants].sort((a, b) => b.cashbackBasisPoints() - a.cashbackBasisPoints());
   }
 
-  websiteUrl(): `${string}:${string}` | undefined {
+  static categoriesOf(merchants: Merchant[]): string[] {
+    const counts = new Map<string, number>();
+    for (const category of merchants.flatMap((merchant) => merchant.categories)) {
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([category]) => category);
+  }
+
+  static categoryLabel(category: string): string {
+    return category.charAt(0).toUpperCase() + category.slice(1);
+  }
+
+  websiteUrl():`${string}:${string}` | undefined {
     if (!this.website) {
       return undefined;
     }

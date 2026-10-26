@@ -1,4 +1,4 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -8,6 +8,7 @@ import { Button, Notice } from '@/components/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
 import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
+import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { OrderDetailSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -36,12 +37,17 @@ const signInMessage = 'Sign in to see this order.';
 
 export default function GiftCardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const [giftCard, setGiftCard] = useState<GiftCard | null>(null);
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
   const readSession = useSessionOwner();
   const { onScroll, backdrop } = useScrimScroll();
+  const { openSignIn } = useSignIn();
+  useOnSignIn(() => {
+    setGiftCard(null);
+    setMessage('');
+    setAttempt((count) => count + 1);
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -115,7 +121,7 @@ export default function GiftCardScreen() {
               (message === signInMessage ? (
                 <View style={styles.section}>
                   <ThemedText type="heading">{signInMessage}</ThemedText>
-                  <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
+                  <Button label="Sign in" variant="primary" onPress={() => openSignIn(signInMessage)} />
                 </View>
               ) : (
                 <Notice message={message} actionLabel="Try again" onAction={retry} />
