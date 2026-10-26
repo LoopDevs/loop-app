@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
+import { giftCardStatusLabel } from '@/ctx/gift-card-status';
 
 export default function GiftCardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,7 +29,7 @@ export default function GiftCardScreen() {
             <ThemedText type="smallBold">
               {giftCard.cardFiatAmount} {giftCard.cardFiatCurrency} {giftCard.merchantName}
             </ThemedText>
-            <ThemedText type="small">Status: {giftCard.status}</ThemedText>
+            <ThemedText type="small">{giftCardStatusLabel(giftCard.status)}</ThemedText>
             {giftCard.paymentCryptoAmount && (
               <ThemedText type="small">
                 Paid: {giftCard.paymentCryptoAmount} {giftCard.paymentCryptoCurrency}
