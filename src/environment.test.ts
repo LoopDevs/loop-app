@@ -30,11 +30,6 @@ describe('LoopEnvironment.resolve', () => {
 });
 
 describe('LoopEnvironment naming', () => {
-  it('suffixes storage keys with the environment name', () => {
-    assert.equal(LoopEnvironment.resolve('staging').storageKey('ctx.refreshToken'), 'ctx.refreshToken.staging');
-    assert.equal(LoopEnvironment.resolve('production').storageKey('device.signer.secret'), 'device.signer.secret.production');
-  });
-
   it('marks staging passkeys as test and leaves production unmarked', () => {
     assert.equal(LoopEnvironment.resolve('staging').passkeyLabel('ash@example.com'), 'ash@example.com (test)');
     assert.equal(LoopEnvironment.resolve('production').passkeyLabel('ash@example.com'), 'ash@example.com');

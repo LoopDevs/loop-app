@@ -1,8 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-import { loopEnvironment } from '@/environment';
-
-const enabledKey = loopEnvironment.storageKey('appLock.enabled');
+const enabledKey = 'appLock.enabled';
 
 export const appLockStore = {
   async readEnabled(): Promise<boolean> {

@@ -29,10 +29,6 @@ export class LoopEnvironment {
     throw new Error(`EXPO_PUBLIC_LOOP_ENV must be ${allowed}, got ${value === undefined ? 'nothing' : JSON.stringify(value)}`);
   }
 
-  storageKey(key: string): string {
-    return `${key}.${this.name}`;
-  }
-
   passkeyLabel(label: string): string {
     return `${label}${definitions[this.name].passkeyLabelSuffix}`;
   }

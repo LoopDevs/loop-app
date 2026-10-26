@@ -1,8 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-import { loopEnvironment } from '@/environment';
-
-const refreshTokenKey = loopEnvironment.storageKey('ctx.refreshToken');
+const refreshTokenKey = 'ctx.refreshToken';
 
 export const tokenStore = {
   readRefreshToken(): Promise<string | null> {
