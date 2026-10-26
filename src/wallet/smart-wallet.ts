@@ -234,9 +234,9 @@ export class SmartWallet {
     transaction: string,
     call: SponsoredCall,
   ): Promise<SponsoredResult> {
-    return ctx.sponsorTransaction(this.id, intent, {
-      transaction,
-      ...(await this.sign(call)),
+    const signed = await this.sign(call);
+    return ctx.sponsorTransaction(this.id, intent, { transaction, ...signed }).catch((error: unknown) => {
+      throw Savings.sponsorFailure(error);
     });
   }
 

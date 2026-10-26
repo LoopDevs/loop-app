@@ -24,7 +24,6 @@ import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
-import { units } from '@/stellar/units';
 import { Savings, type DepositInput } from '@/wallet/savings';
 import { UnlinkedDevice } from '@/wallet/smart-wallet';
 
@@ -74,7 +73,7 @@ export default function SavingsScreen() {
       if (!wallet) {
         return;
       }
-      const { sent, outcome } = await Savings.sendDeposit(
+      const { outcome } = await Savings.sendDeposit(
         () => wallet.deposit(amount).catch(reloadIfUnlinked),
         wallet.vaultCall(),
         input,
@@ -83,7 +82,7 @@ export default function SavingsScreen() {
         () => '',
         (error: unknown) => errorMessage(error),
       );
-      const text = Savings.depositMessage(outcome, amount, sent.hash);
+      const text = Savings.depositMessage(outcome, amount);
       if (outcome === 'success' && !refreshError) {
         toast(text);
         setAdding(false);
@@ -255,17 +254,25 @@ type AddToSavingsProps = {
 function AddToSavings({ walletUsdc, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
   const theme = useTheme();
   const [input, setInput] = useState('');
+  const [usedMax, setUsedMax] = useState(false);
   const amount = normalizeAmount(input);
-  const depositAmount = Savings.depositAmount(input, walletUsdc);
-  const allOfIt = units.format(walletUsdc, units.decimals);
+  const depositAmount = Savings.depositAmount(input, walletUsdc, usedMax);
+  const edit = (text: string) => {
+    setUsedMax(false);
+    setInput(text);
+  };
   const deposit = () => {
     if (depositAmount === null) {
       return;
     }
     const sentInput = input;
+    const sentMax = usedMax;
     onDeposit(depositAmount, {
-      clear: () => setInput(''),
-      restore: () => setInput(sentInput),
+      clear: () => edit(''),
+      restore: () => {
+        setUsedMax(sentMax);
+        setInput(sentInput);
+      },
     });
   };
   return (
@@ -278,21 +285,24 @@ function AddToSavings({ walletUsdc, busy, ready, onDeposit, onClose }: AddToSavi
       <Field
         placeholder="Amount in dollars"
         value={input}
-        onChangeText={setInput}
+        onChangeText={edit}
         keyboardType="decimal-pad"
         accessibilityLabel="Amount in dollars"
       />
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
-            <Button label={money.fiat(quick, 'USD')} selected={amount === quick} onPress={() => setInput(quick)} />
+            <Button label={money.fiat(quick, 'USD')} selected={amount === quick} onPress={() => edit(quick)} />
           </View>
         ))}
         <View style={styles.chip}>
           <Button
             label="Max"
-            selected={input !== '' && input === allOfIt}
-            onPress={() => setInput(allOfIt)}
+            selected={usedMax}
+            onPress={() => {
+              setUsedMax(true);
+              setInput(Savings.maxInput(walletUsdc));
+            }}
             disabled={walletUsdc === 0n}
           />
         </View>

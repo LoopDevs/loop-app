@@ -2,6 +2,7 @@ import { scValToNative } from '@stellar/stellar-sdk';
 
 import type { SmartWalletIntent } from '../ctx/client.ts';
 import { normalizeAmount } from '../ctx/amount-input.ts';
+import { CtxError } from '../ctx/ctx-error.ts';
 import { money } from '../money.ts';
 import { network, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
@@ -13,11 +14,22 @@ export type DepositInput = {
   restore(): void;
 };
 
+export type DepositOutcome = VaultCallOutcome | 'unconfirmed';
+
+export class SponsorReplyLost extends Error {
+  constructor(options?: ErrorOptions) {
+    super(Savings.depositUnconfirmedMessage, options);
+  }
+}
+
 export class Savings {
   static readonly currency: PaymentCurrency = 'XLM.USDC';
   static readonly maxYearlyRatePercent = 5;
   static readonly rateHeadline = `Earn up to ${Savings.maxYearlyRatePercent}% a year, variable`;
-  static readonly depositFailedMessage = 'The deposit failed. Your USDC is still in your wallet.';
+  static readonly depositFailedMessage = 'The deposit failed. Your money is still in your balance.';
+  static readonly depositPendingMessage = 'Still confirming. Check back in a minute.';
+  static readonly depositUnconfirmedMessage =
+    'The deposit may still be confirming. Check your savings before trying again.';
 
   static takes(currency: string | undefined): boolean {
     return currency === Savings.currency;
@@ -27,7 +39,14 @@ export class Savings {
     return { intent: 'vault_deposit', currency: Savings.currency, amount: units.format(amount, units.decimals) };
   }
 
-  static depositAmount(input: string, walletUsdc: bigint): bigint | null {
+  static maxInput(walletUsdc: bigint): string {
+    return units.format(walletUsdc, 2);
+  }
+
+  static depositAmount(input: string, walletUsdc: bigint, usedMax = false): bigint | null {
+    if (usedMax) {
+      return walletUsdc > 0n ? walletUsdc : null;
+    }
     const normalized = normalizeAmount(input);
     if (normalized === null) {
       return null;
@@ -41,14 +60,16 @@ export class Savings {
     return amount > 0n && amount <= walletUsdc ? amount : null;
   }
 
-  static depositMessage(outcome: VaultCallOutcome, amount: bigint, hash: string): string {
+  static depositMessage(outcome: DepositOutcome, amount: bigint): string {
     switch (outcome) {
       case 'success':
-        return `Added ${money.payment(units.format(amount, units.decimals), Savings.currency)} to savings`;
+        return `Added ${money.token(amount, Savings.currency)} to savings`;
       case 'failed':
         return Savings.depositFailedMessage;
       case 'pending':
-        return `Deposit sent, still confirming.\n${hash}`;
+        return Savings.depositPendingMessage;
+      case 'unconfirmed':
+        return Savings.depositUnconfirmedMessage;
     }
   }
 
@@ -56,14 +77,30 @@ export class Savings {
     send: () => Promise<SentVaultCall>,
     vaultCall: VaultCall,
     input: DepositInput,
-  ): Promise<{ sent: SentVaultCall; outcome: VaultCallOutcome }> {
-    const sent = await send();
+  ): Promise<{ outcome: DepositOutcome }> {
+    let sent: SentVaultCall;
+    try {
+      sent = await send();
+    } catch (error) {
+      if (error instanceof SponsorReplyLost) {
+        input.clear();
+        return { outcome: 'unconfirmed' };
+      }
+      throw error;
+    }
     input.clear();
     const outcome = await vaultCall.settle(sent);
     if (outcome === 'failed') {
       input.restore();
     }
-    return { sent, outcome };
+    return { outcome };
+  }
+
+  static sponsorFailure(error: unknown): Error {
+    if (error instanceof CtxError) {
+      return error;
+    }
+    return new SponsorReplyLost({ cause: error });
   }
 
   static requireDeposit(call: AuthorizedCall, wallet: string, amount: bigint): void {
