@@ -12,12 +12,14 @@ import { ctx } from '@/ctx/client';
 import type { BlockingServiceState } from '@/ctx/service-state';
 import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
 import { useAppSwitcherProtection } from '@/native/screen-privacy';
+import { useUpdateChecks } from '@/updates/use-update-checks';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [blocked, setBlocked] = useState<BlockingServiceState | null>(null);
   useAppRefreshTriggers();
   useAppSwitcherProtection();
+  useUpdateChecks();
   useEffect(() => ctx.onServiceState(setBlocked), []);
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
