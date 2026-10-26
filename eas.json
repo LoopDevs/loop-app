@@ -16,8 +16,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_CTX_API_URL": "https://staging.spend.ctx.com",
-        "EXPO_PUBLIC_STELLAR_NETWORK": "testnet"
+        "EXPO_PUBLIC_LOOP_ENV": "staging"
       }
     },
     "preview": {
@@ -28,8 +27,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_CTX_API_URL": "https://staging.spend.ctx.com",
-        "EXPO_PUBLIC_STELLAR_NETWORK": "testnet"
+        "EXPO_PUBLIC_LOOP_ENV": "staging"
       }
     },
     "production": {
@@ -41,8 +39,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_CTX_API_URL": "https://spend.ctx.com",
-        "EXPO_PUBLIC_STELLAR_NETWORK": "mainnet"
+        "EXPO_PUBLIC_LOOP_ENV": "production"
       }
     }
   },

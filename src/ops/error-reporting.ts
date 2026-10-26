@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/react-native';
 
+import { loopEnvironment } from '@/environment';
 import { SentryScrubber } from '@/ops/sentry-scrubber';
 
 const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
@@ -13,7 +14,7 @@ export const errorReporting = {
     }
     Sentry.init({
       dsn,
-      environment: process.env.EXPO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet',
+      environment: loopEnvironment.name,
       sendDefaultPii: false,
       tracesSampleRate: 0,
       enableNetworkBreadcrumbs: false,
