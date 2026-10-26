@@ -14,7 +14,7 @@ import {
 } from '@/session/social-sign-in';
 
 const config = new SocialSignInConfig({
-  appleClientId: process.env.EXPO_PUBLIC_APPLE_CLIENT_ID,
+  appleSignIn: process.env.EXPO_PUBLIC_APPLE_SIGN_IN,
   googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
 });

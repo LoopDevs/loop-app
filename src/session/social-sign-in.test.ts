@@ -9,21 +9,28 @@ import {
 } from './social-sign-in.ts';
 
 const allIds = new SocialSignInConfig({
-  appleClientId: 'io.loopfinance.app',
+  appleSignIn: 'true',
   googleWebClientId: '111-web.apps.googleusercontent.com',
   googleIosClientId: '222-ios.apps.googleusercontent.com',
 });
 
 test('no client ids shows only email sign-in everywhere', () => {
-  const none = new SocialSignInConfig({ appleClientId: ' ', googleWebClientId: '' });
+  const none = new SocialSignInConfig({ appleSignIn: ' ', googleWebClientId: '' });
   for (const platform of ['ios', 'android', 'web']) {
     assert.deepEqual(none.providers(platform), []);
   }
 });
 
+test('Apple sign-in is on only when the flag is true', () => {
+  for (const appleSignIn of [undefined, '', 'false', '0', 'io.loopfinance.app']) {
+    assert.deepEqual(new SocialSignInConfig({ appleSignIn }).providers('ios'), []);
+  }
+  assert.deepEqual(new SocialSignInConfig({ appleSignIn: ' true ' }).providers('ios'), ['apple']);
+});
+
 test('iOS shows Apple, and Google only beside Apple', () => {
   assert.deepEqual(allIds.providers('ios'), ['apple', 'google']);
-  const appleOnly = new SocialSignInConfig({ appleClientId: 'io.loopfinance.app' });
+  const appleOnly = new SocialSignInConfig({ appleSignIn: 'true' });
   assert.deepEqual(appleOnly.providers('ios'), ['apple']);
   const googleOnly = new SocialSignInConfig({
     googleWebClientId: '111-web.apps.googleusercontent.com',
@@ -34,7 +41,7 @@ test('iOS shows Apple, and Google only beside Apple', () => {
 
 test('iOS needs the iOS client id for Google', () => {
   const noIosId = new SocialSignInConfig({
-    appleClientId: 'io.loopfinance.app',
+    appleSignIn: 'true',
     googleWebClientId: '111-web.apps.googleusercontent.com',
   });
   assert.deepEqual(noIosId.providers('ios'), ['apple']);
@@ -42,7 +49,7 @@ test('iOS needs the iOS client id for Google', () => {
 
 test('Android shows Google with the web client id and never Apple', () => {
   assert.deepEqual(allIds.providers('android'), ['google']);
-  const appleOnly = new SocialSignInConfig({ appleClientId: 'io.loopfinance.app' });
+  const appleOnly = new SocialSignInConfig({ appleSignIn: 'true' });
   assert.deepEqual(appleOnly.providers('android'), []);
 });
 
