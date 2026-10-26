@@ -1,3 +1,4 @@
+import { ctxReportMessage } from '@/ctx/ctx-report';
 import { Merchant } from '@/ctx/merchant';
 import { rateLimitedMessage } from '@/ctx/payment-state';
 import { Profile } from '@/ctx/profile';
@@ -7,6 +8,7 @@ import {
   serviceStateMessages,
   type BlockingServiceState,
 } from '@/ctx/service-state';
+import { errorReporting } from '@/ops/error-reporting';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -475,6 +477,10 @@ class CtxClient {
       const blocking = blockingServiceState(error.errorName());
       if (blocking) {
         this.serviceStateListener?.(blocking);
+      }
+      const report = ctxReportMessage(response.status, error.errorName());
+      if (report) {
+        errorReporting.reportMessage(report);
       }
       throw error;
     }
