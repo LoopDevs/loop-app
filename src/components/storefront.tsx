@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import {
   Platform,
   Pressable,
@@ -23,12 +23,13 @@ import { loopLinks } from '@/constants/loop-links';
 import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx, type MerchantPage, type MerchantQuery } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
+import { CategoryTally, MerchantPaging } from '@/ctx/merchant-paging';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { Savings } from '@/wallet/savings';
 
-const catalogScanSize = 500;
+const catalogTopSize = 10;
 const heroPhoto = require('@/assets/images/home-shopping.jpg');
 const catalogPageSize = 24;
 const searchDelayMs = 300;
@@ -39,7 +40,6 @@ const suggestionDelayMs = 120;
 
 export type Catalog = {
   top: Merchant[];
-  categories: string[];
   total: number;
 };
 
@@ -47,6 +47,17 @@ const catalogRequests = new Map<string, Promise<Catalog>>();
 const loadedCatalogs = new Map<string, Catalog>();
 const loadedMerchants = new Map<string, Merchant>();
 const loadedPages = new Map<string, MerchantPage>();
+const categoryTallies = new Map<string, CategoryTally>();
+
+export function loadedCategories(country: string): string[] {
+  return categoryTallies.get(country)?.list() ?? [];
+}
+
+function tallyCategories(country: string, merchants: readonly Merchant[]) {
+  const tally = categoryTallies.get(country) ?? new CategoryTally();
+  tally.add(merchants);
+  categoryTallies.set(country, tally);
+}
 
 function rememberMerchants(merchants: readonly Merchant[]) {
   for (const merchant of merchants) {
@@ -85,6 +96,7 @@ export function cachedMerchantPage(query: MerchantQuery): MerchantPage | null {
 export async function loadMerchantPage(query: MerchantQuery): Promise<MerchantPage> {
   const loaded = await ctx.merchants(query);
   rememberMerchants(loaded.result);
+  tallyCategories(query.country, loaded.result);
   loadedPages.set(pageKey(query), loaded);
   return loaded;
 }
@@ -103,7 +115,6 @@ export function loadCatalog(country: string, size: number): Promise<Catalog> {
     .then(({ result, pagination }) => {
       const catalog = {
         top: Merchant.byCashback(result).filter((merchant) => merchant.cashbackBasisPoints() > 0),
-        categories: Merchant.categoriesOf(result),
         total: pagination.total,
       };
       loadedCatalogs.set(key, catalog);
@@ -111,13 +122,13 @@ export function loadCatalog(country: string, size: number): Promise<Catalog> {
     })
     .catch(() => {
       catalogRequests.delete(key);
-      return { top: [], categories: [], total: 0 };
+      return { top: [], total: 0 };
     });
   catalogRequests.set(key, request);
   return request;
 }
 
-export function useCatalog(country: string | undefined, size = catalogScanSize) {
+export function useCatalog(country: string | undefined, size = catalogTopSize) {
   const key = country ? catalogKey(country, size) : null;
   const [loaded, setLoaded] = useState<{ key: string; catalog: Catalog } | null>(() => {
     const cached = key ? loadedCatalogs.get(key) : undefined;
@@ -533,14 +544,15 @@ function SectionHeading({ title, detail, accessory }: { title: string; detail?: 
 
 type CatalogProps = {
   country: string;
-  categories: string[];
   search: string;
   onSearch: (text: string) => void;
   onOpen: (merchant: Merchant) => void;
+  loadMoreRef: MutableRefObject<(() => void) | null>;
 };
 
-export function MerchantCatalog({ country, categories, search, onSearch, onOpen }: CatalogProps) {
-  const { wide } = usePageLayout();
+export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef }: CatalogProps) {
+  const { wide, columns } = usePageLayout();
+  const categories = loadedCategories(country);
   const [query, setQuery] = useState(search.trim());
   const [pickedCategory, setPickedCategory] = useState<{ country: string; category: string | null }>({
     country,
@@ -586,7 +598,7 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
         if (request !== latestRequest.current) {
           return;
         }
-        setMerchants((shown) => (next === 1 ? result : [...shown, ...result]));
+        setMerchants((shown) => MerchantPaging.merge(shown, result, next));
         setPage(next);
         setPages(pagination.pages);
         setTotal(pagination.total);
@@ -597,6 +609,18 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
   useEffect(() => {
     load(1);
   }, [load]);
+
+  useEffect(() => {
+    loadMoreRef.current = () => {
+      const next = MerchantPaging.nextPage(page, pages, busy || message !== '');
+      if (next) {
+        load(next);
+      }
+    };
+    return () => {
+      loadMoreRef.current = null;
+    };
+  }, [loadMoreRef, load, page, pages, busy, message]);
 
   const searching = query !== '';
   const firstLoad = page === 0 && busy;
@@ -633,7 +657,10 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
       {firstLoad ? (
         <MerchantGrid merchants={Array.from({ length: 12 }, () => null)} onOpen={onOpen} stagger={false} />
       ) : merchants.length > 0 ? (
-        <MerchantGrid merchants={merchants} onOpen={onOpen} />
+        <MerchantGrid
+          merchants={busy && page > 0 ? [...merchants, ...Array.from({ length: columns }, () => null)] : merchants}
+          onOpen={onOpen}
+        />
       ) : message === '' && page > 0 ? (
         <View style={styles.empty}>
           <ThemedText type="heading">{searching ? 'No matches' : 'No gift cards here yet'}</ThemedText>
@@ -651,15 +678,6 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
       ) : null}
       {message !== '' && (
         <Notice message={message} actionLabel="Try again" onAction={() => load(retryPage.current)} disabled={busy} />
-      )}
-      {page > 0 && page < pages && (
-        <View style={styles.more}>
-          <Button
-            label={busy ? 'Loading gift cards…' : 'Show more gift cards'}
-            onPress={() => load(page + 1)}
-            disabled={busy}
-          />
-        </View>
       )}
     </View>
   );
@@ -1094,10 +1112,6 @@ const styles = StyleSheet.create({
   inlineButton: {
     alignSelf: 'flex-start',
     paddingTop: Spacing.two,
-  },
-  more: {
-    alignSelf: 'center',
-    minWidth: 240,
   },
   band: {
     width: '100%',
