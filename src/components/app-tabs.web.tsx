@@ -12,10 +12,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CountryMenu } from '@/components/country-menu';
 import { SignInButton, useSignIn } from '@/components/sign-in';
-import { SearchBar } from '@/components/storefront';
+import { MerchantSearch } from '@/components/storefront';
 import { Wordmark } from '@/components/wordmark';
 import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useMarket } from '@/hooks/use-market';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
@@ -111,6 +112,7 @@ function HomeLink() {
 
 function HeaderSearch() {
   const router = useRouter();
+  const { country } = useMarket();
   const [search, setSearch] = useState('');
   const submit = () => {
     const q = search.trim();
@@ -118,7 +120,13 @@ function HeaderSearch() {
   };
   return (
     <View style={styles.search}>
-      <SearchBar value={search} onChangeText={setSearch} onSubmit={submit} />
+      <MerchantSearch
+        country={country}
+        value={search}
+        onChangeText={setSearch}
+        onSubmit={submit}
+        onOpen={(merchant) => router.push(`/shop/${merchant.slug}`)}
+      />
     </View>
   );
 }

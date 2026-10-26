@@ -136,6 +136,26 @@ test('a fixed merchant has no range and no quick amounts', () => {
   assert.deepEqual(fixed.quickAmounts(), []);
 });
 
+test('search matches rank name starts, then word starts, then anywhere', () => {
+  const named = (id: string, name: string, userDiscount = 0) => new Merchant({ ...json, id, name, userDiscount });
+  const merchants = [
+    named('a', 'Banana Republic'),
+    named('b', 'Old Navy'),
+    named('c', 'Navyfield'),
+    named('d', 'Café Navy', 500),
+  ];
+  assert.deepEqual(
+    Merchant.matching(merchants, ' NAVY ', 10).map((merchant) => merchant.id),
+    ['c', 'd', 'b'],
+  );
+  assert.deepEqual(
+    Merchant.matching(merchants, 'cafe', 10).map((merchant) => merchant.id),
+    ['d'],
+  );
+  assert.deepEqual(Merchant.matching(merchants, 'an', 1).map((merchant) => merchant.id), ['a']);
+  assert.deepEqual(Merchant.matching(merchants, '  ', 10), []);
+});
+
 test('quick amounts fall inside the range', () => {
   assert.deepEqual(new Merchant(json).quickAmounts(), ['10', '25', '50', '100']);
   assert.deepEqual(new Merchant({ ...json, denominationValues: ['30', '150'] }).quickAmounts(), ['50', '100']);

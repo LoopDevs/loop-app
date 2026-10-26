@@ -59,6 +59,49 @@ export class Merchant {
     return [...merchants].sort((a, b) => b.cashbackBasisPoints() - a.cashbackBasisPoints());
   }
 
+  static matching(merchants: Iterable<Merchant>, query: string, limit: number): Merchant[] {
+    const needle = Merchant.searchKey(query);
+    if (!needle) {
+      return [];
+    }
+    const ranked = new Map<string, { merchant: Merchant; rank: number }>();
+    for (const merchant of merchants) {
+      const rank = merchant.matchRank(needle);
+      if (rank !== null && !ranked.has(merchant.id)) {
+        ranked.set(merchant.id, { merchant, rank });
+      }
+    }
+    return [...ranked.values()]
+      .sort(
+        (a, b) =>
+          a.rank - b.rank ||
+          b.merchant.cashbackBasisPoints() - a.merchant.cashbackBasisPoints() ||
+          a.merchant.name.localeCompare(b.merchant.name),
+      )
+      .slice(0, limit)
+      .map(({ merchant }) => merchant);
+  }
+
+  private static searchKey(text: string): string {
+    return text
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  private matchRank(needle: string): number | null {
+    const name = Merchant.searchKey(this.name);
+    if (name.startsWith(needle)) {
+      return 0;
+    }
+    const at = name.indexOf(needle);
+    if (at === -1) {
+      return null;
+    }
+    return /[a-z0-9]/.test(name.charAt(at - 1)) ? 2 : 1;
+  }
+
   static categoriesOf(merchants: Merchant[]): string[] {
     const counts = new Map<string, number>();
     for (const category of merchants.flatMap((merchant) => merchant.categories)) {

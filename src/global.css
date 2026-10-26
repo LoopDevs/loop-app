@@ -26,6 +26,10 @@ body {
   outline-offset: 2px;
 }
 
+[role='searchbox']:focus-visible {
+  outline: none;
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     background-color: #0d0f12;

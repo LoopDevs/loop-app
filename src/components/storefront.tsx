@@ -1,7 +1,15 @@
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputKeyPressEvent,
+} from 'react-native';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
@@ -14,7 +22,6 @@ import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
 import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx, type MerchantPage, type MerchantQuery } from '@/ctx/client';
-import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -26,8 +33,12 @@ const heroPhoto = require('@/assets/images/home-shopping.jpg');
 const catalogPageSize = 24;
 const searchDelayMs = 300;
 const cardHeight = 230;
+const suggestionLimit = 6;
+const suggestionScanSize = 20;
+const suggestionDelayMs = 120;
 
 export type Catalog = {
+  merchants: Merchant[];
   top: Merchant[];
   categories: string[];
   total: number;
@@ -87,6 +98,7 @@ export function loadCatalog(country: string): Promise<Catalog> {
   const request = loadMerchantPage({ country, perPage: catalogScanSize })
     .then(({ result, pagination }) => {
       const catalog = {
+        merchants: result,
         top: Merchant.byCashback(result).filter((merchant) => merchant.cashbackBasisPoints() > 0),
         categories: Merchant.categoriesOf(result),
         total: pagination.total,
@@ -96,7 +108,7 @@ export function loadCatalog(country: string): Promise<Catalog> {
     })
     .catch(() => {
       catalogRequests.delete(country);
-      return { top: [], categories: [], total: 0 };
+      return { merchants: [], top: [], categories: [], total: 0 };
     });
   catalogRequests.set(country, request);
   return request;
@@ -141,7 +153,7 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
   const theme = useTheme();
   const best = catalog?.top[0];
   return (
-    <View>
+    <View style={styles.hero}>
       <PageWidth style={[styles.heroInner, wide && styles.heroInnerWide]}>
         <Animated.View
           entering={reduceMotion ? undefined : FadeInDown.duration(Motion.transition).easing(Motion.easeOut)}
@@ -157,10 +169,17 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
           </Text>
           <Text style={[styles.heroLine, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
             {best
-              ? `Buy gift cards for the shops you already use and earn up to ${best.rateFigure()} cashback in ${Market.countryName(country)}.`
+              ? `Buy gift cards for the shops you already use and earn up to ${best.rateFigure()} cashback.`
               : 'Buy gift cards for the shops you already use and earn cashback on every card.'}
           </Text>
-          <SearchBar value={search} onChangeText={onSearch} onSubmit={onSubmitSearch} large />
+          <MerchantSearch
+            country={country}
+            value={search}
+            onChangeText={onSearch}
+            onSubmit={onSubmitSearch}
+            onOpen={onOpen}
+            large
+          />
         </Animated.View>
         <HeroPhoto best={best ?? null} onOpen={onOpen} />
       </PageWidth>
@@ -214,25 +233,191 @@ function HeroPhoto({ best, onOpen }: { best: Merchant | null; onOpen: (merchant:
   );
 }
 
+type MerchantSearchProps = {
+  country: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  onSubmit: () => void;
+  onOpen: (merchant: Merchant) => void;
+  large?: boolean;
+};
+
+export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen, large = false }: MerchantSearchProps) {
+  const catalog = useCatalog(country);
+  const remote = useRemoteMatches(country, value);
+  const [focused, setFocused] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const query = value.trim();
+  const suggestions = useMemo(
+    () => Merchant.matching([...(catalog?.merchants ?? []), ...remote], query, suggestionLimit),
+    [catalog, remote, query],
+  );
+  const open = focused && !dismissed && suggestions.length > 0;
+
+  const change = (text: string) => {
+    setHighlight(-1);
+    setDismissed(false);
+    onChangeText(text);
+  };
+
+  const pick = (merchant: Merchant) => {
+    setHighlight(-1);
+    setDismissed(true);
+    onChangeText('');
+    onOpen(merchant);
+  };
+
+  const submit = () => {
+    const picked = open ? suggestions[highlight] : undefined;
+    if (picked) {
+      pick(picked);
+      return;
+    }
+    setDismissed(true);
+    onSubmit();
+  };
+
+  const moveHighlight = (event: TextInputKeyPressEvent) => {
+    const key = event.nativeEvent.key;
+    if (key === 'Escape') {
+      setDismissed(true);
+      setHighlight(-1);
+      return;
+    }
+    if ((key !== 'ArrowDown' && key !== 'ArrowUp') || suggestions.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const step = key === 'ArrowDown' ? 1 : -1;
+    const positions = suggestions.length + 1;
+    setDismissed(false);
+    setHighlight((current) => ((current + 1 + step + positions) % positions) - 1);
+  };
+
+  return (
+    <View style={[styles.merchantSearch, large && styles.merchantSearchLarge, open && styles.merchantSearchOpen]}>
+      <SearchBar
+        value={value}
+        onChangeText={change}
+        onSubmit={submit}
+        onKeyPress={moveHighlight}
+        onFocusChange={setFocused}
+        expanded={open}
+        large={large}
+      />
+      {open && (
+        <SearchSuggestions
+          merchants={suggestions}
+          highlight={highlight}
+          onHighlight={setHighlight}
+          onPick={pick}
+        />
+      )}
+    </View>
+  );
+}
+
+function useRemoteMatches(country: string, text: string): Merchant[] {
+  const name = text.trim();
+  const query = useMemo(() => ({ country, name, perPage: suggestionScanSize }), [country, name]);
+  const searchable = name.length >= 2;
+  const cached = searchable ? cachedMerchantPage(query) : null;
+  const [loaded, setLoaded] = useState<Merchant[]>([]);
+  useEffect(() => {
+    if (!searchable || cached) {
+      return;
+    }
+    let current = true;
+    const timer = setTimeout(() => {
+      loadMerchantPage(query)
+        .then((page) => current && setLoaded(page.result))
+        .catch(() => undefined);
+    }, suggestionDelayMs);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [query, searchable, cached]);
+  return cached ? cached.result : loaded;
+}
+
+type SuggestionsProps = {
+  merchants: Merchant[];
+  highlight: number;
+  onHighlight: (index: number) => void;
+  onPick: (merchant: Merchant) => void;
+};
+
+function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: SuggestionsProps) {
+  const theme = useTheme();
+  return (
+    <Animated.View
+      entering={FadeIn.duration(Motion.feedback)}
+      style={[styles.suggestions, Elevation.raised, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      {merchants.map((merchant, index) => (
+        <Pressable
+          key={merchant.id}
+          {...(Platform.OS === 'web' ? { onPressIn: () => onPick(merchant) } : { onPress: () => onPick(merchant) })}
+          onHoverIn={() => onHighlight(index)}
+          accessibilityRole="button"
+          accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
+          style={[styles.suggestion, index === highlight && { backgroundColor: theme.backgroundSelected }]}>
+          <View style={[styles.suggestionLogo, { borderColor: theme.border }]}>
+            {merchant.logoUrl ? (
+              <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.suggestionLogoImage} />
+            ) : (
+              <View style={[styles.suggestionInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
+                <Text style={styles.suggestionInitialText}>{merchant.initial()}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.suggestionName, { color: theme.text }]} numberOfLines={1}>
+            {merchant.name}
+          </Text>
+          {merchant.cashbackBasisPoints() > 0 && (
+            <Text style={[styles.suggestionRate, { color: theme.accent }]}>{merchant.rateLabel()}</Text>
+          )}
+        </Pressable>
+      ))}
+    </Animated.View>
+  );
+}
+
 type SearchBarProps = {
   value: string;
   onChangeText: (text: string) => void;
   onSubmit?: () => void;
+  onKeyPress?: (event: TextInputKeyPressEvent) => void;
+  onFocusChange?: (focused: boolean) => void;
+  expanded?: boolean;
   large?: boolean;
   placeholder?: string;
 };
 
-export function SearchBar({ value, onChangeText, onSubmit, large = false, placeholder = 'Search gift cards' }: SearchBarProps) {
+function SearchBar({
+  value,
+  onChangeText,
+  onSubmit,
+  onKeyPress,
+  onFocusChange,
+  expanded = false,
+  large = false,
+  placeholder = 'Search gift cards',
+}: SearchBarProps) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
+  const focus = (next: boolean) => {
+    setFocused(next);
+    onFocusChange?.(next);
+  };
   return (
     <View
       style={[
         styles.search,
         large && styles.searchLarge,
-        large && Elevation.raised,
-        { backgroundColor: theme.backgroundElement, borderColor: focused ? theme.accent : theme.border },
-        focused && styles.searchFocused,
+        (large || focused) && Elevation.raised,
+        { backgroundColor: theme.backgroundElement, borderColor: focused ? theme.borderStrong : theme.border },
       ]}>
       <SymbolView
         name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
@@ -243,6 +428,9 @@ export function SearchBar({ value, onChangeText, onSubmit, large = false, placeh
         value={value}
         onChangeText={onChangeText}
         onSubmitEditing={onSubmit}
+        onKeyPress={onKeyPress}
+        role="searchbox"
+        aria-expanded={expanded}
         placeholder={placeholder}
         accessibilityLabel={placeholder}
         placeholderTextColor={theme.textSecondary}
@@ -251,8 +439,8 @@ export function SearchBar({ value, onChangeText, onSubmit, large = false, placeh
         autoCapitalize="none"
         autoCorrect={false}
         clearButtonMode="while-editing"
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={() => focus(true)}
+        onBlur={() => focus(false)}
         style={[styles.searchInput, large && styles.searchInputLarge, { color: theme.text }]}
       />
       {value !== '' && (
@@ -641,8 +829,12 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.six,
     gap: Spacing.six,
   },
+  hero: {
+    zIndex: 1,
+  },
   heroCopy: {
     gap: Spacing.four,
+    zIndex: 2,
   },
   heroCopyWide: {
     flex: 1.25,
@@ -685,15 +877,74 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     paddingHorizontal: Spacing.four,
   },
-  searchFocused: {
-    outlineWidth: 0,
-  },
   searchInput: {
     flex: 1,
     alignSelf: 'stretch',
     fontFamily: FontFamily.regular,
     fontSize: 16,
     outlineWidth: 0,
+  },
+  merchantSearch: {
+    width: '100%',
+  },
+  merchantSearchLarge: {
+    maxWidth: 560,
+  },
+  merchantSearchOpen: {
+    zIndex: 20,
+  },
+  suggestions: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: Spacing.two,
+    borderWidth: 1,
+    borderRadius: Radius.card,
+    padding: Spacing.one,
+    overflow: 'hidden',
+  },
+  suggestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    minHeight: 52,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.control,
+  },
+  suggestionLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionLogoImage: {
+    width: '72%',
+    height: '72%',
+  },
+  suggestionInitial: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionInitialText: {
+    color: '#FFFFFF',
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+  },
+  suggestionName: {
+    flex: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+  },
+  suggestionRate: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
   },
   searchInputLarge: {
     fontSize: 18,
