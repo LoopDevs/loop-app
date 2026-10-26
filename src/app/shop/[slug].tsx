@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
 import { ExternalLink } from '@/components/external-link';
@@ -28,9 +28,15 @@ export default function MerchantScreen() {
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const { favourites, toggle: toggleFavourite } = useFavourites();
 
+  const loadedSlug = useRef<string | undefined>(undefined);
+
   const load = useCallback(
     () =>
       run(async () => {
+        if (loadedSlug.current !== slug) {
+          loadedSlug.current = slug;
+          setMerchant(null);
+        }
         const [loadedMerchant, loadedWallet] = await Promise.all([ctx.merchant(slug), SmartWallet.load()]);
         setMerchant(loadedMerchant);
         setWallet(loadedWallet);
@@ -38,9 +44,11 @@ export default function MerchantScreen() {
     [run, slug],
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   if (!merchant) {
     return (
@@ -73,6 +81,8 @@ export default function MerchantScreen() {
         <ThemedText type="smallBold">{merchant.rateLabel()}</ThemedText>
         <Button
           label={favourites.has(merchant.id) ? '♥ Favourite' : '♡ Add to favourites'}
+          accessibilityLabel={favourites.has(merchant.id) ? 'Remove from favourites' : 'Add to favourites'}
+          selected={favourites.has(merchant.id)}
           onPress={() => toggleFavourite(merchant.id)}
         />
         {websiteUrl && (

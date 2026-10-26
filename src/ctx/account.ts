@@ -2,7 +2,7 @@ import { units } from '../stellar/units.ts';
 import { Savings } from '../wallet/savings.ts';
 import type { AccountJson, BalanceJson } from './client.ts';
 import { Payout } from './payout.ts';
-import type { Profile } from './profile.ts';
+import { Profile } from './profile.ts';
 
 export type OnTheWayItem = {
   key: string;
@@ -16,6 +16,8 @@ export type OnTheWayItem = {
 type CashbackRouting = Pick<Profile, 'stableCurrency' | 'savesCashback'>;
 
 export class Account {
+  static readonly shownUnit = units.parse('0.01');
+
   readonly wallet: BalanceJson[];
   readonly payouts: Payout[];
 
@@ -26,7 +28,7 @@ export class Account {
 
   static hasAmount(amount: string): boolean {
     try {
-      return units.parse(amount) > 0n;
+      return units.parse(amount) >= Account.shownUnit;
     } catch {
       return false;
     }
@@ -62,7 +64,7 @@ export class Account {
       return { ...item, label: 'delayed, contact support' };
     }
     if (balance.currency === 'XLM' && routing.stableCurrency) {
-      return { ...item, label: `converts to ${routing.stableCurrency} when a conversion is available` };
+      return { ...item, label: `converts to ${Profile.currencyLabel(routing.stableCurrency)} when a conversion is available` };
     }
     if (routing.savesCashback() && Savings.takes(balance.currency)) {
       return { ...item, label: 'goes to savings when savings is available' };
@@ -70,7 +72,7 @@ export class Account {
     if (routing.savesCashback()) {
       return {
         ...item,
-        label: `held: Loop savings holds ${Savings.currency}, switch to Account to receive it`,
+        label: `held: Loop savings holds ${Profile.currencyLabel(Savings.currency)}, switch to Account to receive it`,
         heldBySavings: true,
       };
     }
@@ -78,6 +80,6 @@ export class Account {
   }
 
   private hasFailedPayout(currency: string): boolean {
-    return this.payouts.some((payout) => payout.currency === currency && payout.status === 'failed');
+    return this.payouts.some((payout) => payout.currency === currency && payout.status === 'failed' && payout.isInFlight());
   }
 }
