@@ -22,11 +22,11 @@ import {
 } from '@/components/merchant-card';
 import { PressScale } from '@/components/press-scale';
 import { SignInButton, useOnSignIn } from '@/components/sign-in';
+import { SiteFooter } from '@/components/site-footer';
 import { Skeleton } from '@/components/skeleton';
 import {
   HowLoopWorks,
   PageWidth,
-  SiteFooter,
   StorefrontHero,
   useCatalog,
   type Catalog,

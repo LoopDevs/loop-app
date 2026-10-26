@@ -1,7 +1,12 @@
 export const loopLinks = {
   terms: 'https://loopfinance.io/terms' as const,
   privacy: 'https://loopfinance.io/privacy' as const,
+  site: 'https://loopfinance.io' as const,
   supportEmail: 'hello@loopfinance.io',
+  careersEmail: 'careers@loopfinance.io',
+  pressEmail: 'press@loopfinance.io',
+  partnersEmail: 'partners@loopfinance.io',
+  securityEmail: 'security@loopfinance.io',
   supportMail(subject?: string, body?: string): string {
     const params = [
       subject && `subject=${encodeURIComponent(subject)}`,

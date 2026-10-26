@@ -13,13 +13,13 @@ import { CategoryTiles, MerchantCard, MerchantCardStrip } from '@/components/mer
 import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/press-scale';
 import { useOnSignIn } from '@/components/sign-in';
+import { SiteFooter } from '@/components/site-footer';
 import { MerchantGridSkeleton } from '@/components/skeleton';
 import {
   cachedMerchantPage,
   loadMerchantPage,
   MerchantCatalog,
   PageWidth,
-  SiteFooter,
   TopCashback,
   useCatalog,
 } from '@/components/storefront';

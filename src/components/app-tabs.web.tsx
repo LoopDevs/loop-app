@@ -40,6 +40,7 @@ export default function AppTabs() {
           <TabTrigger name="profile" href="/profile" resetOnFocus asChild>
             <TabButton>Profile</TabButton>
           </TabTrigger>
+          <TabTrigger name="site" href="/about" style={styles.hiddenTab} />
         </CustomTabList>
       </TabList>
       {wide ? <TabSlot style={styles.slot} /> : null}
@@ -202,5 +203,8 @@ const styles = StyleSheet.create({
   },
   tabLabelFocused: {
     fontFamily: FontFamily.semibold,
+  },
+  hiddenTab: {
+    display: 'none',
   },
 });
