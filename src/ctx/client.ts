@@ -47,13 +47,30 @@ export type MerchantLinkJson = {
 
 export type MerchantJson = {
   id: string;
+  slug: string;
   name: string;
+  country: string;
   currency: string;
   denominationType: 'min-max' | 'min-max-major' | 'fixed';
   denominations: string[];
   logoUrl?: string;
+  cardImageUrl?: string;
+  website?: string;
+  info?: GiftCardInfo;
   userDiscount: number;
   link?: MerchantLinkJson;
+};
+
+export type MerchantQuery = {
+  country: string;
+  name?: string;
+  page?: number;
+  perPage?: number;
+};
+
+export type MerchantPage = {
+  result: Merchant[];
+  pagination: Pagination;
 };
 
 export type GiftCardOrderIn = {
@@ -204,13 +221,28 @@ class CtxClient {
     return this.userRequest('PUT', '', update);
   }
 
-  async merchants(name: string, country: string): Promise<Merchant[]> {
-    const query = new URLSearchParams({ enabled: '1', perPage: '20', order: 'name', country });
-    if (name.trim()) {
-      query.set('name', name.trim());
+  async merchants({ country, name, page, perPage }: MerchantQuery): Promise<MerchantPage> {
+    const query = new URLSearchParams({ enabled: '1', order: 'name', country });
+    const pattern = Merchant.searchPattern(name ?? '');
+    if (pattern) {
+      query.set('name', pattern);
     }
-    const { result } = await this.sessionRequest<{ result: MerchantJson[] }>('GET', `/merchants?${query}`);
-    return result.map((json) => new Merchant(json));
+    if (page) {
+      query.set('page', String(page));
+    }
+    if (perPage) {
+      query.set('perPage', String(perPage));
+    }
+    const { result, pagination } = await this.sessionRequest<{
+      result: MerchantJson[] | null;
+      pagination: Pagination;
+    }>('GET', `/merchants?${query}`);
+    return { result: (result ?? []).map((json) => new Merchant(json)), pagination };
+  }
+
+  async merchant(idOrSlug: string): Promise<Merchant> {
+    const json = await this.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
+    return new Merchant(json);
   }
 
   orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {

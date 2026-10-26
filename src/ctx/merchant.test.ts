@@ -6,7 +6,9 @@ import { Merchant } from './merchant.ts';
 
 const json: MerchantJson = {
   id: 'm1',
+  slug: 'aerie',
   name: 'Aerie',
+  country: 'US',
   currency: 'USD',
   denominationType: 'min-max',
   denominations: ['5.00', '500.00'],
@@ -56,4 +58,26 @@ test('estimate rounds to whole units for a currency without subunits', () => {
 test('estimate is null for an amount that is not a positive number', () => {
   assert.equal(new Merchant(json).cashbackEstimate('abc', 'en-US'), null);
   assert.equal(new Merchant(json).cashbackEstimate('0', 'en-US'), null);
+});
+
+test('a search name is matched literally', () => {
+  assert.equal(Merchant.searchPattern(' Toys"R"Us (US) '), 'Toys"R"Us \\(US\\)');
+  assert.equal(Merchant.searchPattern('A.B*C+?'), 'A\\.B\\*C\\+\\?');
+});
+
+test('the tile hue is stable for a name and within the colour wheel', () => {
+  const hue = new Merchant(json).tileHue();
+  assert.equal(new Merchant({ ...json, id: 'm2' }).tileHue(), hue);
+  assert.ok(hue >= 0 && hue < 360);
+  assert.notEqual(new Merchant({ ...json, name: 'Target' }).tileHue(), hue);
+});
+
+test('the initial is the first letter of the name, capitalised', () => {
+  assert.equal(new Merchant({ ...json, name: ' eBay' }).initial(), 'E');
+});
+
+test('a website without a scheme opens over https', () => {
+  assert.equal(new Merchant({ ...json, website: 'aerie.com' }).websiteUrl(), 'https://aerie.com');
+  assert.equal(new Merchant({ ...json, website: 'http://aerie.com' }).websiteUrl(), 'http://aerie.com');
+  assert.equal(new Merchant(json).websiteUrl(), undefined);
 });
