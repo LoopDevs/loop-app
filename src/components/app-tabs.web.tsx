@@ -145,7 +145,7 @@ function HeaderSearch() {
 
 function AccountActions() {
   const { signedIn } = useSignIn();
-  if (signedIn === true) {
+  if (signedIn !== false) {
     return null;
   }
   return (
