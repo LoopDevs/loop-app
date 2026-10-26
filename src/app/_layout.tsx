@@ -45,7 +45,7 @@ export default function TabLayout() {
   return (
     <ThemeProvider value={DefaultTheme}>
       <StatusBar style="dark" />
-      <ErrorBoundary fallback={({ resetError }) => <CrashFallback onRetry={resetError} />}>
+      <ErrorBoundary fallback={({ error, resetError }) => <CrashFallback error={error} onRetry={resetError} />}>
         <AppLockProvider>
           <ToastProvider>
             <MarketProvider>
