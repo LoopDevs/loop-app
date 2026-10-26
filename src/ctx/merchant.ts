@@ -44,7 +44,21 @@ export class Merchant {
     } catch {
       return null;
     }
-    const cashback = (parsed * BigInt(this.cashbackBasisPoints())) / basisPointsPerWhole;
-    return money.fiat(units.format(cashback, 7), this.currency, locale);
+    if (parsed <= 0n) {
+      return null;
+    }
+    const subunit = 10n ** BigInt(units.decimals - this.currencyDigits());
+    const divisor = basisPointsPerWhole * subunit;
+    const subunits = (parsed * BigInt(this.cashbackBasisPoints()) + divisor / 2n) / divisor;
+    return money.fiat(units.format(subunits * subunit, units.decimals), this.currency, locale);
+  }
+
+  private currencyDigits(): number {
+    try {
+      const formatter = new Intl.NumberFormat('en', { style: 'currency', currency: this.currency });
+      return formatter.resolvedOptions().maximumFractionDigits ?? 2;
+    } catch {
+      return 2;
+    }
   }
 }

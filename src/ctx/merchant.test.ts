@@ -43,10 +43,17 @@ test('rate label shows up to two decimals', () => {
   assert.equal(new Merchant({ ...json, userDiscount: 500 }).rateLabel('en-US'), '5% cashback');
 });
 
-test('estimate truncates to the card currency subunit', () => {
-  assert.equal(new Merchant(json).cashbackEstimate('25.00', 'en-US'), '$0.62');
+test('estimate rounds half up to the card currency subunit', () => {
+  assert.equal(new Merchant(json).cashbackEstimate('25.00', 'en-US'), '$0.63');
+  assert.equal(new Merchant(json).cashbackEstimate('25.19', 'en-US'), '$0.63');
 });
 
-test('estimate is null for an amount that is not a number', () => {
+test('estimate rounds to whole units for a currency without subunits', () => {
+  const yen = new Merchant({ ...json, currency: 'JPY' });
+  assert.equal(yen.cashbackEstimate('1020', 'en-US'), '¥26');
+});
+
+test('estimate is null for an amount that is not a positive number', () => {
   assert.equal(new Merchant(json).cashbackEstimate('abc', 'en-US'), null);
+  assert.equal(new Merchant(json).cashbackEstimate('0', 'en-US'), null);
 });

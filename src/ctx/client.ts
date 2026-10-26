@@ -184,7 +184,7 @@ class CtxClient {
     if (name.trim()) {
       query.set('name', name.trim());
     }
-    const { result } = await this.send<{ result: MerchantJson[] }>('GET', `/merchants?${query}`);
+    const { result } = await this.sessionRequest<{ result: MerchantJson[] }>('GET', `/merchants?${query}`);
     return result.map((json) => new Merchant(json));
   }
 
