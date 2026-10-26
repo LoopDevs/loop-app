@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { giftCardStatusLabel } from '@/ctx/gift-card-status';
+import { money } from '@/money';
 
 export default function GiftCardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,12 +28,12 @@ export default function GiftCardScreen() {
         {giftCard && (
           <>
             <ThemedText type="smallBold">
-              {giftCard.cardFiatAmount} {giftCard.cardFiatCurrency} {giftCard.merchantName}
+              {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)} {giftCard.merchantName}
             </ThemedText>
             <ThemedText type="small">{giftCardStatusLabel(giftCard.status)}</ThemedText>
             {giftCard.paymentCryptoAmount && (
               <ThemedText type="small">
-                Paid: {giftCard.paymentCryptoAmount} {giftCard.paymentCryptoCurrency}
+                Paid: {money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
               </ThemedText>
             )}
             <GiftCardDetails giftCard={giftCard} />
