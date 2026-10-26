@@ -11,7 +11,12 @@ export const stablePeg: Record<PaymentCurrency, 'USD' | 'EUR' | 'GBP' | null> = 
   'XLM.GBPLOOP': 'GBP',
 };
 
-export const offeredCurrencies: ReadonlySet<string> = new Set<PaymentCurrency>(['XLM.USDC']);
+export const offeredCurrencies: ReadonlySet<string> = new Set<PaymentCurrency>([
+  'XLM',
+  'XLM.USDC',
+  'XLM.EURC',
+  'XLM.GBPLOOP',
+]);
 
 export type Token = {
   currency: PaymentCurrency;
@@ -19,7 +24,7 @@ export type Token = {
   contract: string;
 };
 
-export const onlyPaymentCurrency: PaymentCurrency | null = 'XLM.USDC';
+export const onlyPaymentCurrency: PaymentCurrency | null = null;
 
 export type StellarNetwork = {
   rpcUrl: string;

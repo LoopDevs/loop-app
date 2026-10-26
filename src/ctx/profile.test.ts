@@ -6,7 +6,7 @@ import { Profile } from './profile.ts';
 
 const company = {
   countries: ['US', 'GB', 'CA'],
-  stableCurrencies: ['XLM.USDC', 'XLM.GBPLOOP'],
+  stableCurrencies: ['XLM.USDC', 'XLM.GBPLOOP', 'XLM.UNLISTED'],
 };
 
 const newUser: MeJson = { user: { id: 'u1' }, company };
@@ -18,12 +18,12 @@ test('a new user needs setup and a currency choice', () => {
 });
 
 test('only offered currencies are given as a choice', () => {
-  assert.deepEqual(Profile.fromMe(newUser).stableCurrencies, ['XLM.USDC']);
+  assert.deepEqual(Profile.fromMe(newUser).stableCurrencies, ['XLM.USDC', 'XLM.GBPLOOP']);
 });
 
 test('a company currency that is not offered is never sent', () => {
   const profile = Profile.fromMe(newUser);
-  assert.equal(profile.nextUpdate({ country: 'GB', stableCurrency: 'XLM.GBPLOOP' }), null);
+  assert.equal(profile.nextUpdate({ country: 'GB', stableCurrency: 'XLM.UNLISTED' }), null);
 });
 
 test('the stable currency is sent before the country', () => {
