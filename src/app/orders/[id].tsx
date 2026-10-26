@@ -10,12 +10,15 @@ import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { OrderDetailSkeleton } from '@/components/skeleton';
+import { SplitLayout } from '@/components/split-layout';
+import { PageWidth } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
   BottomTabInset,
   Brand,
   FontFamily,
+  Layout,
   MaxContentWidth,
   Motion,
   Radius,
@@ -29,9 +32,11 @@ import {
   outcomeText,
   pollIntervalMs,
 } from '@/ctx/gift-card-status';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { dates, money } from '@/money';
+import { stablePeg, type PaymentCurrency } from '@/stellar/network';
 
 const signInMessage = 'Sign in to see this order.';
 
@@ -43,6 +48,7 @@ export default function GiftCardScreen() {
   const readSession = useSessionOwner();
   const { onScroll, backdrop } = useScrimScroll();
   const { openSignIn } = useSignIn();
+  const { wide } = usePageLayout();
   useOnSignIn(() => {
     setGiftCard(null);
     setMessage('');
@@ -113,9 +119,12 @@ export default function GiftCardScreen() {
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={backdrop} />
-      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.content}>
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.content, wide && styles.wideContent]}>
         {(!giftCard || message !== '') && (
-          <View style={[styles.body, styles.status]}>
+          <View style={[styles.body, styles.status, wide && styles.wideStatus]}>
             {!giftCard && !message && <OrderDetailSkeleton />}
             {message !== '' &&
               (message === signInMessage ? (
@@ -128,24 +137,64 @@ export default function GiftCardScreen() {
               ))}
           </View>
         )}
-        {giftCard && <GiftCardSummary giftCard={giftCard} />}
+        {giftCard && <GiftCardSummary giftCard={giftCard} wide={wide} />}
       </Animated.ScrollView>
     </ThemedView>
   );
 }
 
-function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
+function amountInMoney(amount: string | null | undefined, currency: string | null | undefined): string | null {
+  if (!amount || !currency) {
+    return null;
+  }
+  if (Object.hasOwn(stablePeg, currency) && !stablePeg[currency as PaymentCurrency]) {
+    return null;
+  }
+  return money.ctx(amount, currency);
+}
+
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean }) {
   const theme = useTheme();
+  const { gutter } = usePageLayout();
   const reduceMotion = useReducedMotion();
   const cashback = cashbackState(giftCard);
   const outcome = outcomeText(giftCard);
   const processing = giftCard.status === 'paid';
+  const paid = amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency);
+  const cashbackAmount = amountInMoney(giftCard.cashbackAmount, giftCard.cashbackCurrency);
+  const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
+
+  const summary = (paid || cashback !== 'none') && (
+    <View
+      style={[
+        styles.summary,
+        {
+          backgroundColor: theme.backgroundElement,
+          borderColor: theme.border,
+        },
+      ]}>
+      {paid && <SummaryRow label="Paid" value={paid} />}
+      {cashback !== 'none' && (
+        <SummaryRow
+          label={cashbackAmount ? `Cashback, ${cashbackStateLabel(cashback)}` : 'Cashback'}
+          value={cashbackAmount ?? sentenceCase(cashbackStateLabel(cashback))}
+          tone={cashback === 'reversed' ? 'danger' : 'success'}
+        />
+      )}
+      <SummaryRow label="Ordered" value={dates.day(giftCard.created)} />
+    </View>
+  );
+
   return (
     <Animated.View
       entering={reduceMotion ? undefined : FadeIn.duration(Motion.state).easing(Motion.easeOut)}
       style={styles.summarySections}>
       <View style={styles.hero}>
-        <View style={styles.heroInner}>
+        <View style={[styles.heroInner, pageWidth]}>
           <Text style={styles.heroName} maxFontSizeMultiplier={1.6}>
             {giftCard.merchantName}
           </Text>
@@ -161,39 +210,28 @@ function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
         </View>
       </View>
 
-      <View style={[styles.body, styles.section]}>
-        {outcome ? <Notice message={outcome} /> : null}
-
-        <GiftCardDetails giftCard={giftCard} />
-
-        {(giftCard.paymentCryptoAmount || cashback !== 'none') && (
-          <View
-            style={[
-              styles.summary,
-              {
-                backgroundColor: theme.backgroundElement,
-                borderColor: theme.border,
-              },
-            ]}>
-            {giftCard.paymentCryptoAmount && (
-              <SummaryRow
-                label="Paid"
-                value={money.ctx(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
-              />
-            )}
-            {cashback !== 'none' && (
-              <SummaryRow
-                label={`Cashback, ${cashbackStateLabel(cashback)}`}
-                value={money.ctx(giftCard.cashbackAmount ?? '', giftCard.cashbackCurrency ?? '')}
-                tone={cashback === 'reversed' ? 'danger' : 'success'}
-              />
-            )}
-            <SummaryRow label="Ordered" value={dates.day(giftCard.created)} />
-          </View>
-        )}
-
-        <OrderHelp giftCard={giftCard} />
-      </View>
+      {wide ? (
+        <PageWidth>
+          <SplitLayout
+            asideWidth={360}
+            aside={
+              <>
+                {summary}
+                <OrderHelp giftCard={giftCard} />
+              </>
+            }>
+            {outcome ? <Notice message={outcome} /> : null}
+            <GiftCardDetails giftCard={giftCard} />
+          </SplitLayout>
+        </PageWidth>
+      ) : (
+        <View style={[styles.body, styles.section]}>
+          {outcome ? <Notice message={outcome} /> : null}
+          <GiftCardDetails giftCard={giftCard} />
+          {summary}
+          <OrderHelp giftCard={giftCard} />
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -235,6 +273,13 @@ const styles = StyleSheet.create({
   },
   status: {
     paddingTop: Spacing.three,
+  },
+  wideContent: {
+    paddingBottom: Spacing.six,
+  },
+  wideStatus: {
+    maxWidth: 560,
+    paddingTop: Spacing.five,
   },
   section: {
     gap: Spacing.three,
