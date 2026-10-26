@@ -6,12 +6,10 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { Wordmark } from '@/components/wordmark';
+import { Brand, FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 
 export default function AppTabs() {
   return (
@@ -39,14 +37,14 @@ export default function AppTabs() {
 
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+    <Pressable
+      {...props}
+      style={({ pressed }) => [
+        styles.tabButton,
+        isFocused && styles.tabButtonFocused,
+        !isFocused && pressed && styles.tabButtonPressed,
+      ]}>
+      <Text style={[styles.tabLabel, isFocused && styles.tabLabelFocused]}>{children}</Text>
     </Pressable>
   );
 }
@@ -54,13 +52,12 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
 export function CustomTabList(props: TabListProps) {
   return (
     <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Loop
-        </ThemedText>
-
+      <View style={styles.innerContainer}>
+        <View style={styles.brand}>
+          <Wordmark height={18} />
+        </View>
         {props.children}
-      </ThemedView>
+      </View>
     </View>
   );
 }
@@ -76,23 +73,39 @@ const styles = StyleSheet.create({
   },
   innerContainer: {
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.control,
+    backgroundColor: Brand.navy,
     flexDirection: 'row',
     alignItems: 'center',
     flexGrow: 1,
-    gap: Spacing.two,
+    gap: Spacing.one,
     maxWidth: MaxContentWidth,
+    boxShadow: '0 8px 24px rgba(10, 22, 64, 0.24)',
   },
-  brandText: {
+  brand: {
     marginRight: 'auto',
   },
-  pressed: {
-    opacity: 0.7,
-  },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
+  tabButton: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.control,
+  },
+  tabButtonPressed: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  tabButtonFocused: {
+    backgroundColor: Brand.royal,
+  },
+  tabLabel: {
+    color: Brand.onRoyalMuted,
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  tabLabelFocused: {
+    color: Brand.onRoyal,
+    fontFamily: FontFamily.semibold,
   },
 });

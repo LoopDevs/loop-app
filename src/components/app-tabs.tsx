@@ -1,6 +1,6 @@
 import { NativeTabs } from 'expo-router/native-tabs';
 
-import { Colors } from '@/constants/theme';
+import { Colors, FontFamily } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function AppTabs() {
@@ -9,9 +9,23 @@ export default function AppTabs() {
 
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      backgroundColor={colors.backgroundElement}
+      indicatorColor={colors.backgroundSelected}
+      rippleColor={colors.backgroundSelected}
+      tintColor={colors.accent}
+      iconColor={{ default: colors.textSecondary, selected: colors.accent }}
+      labelStyle={{
+        default: {
+          color: colors.textSecondary,
+          fontFamily: FontFamily.medium,
+          fontSize: 11,
+        },
+        selected: {
+          color: colors.accent,
+          fontFamily: FontFamily.semibold,
+          fontSize: 11,
+        },
+      }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
