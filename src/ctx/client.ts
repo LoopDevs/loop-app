@@ -228,6 +228,7 @@ class CtxClient {
   constructor(
     private readonly baseUrl: string,
     private readonly clientId: string,
+    private readonly catalogUrl: string,
   ) {}
 
   onServiceState(listener: ServiceStateListener): () => void {
@@ -318,7 +319,7 @@ class CtxClient {
       return new Merchant(json);
     }
     const query = new URLSearchParams({ slug: idOrSlug });
-    const { result } = await this.send<{ result: MerchantJson[] | null }>('GET', `/merchants?${query}`);
+    const { result } = await this.catalogRequest<{ result: MerchantJson[] | null }>(`/merchants?${query}`);
     const json = result?.[0];
     if (!json) {
       throw new Error('We couldn’t find that gift card.');
@@ -412,7 +413,11 @@ class CtxClient {
     if (await this.isSignedIn()) {
       return this.auth.sessionRequest<T>('GET', path);
     }
-    return this.send<T>('GET', path);
+    return this.catalogRequest<T>(path);
+  }
+
+  private catalogRequest<T>(path: string): Promise<T> {
+    return this.send<T>('GET', path, undefined, { baseUrl: this.catalogUrl });
   }
 
   private async userRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -438,10 +443,15 @@ class CtxClient {
     method: string,
     path: string,
     body?: unknown,
-    { headers = {}, reportServiceState = true, timeoutMs = Deadline.requestMs }: SendOptions = {},
+    {
+      headers = {},
+      reportServiceState = true,
+      timeoutMs = Deadline.requestMs,
+      baseUrl = this.baseUrl,
+    }: SendOptions & { baseUrl?: string } = {},
   ): Promise<T> {
     const response = await Deadline.run(timeoutMs, async (signal) => {
-      const answer = await fetch(`${this.baseUrl}${path}`, {
+      const answer = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -470,4 +480,8 @@ class CtxClient {
   }
 }
 
-export const ctx = new CtxClient(loopEnvironment.ctxApiUrl, process.env.EXPO_PUBLIC_CTX_CLIENT_ID ?? '');
+export const ctx = new CtxClient(
+  loopEnvironment.ctxApiUrl,
+  process.env.EXPO_PUBLIC_CTX_CLIENT_ID ?? '',
+  process.env.EXPO_PUBLIC_CATALOG_URL || loopEnvironment.ctxApiUrl,
+);
