@@ -31,7 +31,7 @@ test('max is the balance cut to whole pence', () => {
 test('zero and amounts above the balance are blocked', () => {
   assert.deepEqual(BankWithdrawalForm.checkAmount('0', 250_000_000n), { error: 'Enter an amount above zero' });
   assert.deepEqual(BankWithdrawalForm.checkAmount('25.01', 250_000_000n), {
-    error: 'More than your GBPLOOP balance',
+    error: 'More than your balance',
   });
   assert.deepEqual(BankWithdrawalForm.checkAmount('25.00', 250_000_000n), { amount: '25.00' });
 });
@@ -52,8 +52,9 @@ test('account number takes exactly eight digits', () => {
 
 test('review names the amount, payee and masked account', () => {
   const text = BankWithdrawalForm.reviewText('25.00', { sortCode: '123456', accountNumber: '12345678' }, 'Ada Lovelace');
-  assert.match(text, /25\.00 GBPLOOP/);
-  assert.match(text, /£25\.00 to Ada Lovelace, 12-34-56 ••••5678, after a review\./);
+  assert.doesNotMatch(text, /GBPLOOP/);
+  assert.match(text, /^You send £25\.00\./);
+  assert.match(text, /We pay it to Ada Lovelace, 12-34-56 ••••5678, after a review\./);
 });
 
 test('a withdrawal matches only the confirmed GBPLOOP amount', () => {

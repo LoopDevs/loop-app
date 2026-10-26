@@ -52,19 +52,24 @@ export default function WithdrawScreen() {
   const [withdrawal, setWithdrawal] = useState<BankWithdrawal | null>(null);
   const [heading, setHeading] = useState('');
   const [sending, setSending] = useState(false);
+  const [unlinked, setUnlinked] = useState(false);
+  const confirming = useRef(false);
   const following = useRef(0);
 
   const balance = view?.holdings.inWallet(bankWithdrawalCurrency) ?? 0n;
 
-  const homeIfUnlinked = useCallback(
-    (error: unknown): never => {
-      if (error instanceof UnlinkedDevice) {
-        router.replace('/');
-      }
-      throw error;
-    },
-    [router],
-  );
+  const homeIfUnlinked = useCallback((error: unknown): never => {
+    if (error instanceof UnlinkedDevice) {
+      setUnlinked(true);
+    }
+    throw error;
+  }, []);
+
+  useEffect(() => {
+    if (unlinked && !sending) {
+      router.replace('/');
+    }
+  }, [unlinked, sending, router]);
 
   useEffect(() => {
     run(async () => {
@@ -194,8 +199,12 @@ export default function WithdrawScreen() {
     setStep('submitted');
   };
 
-  const confirm = (retried: boolean) =>
-    run(async () => {
+  const confirm = (retried: boolean) => {
+    if (confirming.current) {
+      return;
+    }
+    confirming.current = true;
+    return run(async () => {
       if (!bank) {
         return;
       }
@@ -230,7 +239,10 @@ export default function WithdrawScreen() {
       }
       clearBankDetails();
       await pay(created, amount);
+    }).finally(() => {
+      confirming.current = false;
     });
+  };
 
   const nameSaved = (saved: Profile) => {
     setProfile(saved);
@@ -259,13 +271,12 @@ export default function WithdrawScreen() {
           {step === 'amount' && (
             <View style={styles.section}>
               <ThemedText type="small">
-                Balance {money.token(balance, bankWithdrawalCurrency)} ({BankWithdrawalForm.maxAmount(balance)}{' '}
-                GBPLOOP)
+                Balance {money.token(balance, bankWithdrawalCurrency)}
               </ThemedText>
               <Field
                 value={amountInput}
                 onChangeText={changeAmount}
-                placeholder="Amount in GBPLOOP"
+                placeholder="Amount in pounds"
                 keyboardType="decimal-pad"
               />
               <Button label="Max" onPress={fillMax} disabled={balance === 0n} />

@@ -18,7 +18,7 @@ export class WithdrawalPayment {
       return state.detail;
     }
     if (state.kind === 'failed' && state.contactSupport) {
-      return "This payment isn't on the network. Contact support about this withdrawal.";
+      return "We couldn't confirm this payment.";
     }
     return state.kind === 'failed' ? 'Payment failed' : "Payment couldn't be sent";
   }

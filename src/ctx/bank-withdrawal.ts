@@ -35,7 +35,7 @@ export class BankWithdrawalForm {
       return { error: 'Enter an amount above zero' };
     }
     if (value > balance) {
-      return { error: 'More than your GBPLOOP balance' };
+      return { error: 'More than your balance' };
     }
     return { amount };
   }
@@ -61,10 +61,9 @@ export class BankWithdrawalForm {
   }
 
   static reviewText(amount: string, bank: BankDetails, accountName: string): string {
-    const sent = money.payment(amount, bankWithdrawalCurrency);
-    const paid = money.fiat(amount, 'GBP');
+    const sent = money.fiat(amount, 'GBP');
     const account = `${BankWithdrawalForm.shownSortCode(bank.sortCode)} ••••${bank.accountNumber.slice(-4)}`;
-    return `You send ${sent}. We pay ${paid} to ${accountName}, ${account}, after a review.`;
+    return `You send ${sent}. We pay it to ${accountName}, ${account}, after a review.`;
   }
 
   static matchesConfirmed(withdrawal: BankWithdrawal, confirmed: string): boolean {
