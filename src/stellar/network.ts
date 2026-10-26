@@ -11,6 +11,8 @@ export const stablePeg: Record<PaymentCurrency, 'USD' | 'EUR' | 'GBP' | null> = 
   'XLM.GBPLOOP': 'GBP',
 };
 
+export const offeredCurrencies: ReadonlySet<string> = new Set<PaymentCurrency>(['XLM.USDC']);
+
 export type Token = {
   currency: PaymentCurrency;
   symbol: string;
@@ -28,6 +30,7 @@ export type StellarNetwork = {
   payee: string;
   tokens: Token[];
   usdc: string;
+  usdcIssuer: string;
   usdcVault: string;
 };
 
@@ -48,6 +51,7 @@ const networks: Record<StellarNetworkName, StellarNetwork> = {
       { currency: 'XLM.GBPLOOP', symbol: 'GBPLOOP', contract: 'CBSQZMHXIRMRAFCE2FRDDZOSNFH5WKJO4Z6G4KMH4RLXZWHI6UYTVUWM' },
     ],
     usdc: 'CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU',
+    usdcIssuer: 'GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56',
     usdcVault: 'CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN',
   },
   mainnet: {
@@ -65,8 +69,11 @@ const networks: Record<StellarNetworkName, StellarNetwork> = {
       { currency: 'XLM.EURC', symbol: 'EURC', contract: 'CDTKPWPLOURQA2SGTKTUQOWRCBZEORB4BWBOMJ3D3ZTQQSGE5F6JBQLV' },
     ],
     usdc: 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75',
+    usdcIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
     usdcVault: 'CCUZC3HC5TH2VCYZFUG57E6IGKPL45YUN2SI3UEYQUBA7RCYHUIZBSFV',
   },
 };
 
 export const network = networks[loopEnvironment.stellarNetwork];
+
+export const offeredTokens = network.tokens.filter((token) => offeredCurrencies.has(token.currency));

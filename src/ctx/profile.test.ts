@@ -17,6 +17,15 @@ test('a new user needs setup and a currency choice', () => {
   assert.equal(profile.needsCurrencyChoice(), true);
 });
 
+test('only offered currencies are given as a choice', () => {
+  assert.deepEqual(Profile.fromMe(newUser).stableCurrencies, ['XLM.USDC']);
+});
+
+test('a company currency that is not offered is never sent', () => {
+  const profile = Profile.fromMe(newUser);
+  assert.equal(profile.nextUpdate({ country: 'GB', stableCurrency: 'XLM.GBPLOOP' }), null);
+});
+
 test('the stable currency is sent before the country', () => {
   const profile = Profile.fromMe(newUser);
   assert.deepEqual(profile.nextUpdate({ country: 'GB', stableCurrency: 'XLM.USDC' }), {

@@ -1,4 +1,4 @@
-import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
+import { offeredCurrencies, stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { Savings } from '../wallet/savings.ts';
 import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client.ts';
 
@@ -30,7 +30,7 @@ export class Profile {
     this.cashbackDestination = user.cashbackDestination ?? 'account';
     this.signInProviders = (user.oauthIdentities ?? []).map((identity) => identity.provider);
     this.countries = company?.countries ?? [];
-    this.stableCurrencies = company?.stableCurrencies ?? [];
+    this.stableCurrencies = (company?.stableCurrencies ?? []).filter((currency) => offeredCurrencies.has(currency));
   }
 
   static fromMe(me: MeJson): Profile {
