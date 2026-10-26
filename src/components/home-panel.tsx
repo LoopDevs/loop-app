@@ -11,10 +11,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Odometer } from '@/components/odometer';
-import { Wordmark } from '@/components/wordmark';
-import { FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
 import type { HoldingsView } from '@/hooks/use-holdings';
-import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
@@ -23,9 +21,9 @@ import { Savings } from '@/wallet/savings';
 const scrimFadeDistance = 48;
 const balanceType = {
   fontFamily: FontFamily.semibold,
-  fontSize: 52,
-  lineHeight: 60,
-  letterSpacing: -1.6,
+  fontSize: 36,
+  lineHeight: 42,
+  letterSpacing: -1,
 };
 
 type Scrollable = NonNullable<Parameters<typeof useScrollToTop>[0]['current']>;
@@ -61,22 +59,18 @@ export function StatusBarScrim({ style }: { style: ComponentProps<typeof Animate
   return <Animated.View pointerEvents="none" style={style} />;
 }
 
-type BalanceHeaderProps = {
+type BalanceCardProps = {
   view: HoldingsView | null;
   children?: ReactNode;
 };
 
-export function BalanceHeader({ view, children }: BalanceHeaderProps) {
-  const insets = useSafeAreaInsets();
+export function BalanceCard({ view, children }: BalanceCardProps) {
   const theme = useTheme();
-  const { wide, gutter } = usePageLayout();
   return (
-    <View style={[styles.header, { paddingTop: insets.top + (wide ? Spacing.five : Spacing.three) }]}>
-      <View style={[styles.inner, wide && { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter }]}>
-        {!wide && <Wordmark height={20} color={theme.text} />}
-        <Balance view={view} />
-        {children}
-      </View>
+    <View
+      style={[styles.card, Elevation.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <Balance view={view} />
+      {children}
     </View>
   );
 }
@@ -141,15 +135,11 @@ function accountState(view: HoldingsView | null): string {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingBottom: Spacing.two,
-  },
-  inner: {
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
-    paddingHorizontal: Spacing.three,
+  card: {
+    padding: Spacing.four,
     gap: Spacing.four,
+    borderRadius: Radius.card,
+    borderWidth: 1,
   },
   balanceBlock: {
     gap: Spacing.one,

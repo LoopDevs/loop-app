@@ -1,8 +1,9 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
+import { Image } from 'expo-image';
 import { useCallback, useRef, useState } from 'react';
-import { Platform, RefreshControl, StyleSheet, View } from 'react-native';
+import { Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,22 +12,28 @@ import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
 import { NextStep, RecentGiftCards } from '@/components/home-overview';
-import { BalanceHeader, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
-import { MerchantCardStrip } from '@/components/merchant-card';
+import { BalanceCard, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
+import {
+  coverClearance,
+  MerchantCard,
+  MerchantCardStrip,
+  MerchantCover,
+  SectionHeading,
+} from '@/components/merchant-card';
 import { PressScale } from '@/components/press-scale';
 import { SignInButton, useOnSignIn } from '@/components/sign-in';
+import { Skeleton } from '@/components/skeleton';
 import {
   HowLoopWorks,
-  MerchantCatalog,
   PageWidth,
   SiteFooter,
   StorefrontHero,
-  TopCashback,
   useCatalog,
+  type Catalog,
 } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -40,7 +47,10 @@ import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'wallet';
 
-const topCashbackShown = 10;
+const featuredShown = 5;
+const stripShown = 10;
+const brandRows = 2;
+const maxBrandColumns = 6;
 
 const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
@@ -54,12 +64,16 @@ export default function HomeScreen() {
   const { busy, message, setMessage, run } = useBusyAction();
   const [refreshing, setRefreshing] = useState(false);
   const [giftCardsRefreshKey, setGiftCardsRefreshKey] = useState(0);
+  const [search, setSearch] = useState('');
   const walletLoadStarted = useRef(false);
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const catalog = useCatalog(screen === 'wallet' ? profileCountry : undefined);
+  const { country: marketCountry } = useMarket();
+  const signedOut = screen === 'signed-out';
+  const catalogCountry = signedOut ? marketCountry : profileCountry;
+  const catalog = useCatalog(catalogCountry);
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -157,26 +171,17 @@ export default function HomeScreen() {
 
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const addMoney = () => router.navigate({ pathname: '/wallet', params: { add: '1' } });
+  const openShop = () => router.navigate('/shop');
+  const searchShop = () => {
+    const q = search.trim();
+    if (q) {
+      router.navigate({ pathname: '/shop', params: { q } });
+    }
+  };
 
   const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
   const topMerchant = catalog?.top[0] ?? null;
-
-  if (screen === 'signed-out') {
-    return (
-      <ThemedView style={styles.container}>
-        <StatusBar style="auto" />
-        <Animated.ScrollView
-          ref={scrollRef}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          contentContainerStyle={styles.storeScroll}
-          keyboardShouldPersistTaps="handled">
-          <SignedOutStore onOpen={openMerchant} />
-        </Animated.ScrollView>
-        <StatusBarScrim style={scrim} />
-      </ThemedView>
-    );
-  }
+  const showsListings = signedOut || catalogCountry !== undefined;
 
   return (
     <ThemedView style={styles.container}>
@@ -185,7 +190,7 @@ export default function HomeScreen() {
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           screen === 'wallet' ? (
@@ -198,22 +203,24 @@ export default function HomeScreen() {
             />
           ) : undefined
         }>
-        <BalanceHeader view={screen === 'wallet' ? view : null}>
-          {screen === 'wallet' && wallet && (
-            <HomeActions
-              onAddMoney={addMoney}
-              onShop={() => router.navigate('/shop')}
-              onSavings={() => router.navigate('/savings')}
-              onCashOut={() => router.push('/wallet/cash-out')}
-            />
-          )}
-        </BalanceHeader>
+        <StorefrontHero
+          catalog={catalog}
+          country={catalogCountry ?? marketCountry}
+          search={search}
+          onSearch={setSearch}
+          onSubmitSearch={searchShop}
+          onOpen={openMerchant}
+          accessory={
+            wide || !signedOut ? null : (
+              <View style={styles.heroActions}>
+                <CountryMenu />
+                <SignInButton />
+              </View>
+            )
+          }
+        />
 
-        <View style={[styles.content, wide && styles.contentWide]}>
-          {!wide && screen === 'wallet' && (
-            <NextStep view={view} topMerchant={topMerchant} onAddMoney={addMoney} onOpenMerchant={openMerchant} />
-          )}
-
+        <PageWidth style={styles.body}>
           {screen === 'no-wallet' && (
             <Animated.View entering={FadeIn.duration(Motion.state)} style={[styles.sheet, styles.form]}>
               <ThemedText type="subtitle">Finish setting up Loop</ThemedText>
@@ -236,38 +243,150 @@ export default function HomeScreen() {
 
           {message !== '' && <Notice message={message} />}
 
+          {showsListings && <FeaturedOffers catalog={catalog} onOpen={openMerchant} onSeeAll={openShop} />}
+
+          {showsListings && (
+            <MerchantCardStrip
+              title="More cashback offers"
+              merchants={catalog?.top.slice(featuredShown, featuredShown + stripShown) ?? []}
+              onOpen={openMerchant}
+              onSeeAll={openShop}
+            />
+          )}
+
           {screen === 'wallet' && wallet && (
-            <View style={[styles.overview, wide && styles.overviewWide]}>
-              <View style={[styles.column, wide && styles.columnWide]}>
-                {wide && (
+            <View style={styles.section}>
+              <SectionHeading title="Your Loop" />
+              <View style={[styles.overview, wide && styles.overviewWide]}>
+                <View style={[styles.column, wide && styles.columnWide]}>
+                  <BalanceCard view={view}>
+                    <HomeActions
+                      onAddMoney={addMoney}
+                      onShop={openShop}
+                      onSavings={() => router.navigate('/savings')}
+                      onCashOut={() => router.push('/wallet/cash-out')}
+                    />
+                  </BalanceCard>
+                  <SavingsNudge onPress={() => router.navigate('/savings')} />
+                </View>
+                <View style={[styles.column, wide && styles.columnWide]}>
                   <NextStep view={view} topMerchant={topMerchant} onAddMoney={addMoney} onOpenMerchant={openMerchant} />
-                )}
-                <SavingsNudge onPress={() => router.navigate('/savings')} />
-              </View>
-              <View style={[styles.column, wide && styles.columnWide]}>
-                <RecentGiftCards
-                  refreshKey={giftCardsRefreshKey}
-                  onOpenOrder={(id) => router.push(`/wallet/${id}`)}
-                  onSeeAll={() => router.navigate('/wallet')}
-                  onShop={() => router.navigate('/shop')}
-                />
+                  <RecentGiftCards
+                    refreshKey={giftCardsRefreshKey}
+                    onOpenOrder={(id) => router.push(`/wallet/${id}`)}
+                    onSeeAll={() => router.navigate('/wallet')}
+                    onShop={openShop}
+                  />
+                </View>
               </View>
             </View>
           )}
 
-          {screen === 'wallet' && (
-            <MerchantCardStrip
-              title="Top cashback"
-              merchants={catalog?.top.slice(0, topCashbackShown) ?? []}
-              onOpen={openMerchant}
-              onSeeAll={() => router.navigate('/shop')}
-            />
+          {showsListings && <BrandWall catalog={catalog} onOpen={openMerchant} onSeeAll={openShop} />}
+
+          {showsListings && (
+            <View style={styles.browseAll}>
+              <Button label="Browse all gift cards" variant="primary" onPress={openShop} />
+            </View>
           )}
-        </View>
-        {wide && <SiteFooter />}
+        </PageWidth>
+        {signedOut && <HowLoopWorks />}
+        {(signedOut || wide) && <SiteFooter />}
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>
+  );
+}
+
+type ListingProps = {
+  catalog: Catalog | null;
+  onOpen: (merchant: Merchant) => void;
+  onSeeAll: () => void;
+};
+
+function FeaturedOffers({ catalog, onOpen, onSeeAll }: ListingProps) {
+  const { wide } = usePageLayout();
+  if (catalog && catalog.top.length === 0) {
+    return null;
+  }
+  const [lead, ...rest] = catalog
+    ? catalog.top.slice(0, featuredShown)
+    : Array.from({ length: featuredShown }, () => null);
+  return (
+    <View style={styles.section}>
+      <SectionHeading title="Top cashback right now" onSeeAll={onSeeAll} />
+      <View style={[styles.featured, wide && styles.featuredWide]}>
+        <View style={wide && styles.featuredLead}>
+          {lead ? <LeadOffer merchant={lead} onPress={() => onOpen(lead)} /> : <Skeleton width="100%" aspectRatio={16 / 10} />}
+        </View>
+        <View style={[styles.featuredGrid, wide && styles.featuredGridWide]}>
+          {rest.map((merchant, index) => (
+            <View key={merchant ? merchant.id : `placeholder-${index}`} style={styles.featuredCell}>
+              {merchant ? (
+                <MerchantCard merchant={merchant} onPress={() => onOpen(merchant)} />
+              ) : (
+                <Skeleton width="100%" aspectRatio={16 / 10} />
+              )}
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function LeadOffer({ merchant, onPress }: { merchant: Merchant; onPress: () => void }) {
+  return (
+    <PressScale onPress={onPress} accessibilityRole="button" accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}>
+      <MerchantCover merchant={merchant} size="hero" />
+      <View style={[styles.leadText, { paddingTop: coverClearance('hero') }]}>
+        <ThemedText type="subtitle" numberOfLines={1}>
+          {merchant.name}
+        </ThemedText>
+        <ThemedText themeColor="textSecondary" numberOfLines={2}>
+          Earn {merchant.rateFigure()} back on every {merchant.name} gift card.
+        </ThemedText>
+      </View>
+    </PressScale>
+  );
+}
+
+function BrandWall({ catalog, onOpen, onSeeAll }: ListingProps) {
+  const { columns } = usePageLayout();
+  const theme = useTheme();
+  const brandColumns = Math.min(columns + 1, maxBrandColumns);
+  const brands = (catalog?.top.slice(featuredShown) ?? [])
+    .filter((merchant) => merchant.logoUrl)
+    .slice(0, brandColumns * brandRows)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (brands.length === 0) {
+    return null;
+  }
+  return (
+    <View style={styles.section}>
+      <SectionHeading title="Shop by brand" onSeeAll={onSeeAll} />
+      <View style={styles.brandGrid}>
+        {brands.map((merchant) => (
+          <View key={merchant.id} style={[styles.brandCell, { width: `${100 / brandColumns}%` }]}>
+            <PressScale
+              onPress={() => onOpen(merchant)}
+              accessibilityRole="button"
+              accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
+              style={[styles.brandTile, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+              <View style={[styles.brandLogo, { borderColor: theme.border }]}>
+                <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.brandLogoImage} />
+              </View>
+              <Text style={[styles.brandName, { color: theme.text }]} numberOfLines={1}>
+                {merchant.name}
+              </Text>
+              <Text style={[styles.brandRate, { color: theme.accent }]} numberOfLines={1}>
+                {merchant.rateFigure()} back
+              </Text>
+            </PressScale>
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -297,87 +416,106 @@ function SavingsNudge({ onPress }: { onPress: () => void }) {
   );
 }
 
-function SignedOutStore({ onOpen }: { onOpen: (merchant: Merchant) => void }) {
-  const router = useRouter();
-  const { country } = useMarket();
-  const { wide } = usePageLayout();
-  const catalog = useCatalog(country);
-  const [search, setSearch] = useState('');
-  const searchShop = () => {
-    const q = search.trim();
-    if (q) {
-      router.navigate({ pathname: '/shop', params: { q } });
-    }
-  };
-  return (
-    <>
-      <StorefrontHero
-        catalog={catalog}
-        country={country}
-        search={search}
-        onSearch={setSearch}
-        onSubmitSearch={searchShop}
-        onOpen={onOpen}
-        accessory={
-          wide ? null : (
-            <View style={styles.heroActions}>
-              <CountryMenu />
-              <SignInButton />
-            </View>
-          )
-        }
-      />
-      <PageWidth style={styles.storeBody}>
-        <TopCashback catalog={catalog} onOpen={onOpen} />
-        <MerchantCatalog
-          country={country}
-          categories={catalog?.categories ?? []}
-          search={search}
-          onSearch={setSearch}
-          onOpen={onOpen}
-        />
-      </PageWidth>
-      <HowLoopWorks />
-      <SiteFooter />
-    </>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: BottomTabInset + Spacing.five,
-  },
-  storeScroll: {
     paddingBottom: BottomTabInset,
-  },
-  storeBody: {
-    paddingVertical: Spacing.six,
-    gap: Spacing.six,
   },
   heroActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
   },
-  content: {
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.four,
+  body: {
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.six,
+    gap: Spacing.six,
+  },
+  section: {
+    gap: Spacing.three,
+  },
+  featured: {
+    gap: Spacing.four,
+  },
+  featuredWide: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: Spacing.five,
   },
-  contentWide: {
-    paddingTop: Spacing.five,
-    maxWidth: Layout.pageMaxWidth,
-    paddingHorizontal: Layout.wideGutter,
-    paddingBottom: Spacing.six,
+  featuredLead: {
+    flex: 1.2,
+    minWidth: 0,
+  },
+  featuredGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -Spacing.two,
+    rowGap: Spacing.four,
+  },
+  featuredGridWide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  featuredCell: {
+    width: '50%',
+    paddingHorizontal: Spacing.two,
+  },
+  leadText: {
+    paddingHorizontal: Spacing.half,
+    gap: Spacing.one,
+  },
+  brandGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -Spacing.one - Spacing.half,
+    rowGap: Spacing.two + Spacing.one,
+  },
+  brandCell: {
+    paddingHorizontal: Spacing.one + Spacing.half,
+  },
+  brandTile: {
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.card,
+    borderWidth: 1,
+  },
+  brandLogo: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+    padding: Spacing.two,
+    marginBottom: Spacing.one,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandLogoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  brandName: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 18,
+    maxWidth: '100%',
+  },
+  brandRate: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    lineHeight: 16,
+    fontVariant: ['tabular-nums'],
+  },
+  browseAll: {
+    alignSelf: 'center',
+    minWidth: 260,
   },
   overview: {
-    gap: Spacing.five,
+    gap: Spacing.four,
   },
   overviewWide: {
     flexDirection: 'row',
@@ -385,7 +523,7 @@ const styles = StyleSheet.create({
     gap: Spacing.five,
   },
   column: {
-    gap: Spacing.five,
+    gap: Spacing.four,
   },
   columnWide: {
     flex: 1,

@@ -19,9 +19,10 @@ import { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { Savings } from '@/wallet/savings';
 
 const catalogScanSize = 500;
-const boardSize = 5;
+const heroPhoto = require('@/assets/images/home-shopping.jpg');
 const catalogPageSize = 24;
 const searchDelayMs = 300;
 const cardHeight = 230;
@@ -161,9 +162,55 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
           </Text>
           <SearchBar value={search} onChangeText={onSearch} onSubmit={onSubmitSearch} large />
         </Animated.View>
-        {wide && <RateBoard merchants={catalog ? catalog.top.slice(0, boardSize) : null} onOpen={onOpen} />}
+        <HeroPhoto best={best ?? null} onOpen={onOpen} />
       </PageWidth>
     </View>
+  );
+}
+
+function HeroPhoto({ best, onOpen }: { best: Merchant | null; onOpen: (merchant: Merchant) => void }) {
+  const { wide } = usePageLayout();
+  const reduceMotion = useReducedMotion();
+  const theme = useTheme();
+  return (
+    <Animated.View
+      entering={reduceMotion ? undefined : FadeIn.duration(Motion.transition).delay(Motion.stagger * 2)}
+      style={[styles.heroPhotoWrap, wide && styles.heroPhotoWrapWide]}>
+      <View style={[styles.heroPhoto, wide && styles.heroPhotoWide, Elevation.raised]}>
+        <Image
+          source={heroPhoto}
+          contentFit="cover"
+          style={styles.heroPhotoImage}
+          accessibilityLabel="A happy shopper holding shopping bags"
+        />
+      </View>
+      {best && best.cashbackBasisPoints() > 0 && (
+        <PressScale
+          onPress={() => onOpen(best)}
+          accessibilityRole="link"
+          accessibilityLabel={`${best.name}, ${best.rateLabel()}`}
+          style={[
+            styles.heroOffer,
+            wide && styles.heroOfferWide,
+            Elevation.raised,
+            { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+          ]}>
+          <View style={[styles.heroOfferLogo, { borderColor: theme.border }]}>
+            {best.logoUrl ? (
+              <Image source={{ uri: best.logoUrl }} contentFit="contain" style={styles.heroOfferLogoImage} />
+            ) : (
+              <Text style={[styles.heroOfferInitial, { color: theme.text }]}>{best.initial()}</Text>
+            )}
+          </View>
+          <View style={styles.heroOfferText}>
+            <Text style={[styles.heroOfferName, { color: theme.textSecondary }]} numberOfLines={1}>
+              {best.name}
+            </Text>
+            <Text style={[styles.heroOfferRate, { color: theme.accent }]}>{best.rateLabel()}</Text>
+          </View>
+        </PressScale>
+      )}
+    </Animated.View>
   );
 }
 
@@ -214,64 +261,6 @@ export function SearchBar({ value, onChangeText, onSubmit, large = false, placeh
         </Pressable>
       )}
     </View>
-  );
-}
-
-function RateBoard({ merchants, onOpen }: { merchants: Merchant[] | null; onOpen: (merchant: Merchant) => void }) {
-  const reduceMotion = useReducedMotion();
-  const theme = useTheme();
-  if (merchants !== null && merchants.length === 0) {
-    return null;
-  }
-  return (
-    <View
-      style={[styles.board, Elevation.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      <Text style={[styles.boardTitle, { color: theme.textSecondary }]}>Highest cashback</Text>
-      {(merchants ?? Array.from({ length: boardSize }, () => null)).map((merchant, index) =>
-        merchant ? (
-          <Animated.View
-            key={merchant.id}
-            entering={
-              reduceMotion
-                ? undefined
-                : FadeInDown.duration(Motion.state).delay(index * Motion.stagger).easing(Motion.easeOut)
-            }>
-            <BoardRow merchant={merchant} onPress={() => onOpen(merchant)} />
-          </Animated.View>
-        ) : (
-          <View key={`placeholder-${index}`} style={[styles.boardRow, { borderTopColor: theme.border }]}>
-            <View style={[styles.boardPlaceholder, { backgroundColor: theme.backgroundSubtle }]} />
-          </View>
-        ),
-      )}
-    </View>
-  );
-}
-
-function BoardRow({ merchant, onPress }: { merchant: Merchant; onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="link"
-      accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
-      style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [
-        styles.boardRow,
-        { borderTopColor: theme.border },
-        (hovered || pressed) && { backgroundColor: theme.backgroundSubtle },
-      ]}>
-      <View style={[styles.boardLogo, { borderColor: theme.border }]}>
-        {merchant.logoUrl ? (
-          <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.boardLogoImage} />
-        ) : (
-          <Text style={[styles.boardInitial, { color: theme.text }]}>{merchant.initial()}</Text>
-        )}
-      </View>
-      <Text style={[styles.boardName, { color: theme.text }]} numberOfLines={1}>
-        {merchant.name}
-      </Text>
-      <Text style={[styles.boardRate, { color: theme.accent }]}>{merchant.rateFigure()}</Text>
-    </Pressable>
   );
 }
 
@@ -496,63 +485,114 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
   );
 }
 
-type Step = { icon: SymbolViewProps['name']; title: string; body: string };
+type Point = { icon: SymbolViewProps['name']; title: string; body: string };
 
-const steps: Step[] = [
+const steps: Point[] = [
   {
     icon: { ios: 'magnifyingglass', android: 'search', web: 'search' },
-    title: 'Pick a gift card',
-    body: 'Choose from the shops you already use and the amount you want to spend.',
+    title: 'Pick a shop',
+    body: 'Find a shop you already use and choose how much to spend.',
   },
   {
-    icon: { ios: 'wallet.pass', android: 'account_balance_wallet', web: 'account_balance_wallet' },
-    title: 'Pay from your balance',
-    body: 'Pay from your Loop balance. Your card number and PIN appear in Loop when it is ready.',
+    icon: { ios: 'hand.tap', android: 'touch_app', web: 'touch_app' },
+    title: 'Pay in a tap',
+    body: 'Pay from your Loop balance. You see the exact price and your cashback first.',
+  },
+  {
+    icon: { ios: 'bolt.fill', android: 'bolt', web: 'bolt' },
+    title: 'Get your card instantly',
+    body: 'Your card number and PIN appear in Loop, ready to use in store or online.',
   },
   {
     icon: { ios: 'arrow.uturn.backward', android: 'replay', web: 'replay' },
-    title: 'Earn cashback',
-    body: 'Cashback from every card goes straight into your balance, where your savings grow.',
+    title: 'Cashback lands',
+    body: 'Cashback goes into your balance. Spend it on your next card or put it in savings.',
   },
 ];
 
-const trust = [
-  'Sign in with Face ID or your fingerprint, with no password to remember',
-  'Cashback is real money in your balance, not points',
-  'Exact prices and cashback shown before you pay',
+const benefits: Point[] = [
+  {
+    icon: { ios: 'bolt.fill', android: 'bolt', web: 'bolt' },
+    title: 'Instant delivery',
+    body: 'Your gift card is in Loop as soon as you pay. No waiting for an email.',
+  },
+  {
+    icon: { ios: 'banknote', android: 'payments', web: 'payments' },
+    title: 'Cashback on every card',
+    body: 'Real money back in your balance, not points that expire.',
+  },
+  {
+    icon: { ios: 'leaf.fill', android: 'savings', web: 'savings' },
+    title: 'Savings that earn',
+    body: `Move your cashback to savings. ${Savings.rateHeadline}.`,
+  },
+  {
+    icon: { ios: 'lock.shield', android: 'verified_user', web: 'verified_user' },
+    title: 'Simple, safe sign-in',
+    body: 'Sign in with Face ID or your fingerprint, with no password to remember.',
+  },
 ];
 
 export function HowLoopWorks() {
   const { wide } = usePageLayout();
   const theme = useTheme();
   return (
-    <View style={[styles.band, { backgroundColor: theme.backgroundSubtle }]}>
-      <PageWidth style={styles.bandInner}>
-        <Text style={[styles.bandTitle, { color: theme.text }]} accessibilityRole="header">
-          How Loop works
-        </Text>
-        <View style={[styles.steps, wide && styles.stepsWide]}>
-          {steps.map((step) => (
-            <View key={step.title} style={[styles.step, wide && styles.stepWide]}>
-              <View style={[styles.stepIcon, { backgroundColor: theme.accentSoft }]}>
-                <SymbolView name={step.icon} size={22} tintColor={theme.accent} />
+    <>
+      <View style={[styles.band, { backgroundColor: theme.backgroundSubtle }]}>
+        <PageWidth style={styles.bandInner}>
+          <View style={styles.bandHeading}>
+            <Text style={[styles.bandTitle, { color: theme.text }]} accessibilityRole="header">
+              How Loop works
+            </Text>
+            <Text style={[styles.bandLine, { color: theme.textSecondary }]}>
+              From picking a shop to cashback in your balance, in four steps.
+            </Text>
+          </View>
+          <View style={[styles.steps, wide && styles.stepsWide]}>
+            {steps.map((step, index) => (
+              <View
+                key={step.title}
+                style={[
+                  styles.step,
+                  wide && styles.stepWide,
+                  Elevation.card,
+                  { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+                ]}>
+                <View style={styles.stepTop}>
+                  <View style={[styles.stepIcon, { backgroundColor: theme.accentSoft }]}>
+                    <SymbolView name={step.icon} size={22} tintColor={theme.accent} />
+                  </View>
+                  <Text style={[styles.stepNumber, { color: theme.borderStrong }]}>{index + 1}</Text>
+                </View>
+                <Text style={[styles.stepTitle, { color: theme.text }]}>{step.title}</Text>
+                <Text style={[styles.stepBody, { color: theme.textSecondary }]}>{step.body}</Text>
               </View>
-              <Text style={[styles.stepTitle, { color: theme.text }]}>{step.title}</Text>
-              <Text style={[styles.stepBody, { color: theme.textSecondary }]}>{step.body}</Text>
-            </View>
-          ))}
+            ))}
+          </View>
+        </PageWidth>
+      </View>
+      <PageWidth style={styles.bandInner}>
+        <View style={styles.bandHeading}>
+          <Text style={[styles.bandTitle, { color: theme.text }]} accessibilityRole="header">
+            Why shop with Loop
+          </Text>
+          <Text style={[styles.bandLine, { color: theme.textSecondary }]}>
+            The shops you love, with money back every time.
+          </Text>
         </View>
-        <View style={[styles.rule, { backgroundColor: theme.border }]} />
-        <View style={[styles.trust, wide && styles.trustWide]}>
-          {trust.map((line) => (
-            <View key={line} style={styles.trustItem}>
-              <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={16} tintColor={theme.success} />
-              <Text style={[styles.trustText, { color: theme.textSecondary }]}>{line}</Text>
+        <View style={[styles.benefits, wide && styles.benefitsWide]}>
+          {benefits.map((benefit) => (
+            <View key={benefit.title} style={[styles.benefit, wide && styles.benefitWide]}>
+              <SymbolView name={benefit.icon} size={28} tintColor={theme.accent} />
+              <View style={styles.benefitText}>
+                <Text style={[styles.stepTitle, { color: theme.text }]}>{benefit.title}</Text>
+                <Text style={[styles.stepBody, { color: theme.textSecondary }]}>{benefit.body}</Text>
+              </View>
             </View>
           ))}
         </View>
       </PageWidth>
-    </View>
+    </>
   );
 }
 
@@ -658,37 +698,54 @@ const styles = StyleSheet.create({
   searchInputLarge: {
     fontSize: 18,
   },
-  board: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: Radius.card,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.two,
+  heroPhotoWrap: {
+    alignSelf: 'center',
+    width: '78%',
+    maxWidth: 320,
+    paddingBottom: Spacing.four,
   },
-  boardTitle: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 13,
-    lineHeight: 16,
-    paddingHorizontal: Spacing.two,
-    paddingBottom: Spacing.two,
+  heroPhotoWrapWide: {
+    flex: 0.85,
+    width: undefined,
+    maxWidth: 440,
+    paddingBottom: 0,
   },
-  boardRow: {
+  heroPhoto: {
+    aspectRatio: 1,
+    borderRadius: 32,
+    borderWidth: 6,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    transform: [{ rotate: '4deg' }],
+  },
+  heroPhotoWide: {
+    borderRadius: 40,
+    borderWidth: 8,
+  },
+  heroPhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroOffer: {
+    position: 'absolute',
+    left: -Spacing.four,
+    bottom: Spacing.two,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-    minHeight: 64,
-    paddingHorizontal: Spacing.two,
-    borderTopWidth: 1,
-    borderRadius: Radius.tile,
-    transitionProperty: 'background-color',
-    transitionDuration: `${Motion.feedback}ms`,
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingLeft: Spacing.two,
+    paddingRight: Spacing.three,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    maxWidth: 260,
+    transform: [{ rotate: '-3deg' }],
   },
-  boardPlaceholder: {
-    flex: 1,
-    height: 20,
-    borderRadius: Radius.tile,
+  heroOfferWide: {
+    left: -Spacing.five,
+    bottom: Spacing.five,
   },
-  boardLogo: {
+  heroOfferLogo: {
     width: 40,
     height: 40,
     borderRadius: Radius.pill,
@@ -698,23 +755,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  boardLogoImage: {
+  heroOfferLogoImage: {
     width: '100%',
     height: '100%',
   },
-  boardInitial: {
+  heroOfferInitial: {
     fontFamily: FontFamily.bold,
     fontSize: 18,
   },
-  boardName: {
-    flex: 1,
-    fontFamily: FontFamily.medium,
-    fontSize: 17,
+  heroOfferText: {
+    flexShrink: 1,
   },
-  boardRate: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 30,
-    letterSpacing: -0.8,
+  heroOfferName: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    lineHeight: 16,
+  },
+  heroOfferRate: {
+    fontFamily: FontFamily.bold,
+    fontSize: 17,
+    lineHeight: 22,
     fontVariant: ['tabular-nums'],
   },
   section: {
@@ -783,25 +843,50 @@ const styles = StyleSheet.create({
     lineHeight: 40,
     letterSpacing: -0.8,
   },
+  bandHeading: {
+    gap: Spacing.two,
+  },
+  bandLine: {
+    fontFamily: FontFamily.medium,
+    fontSize: 17,
+    lineHeight: 25,
+    maxWidth: 540,
+  },
   steps: {
-    gap: Spacing.five,
+    gap: Spacing.three,
   },
   stepsWide: {
     flexDirection: 'row',
+    gap: Spacing.four,
   },
   step: {
     gap: Spacing.two,
+    padding: Spacing.four,
+    borderRadius: Radius.card,
+    borderWidth: 1,
   },
   stepWide: {
     flex: 1,
   },
+  stepTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.two,
+  },
   stepIcon: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.two,
+  },
+  stepNumber: {
+    fontFamily: FontFamily.bold,
+    fontSize: 40,
+    lineHeight: 44,
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
   },
   stepTitle: {
     fontFamily: FontFamily.semibold,
@@ -814,27 +899,25 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     maxWidth: 360,
   },
-  rule: {
-    height: 1,
+  benefits: {
+    gap: Spacing.four,
   },
-  trust: {
-    gap: Spacing.three,
-  },
-  trustWide: {
+  benefitsWide: {
     flexDirection: 'row',
     gap: Spacing.five,
   },
-  trustItem: {
+  benefit: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    flexShrink: 1,
+    alignItems: 'flex-start',
+    gap: Spacing.three,
   },
-  trustText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 15,
-    lineHeight: 20,
-    flexShrink: 1,
+  benefitWide: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  benefitText: {
+    flex: 1,
+    gap: Spacing.one,
   },
   footer: {
     borderTopWidth: 1,
