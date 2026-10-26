@@ -5,6 +5,7 @@ import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native'
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AddDevice } from '@/components/add-device';
 import { AddMoney } from '@/components/add-money';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
@@ -33,9 +34,9 @@ import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
-import { SmartWallet } from '@/wallet/smart-wallet';
+import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
-type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'wallet';
+type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'wallet';
 
 const topCashbackShown = 10;
 
@@ -45,6 +46,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>(Platform.OS === 'web' ? 'signed-out' : 'loading');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const { view, refresh } = useHoldings(wallet);
   const { busy, message, setMessage, run } = useBusyAction();
@@ -76,6 +78,11 @@ export default function HomeScreen() {
       const loaded = await SmartWallet.load();
       await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
     } catch (error) {
+      if (error instanceof UnlinkedDevice) {
+        setUnlinkedWallet(error.wallet);
+        setScreen('unlinked-device');
+        return;
+      }
       walletLoadStarted.current = false;
       throw error;
     }
@@ -169,7 +176,13 @@ export default function HomeScreen() {
       if (!wallet || vaultShares === 0n) {
         return;
       }
-      const result = await wallet.withdraw(vaultShares);
+      const result = await wallet.withdraw(vaultShares).catch((error: unknown) => {
+        if (error instanceof UnlinkedDevice) {
+          setUnlinkedWallet(error.wallet);
+          setScreen('unlinked-device');
+        }
+        throw error;
+      });
       if (result.error) {
         setMessage(result.error);
       } else {
@@ -263,6 +276,10 @@ export default function HomeScreen() {
                 disabled={busy}
               />
             </Animated.View>
+          )}
+
+          {screen === 'unlinked-device' && unlinkedWallet && (
+            <AddDevice wallet={unlinkedWallet} onAdded={loadWallet} />
           )}
 
           {message !== '' && <Notice message={message} />}

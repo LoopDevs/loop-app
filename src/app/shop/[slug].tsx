@@ -53,7 +53,7 @@ export default function MerchantScreen() {
         const isSignedIn = await ctx.isSignedIn();
         const [loadedMerchant, loadedWallet] = await Promise.all([
           loadMerchant(slug),
-          isSignedIn ? SmartWallet.load() : null,
+          isSignedIn ? SmartWallet.load().catch(SmartWallet.unlessUnlinked) : null,
         ]);
         setMerchant(loadedMerchant);
         setWallet(loadedWallet);

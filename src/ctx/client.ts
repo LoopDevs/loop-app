@@ -36,7 +36,8 @@ export type DeployWalletIn = {
 
 export type SmartWalletIntent =
   | { intent: 'vault_withdraw'; currency: string; shares: string }
-  | { intent: 'pay'; paymentId: string };
+  | { intent: 'pay'; paymentId: string }
+  | { intent: 'rotate_device'; newDevicePublicKey: string };
 
 export type BuiltTransaction = {
   transaction: string;
@@ -45,11 +46,17 @@ export type BuiltTransaction = {
   expiryLedger: number;
 };
 
-export type SignedTransaction = {
-  transaction: string;
+export type PasskeySignature = {
+  publicKey: string;
+  authenticatorData: string;
+  clientDataJson: string;
   signature: string;
-  devicePublicKey: string;
 };
+
+export type SignedTransaction = { transaction: string } & (
+  | { signature: string; devicePublicKey: string }
+  | { passkey: PasskeySignature }
+);
 
 export type MerchantLinkJson = {
   userDiscountOverride?: boolean;
