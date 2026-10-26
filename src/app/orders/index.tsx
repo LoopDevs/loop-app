@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
-import { giftCardStatusLabel, historyHiddenStatuses } from '@/ctx/gift-card-status';
+import { giftCardStatusLabel, historyHiddenStatuses, outcomeText } from '@/ctx/gift-card-status';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { dates, money } from '@/money';
 
@@ -94,6 +94,7 @@ export default function OrdersScreen() {
                 {money.ctx(item.cardFiatAmount, item.cardFiatCurrency)} · {giftCardStatusLabel(item.status)} ·{' '}
                 {dates.day(item.created)}
               </ThemedText>
+              {outcomeText(item) && <ThemedText type="small">{outcomeText(item)}</ThemedText>}
             </ThemedView>
           </Pressable>
         )}

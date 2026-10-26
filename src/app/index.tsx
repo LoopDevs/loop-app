@@ -35,9 +35,17 @@ export default function HomeScreen() {
     setBalances(loaded ? await loaded.balances() : null);
   }, []);
 
+  const openActiveOrder = useCallback(async () => {
+    const activeOrder = await ctx.activeGiftCard();
+    if (activeOrder) {
+      router.push(`/shop/${activeOrder.merchantId}`, { withAnchor: true });
+    }
+  }, [router]);
+
   const loadWallet = useCallback(async () => {
-    await showWallet(await SmartWallet.load());
-  }, [showWallet]);
+    const loaded = await SmartWallet.load();
+    await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
+  }, [showWallet, openActiveOrder]);
 
   const readSession = useCallback(async () => {
     try {
