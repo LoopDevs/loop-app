@@ -348,7 +348,12 @@ export default function ShopScreen() {
             {busy ? (
               <MerchantGridSkeleton columns={cardColumns} />
             ) : listing.message === '' ? (
-              <EmptyResults searching={searching} onClear={() => setSearch('')} />
+              <EmptyResults
+                searching={searching}
+                category={searching ? null : category}
+                onClear={() => setSearch('')}
+                onShowAll={() => setCategory(null)}
+              />
             ) : null}
           </View>
         }
@@ -519,7 +524,22 @@ function ActiveOrderCard({ merchantName, onPress }: { merchantName: string; onPr
   );
 }
 
-function EmptyResults({ searching, onClear }: { searching: boolean; onClear: () => void }) {
+type EmptyResultsProps = {
+  searching: boolean;
+  category: string | null;
+  onClear: () => void;
+  onShowAll: () => void;
+};
+
+function EmptyResults({ searching, category, onClear, onShowAll }: EmptyResultsProps) {
+  if (category !== null) {
+    return (
+      <View style={styles.empty}>
+        <ThemedText type="heading">{`No ${Merchant.categoryLabel(category)} gift cards here yet`}</ThemedText>
+        <Button label="See all" onPress={onShowAll} />
+      </View>
+    );
+  }
   return (
     <View style={styles.empty}>
       <ThemedText type="heading">{searching ? 'No matches' : 'No gift cards here yet'}</ThemedText>
