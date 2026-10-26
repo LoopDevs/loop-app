@@ -17,6 +17,8 @@ export type Token = {
   contract: string;
 };
 
+export const onlyPaymentCurrency: PaymentCurrency | null = 'XLM.USDC';
+
 export type StellarNetwork = {
   rpcUrl: string;
   passphrase: string;

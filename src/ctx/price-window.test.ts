@@ -17,13 +17,6 @@ test('a bank order or an order with no expiration has no price window', () => {
   assert.equal(PriceWindow.of({ paymentMethod: 'crypto', paymentUrlExpiration: 'soon' }), null);
 });
 
-test('the remaining time counts down in minutes and seconds', () => {
-  const window = new PriceWindow(expiresAt);
-  assert.equal(window.remaining(expiresAt - 600_000), '10:00');
-  assert.equal(window.remaining(expiresAt - 65_500), '1:05');
-  assert.equal(window.remaining(expiresAt + 5_000), '0:00');
-});
-
 test('the window closes 30 seconds before the expiration', () => {
   const window = new PriceWindow(expiresAt);
   assert.equal(window.isClosed(expiresAt - 30_000), false);

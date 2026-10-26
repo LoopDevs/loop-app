@@ -70,7 +70,7 @@ export type MerchantJson = {
   country: string;
   currency: string;
   denominationType: 'min-max' | 'min-max-major' | 'fixed';
-  denominations: string[];
+  denominationValues: string[] | null;
   logoUrl?: string;
   cardImageUrl?: string;
   website?: string;

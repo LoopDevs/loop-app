@@ -151,16 +151,3 @@ export function canPay(giftCard: GiftCardPayment, state: PaymentState): boolean 
     (state.kind === 'ready' || state.kind === 'notSent')
   );
 }
-
-export function needsNewPrice(giftCard: GiftCardPayment, state: PaymentState): boolean {
-  if (giftCard.status === 'expired') {
-    return true;
-  }
-  if (giftCard.status !== 'unpaid') {
-    return false;
-  }
-  if (state.kind === 'failed') {
-    return !state.contactSupport;
-  }
-  return state.kind === 'priceExpired';
-}

@@ -6,7 +6,6 @@ import {
   chainOutcome,
   landingClosed,
   landingGraceLedgers,
-  needsNewPrice,
   rateLimitedMessage,
   rejectedPaymentState,
   resumedPaymentState,
@@ -128,16 +127,7 @@ test('pay is only offered for an unpaid order with no sent payment', () => {
   assert.equal(canPay({ status: 'paid' }, { kind: 'ready' }), false);
 });
 
-test('a new price is offered for failed, closed and expired orders', () => {
-  assert.equal(needsNewPrice(unpaid, { kind: 'failed' }), true);
-  assert.equal(needsNewPrice(unpaid, { kind: 'priceExpired' }), true);
-  assert.equal(needsNewPrice({ status: 'expired' }, { kind: 'ready' }), true);
-  assert.equal(needsNewPrice(unpaid, { kind: 'ready' }), false);
-  assert.equal(needsNewPrice({ status: 'paid' }, { kind: 'failed' }), false);
-});
-
-test('a failed payment that needs support is not offered a new price', () => {
-  assert.equal(needsNewPrice(unpaid, { kind: 'failed', contactSupport: true }), false);
+test('a failed payment that needs support is not offered pay', () => {
   assert.equal(canPay(unpaid, { kind: 'failed', contactSupport: true }), false);
 });
 

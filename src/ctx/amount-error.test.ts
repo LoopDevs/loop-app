@@ -3,8 +3,8 @@ import { test } from 'node:test';
 
 import { amountErrorMessage } from './amount-error.ts';
 
-const range = { currency: 'GBP', denominations: ['5.00', '500.00'] };
-const fixed = { currency: 'USD', denominations: ['10', '25', '50'] };
+const range = { currency: 'GBP', denominationValues: ['5.00', '500.00'] };
+const fixed = { currency: 'USD', denominationValues: ['10', '25', '50'] };
 
 test('below minimum names the minimum', () => {
   assert.equal(amountErrorMessage('ErrAmountBelowMinimum', range), 'Minimum is 5.00 GBP');
