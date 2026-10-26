@@ -1,4 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
@@ -102,17 +103,22 @@ export default function GiftCardScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.content}>
-        {!giftCard && !message && <OrderDetailSkeleton />}
-        {message !== '' &&
-          (message === signInMessage ? (
-            <View style={styles.section}>
-              <ThemedText type="heading">{signInMessage}</ThemedText>
-              <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
-            </View>
-          ) : (
-            <Notice message={message} actionLabel="Try again" onAction={retry} />
-          ))}
+        {(!giftCard || message !== '') && (
+          <View style={[styles.body, styles.status]}>
+            {!giftCard && !message && <OrderDetailSkeleton />}
+            {message !== '' &&
+              (message === signInMessage ? (
+                <View style={styles.section}>
+                  <ThemedText type="heading">{signInMessage}</ThemedText>
+                  <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
+                </View>
+              ) : (
+                <Notice message={message} actionLabel="Try again" onAction={retry} />
+              ))}
+          </View>
+        )}
         {giftCard && <GiftCardSummary giftCard={giftCard} />}
       </ScrollView>
     </ThemedView>
@@ -128,46 +134,57 @@ function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
   return (
     <Animated.View
       entering={reduceMotion ? undefined : FadeIn.duration(Motion.state).easing(Motion.easeOut)}
-      style={styles.section}>
+      style={styles.summarySections}>
       <View style={styles.hero}>
-        <Text style={styles.heroName} maxFontSizeMultiplier={1.6}>
-          {giftCard.merchantName}
-        </Text>
-        <Text style={styles.heroAmount} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
-          {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)}
-        </Text>
-        <View style={styles.heroStatus}>
-          {processing && <ActivityIndicator size="small" color={Brand.onRoyal} />}
-          <Text style={styles.heroStatusText} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
-            {processing ? 'Processing. Your code shows here when it is ready.' : giftCardStatusLabel(giftCard.status)}
+        <View style={styles.heroInner}>
+          <Text style={styles.heroName} maxFontSizeMultiplier={1.6}>
+            {giftCard.merchantName}
           </Text>
+          <Text style={styles.heroAmount} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
+            {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)}
+          </Text>
+          <View style={styles.heroStatus}>
+            {processing && <ActivityIndicator size="small" color={Brand.onRoyal} />}
+            <Text style={styles.heroStatusText} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
+              {processing ? 'Processing. Your code shows here when it is ready.' : giftCardStatusLabel(giftCard.status)}
+            </Text>
+          </View>
         </View>
       </View>
 
-      {outcome && <Notice message={outcome} />}
+      <View style={[styles.body, styles.section]}>
+        {outcome && <Notice message={outcome} />}
 
-      <GiftCardDetails giftCard={giftCard} />
+        <GiftCardDetails giftCard={giftCard} />
 
-      {(giftCard.paymentCryptoAmount || cashback !== 'none') && (
-        <View style={[styles.summary, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-          {giftCard.paymentCryptoAmount && (
-            <SummaryRow
-              label="Paid"
-              value={money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
-            />
-          )}
-          {cashback !== 'none' && (
-            <SummaryRow
-              label={`Cashback, ${cashbackStateLabel(cashback)}`}
-              value={money.ctx(giftCard.cashbackAmount ?? '', giftCard.cashbackCurrency ?? '')}
-              tone={cashback === 'reversed' ? 'danger' : 'success'}
-            />
-          )}
-          <SummaryRow label="Ordered" value={dates.day(giftCard.created)} />
-        </View>
-      )}
+        {(giftCard.paymentCryptoAmount || cashback !== 'none') && (
+          <View
+            style={[
+              styles.summary,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+              },
+            ]}>
+            {giftCard.paymentCryptoAmount && (
+              <SummaryRow
+                label="Paid"
+                value={money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
+              />
+            )}
+            {cashback !== 'none' && (
+              <SummaryRow
+                label={`Cashback, ${cashbackStateLabel(cashback)}`}
+                value={money.ctx(giftCard.cashbackAmount ?? '', giftCard.cashbackCurrency ?? '')}
+                tone={cashback === 'reversed' ? 'danger' : 'success'}
+              />
+            )}
+            <SummaryRow label="Ordered" value={dates.day(giftCard.created)} />
+          </View>
+        )}
 
-      <OrderHelp giftCard={giftCard} />
+        <OrderHelp giftCard={giftCard} />
+      </View>
     </Animated.View>
   );
 }
@@ -198,20 +215,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    paddingBottom: BottomTabInset + Spacing.five,
+    gap: Spacing.three,
+  },
+  body: {
     width: '100%',
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
-    padding: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.five,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.three,
+  },
+  status: {
+    paddingTop: Spacing.three,
   },
   section: {
     gap: Spacing.three,
   },
+  summarySections: {
+    gap: Spacing.four,
+  },
   hero: {
     backgroundColor: Brand.royal,
-    borderRadius: Radius.control,
-    padding: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.four,
+  },
+  heroInner: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
     gap: Spacing.one,
   },
   heroName: {
