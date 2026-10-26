@@ -51,6 +51,7 @@ const featuredShown = 5;
 const stripShown = 10;
 const brandRows = 2;
 const maxBrandColumns = 6;
+const offersShown = featuredShown + Math.max(stripShown, maxBrandColumns * brandRows);
 
 const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
@@ -60,6 +61,7 @@ export default function HomeScreen() {
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
+  const [sessionRead, setSessionRead] = useState(false);
   const { view, refresh } = useHoldings(wallet);
   const { busy, message, setMessage, run } = useBusyAction();
   const [refreshing, setRefreshing] = useState(false);
@@ -70,11 +72,12 @@ export default function HomeScreen() {
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { country: marketCountry } = useMarket();
+  const { country: marketCountry, resolved: marketResolved } = useMarket();
   const { check } = useSignIn();
   const signedOut = screen === 'signed-out';
-  const catalogCountry = signedOut ? marketCountry : profileCountry;
-  const catalog = useCatalog(catalogCountry);
+  const signedOutCountry = marketResolved ? marketCountry : undefined;
+  const catalogCountry = !sessionRead ? undefined : signedOut ? signedOutCountry : profileCountry;
+  const catalog = useCatalog(catalogCountry, offersShown);
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -111,7 +114,9 @@ export default function HomeScreen() {
 
   const readSession = useCallback(async () => {
     try {
-      if (await ctx.isSignedIn()) {
+      const signedIn = await ctx.isSignedIn();
+      setSessionRead(true);
+      if (signedIn) {
         if (preWalletScreens.includes(screen) && !walletLoadStarted.current) {
           setScreen('loading');
           loadProfileCountry();
