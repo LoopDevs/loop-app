@@ -3,42 +3,44 @@ import '@/global.css';
 import { Platform } from 'react-native';
 import { Easing } from 'react-native-reanimated';
 
-export const Brand = {
-  royal: '#1C3FAE',
-  navy: '#0A1640',
-  onRoyal: '#FFFFFF',
-  onRoyalMuted: '#C9D4FA',
-  pillGround: '#E3EAFF',
-  pillText: '#1C3FAE',
-  scrim: 'rgba(10, 22, 64, 0.5)',
-  actionGround: 'rgba(10, 22, 64, 0.42)',
-  actionGroundSelected: 'rgba(10, 22, 64, 0.72)',
-} as const;
-
 export const Colors = {
   light: {
-    text: '#0B1530',
-    background: '#EEF1F8',
+    text: '#0F1B2D',
+    background: '#FFFFFF',
     backgroundElement: '#FFFFFF',
-    backgroundSelected: '#E3EAFF',
-    textSecondary: '#545E78',
-    border: '#D5DBEA',
-    accent: '#1C3FAE',
+    backgroundSubtle: '#F7F8FA',
+    backgroundSelected: '#EEF1F5',
+    textSecondary: '#5A6577',
+    border: '#E6EAF0',
+    borderStrong: '#D3DBE6',
+    accent: '#1A56DB',
+    accentSoft: '#EBF1FE',
     onAccent: '#FFFFFF',
     danger: '#B42318',
     success: '#11734B',
+    chrome: 'rgba(255, 255, 255, 0.92)',
+    inverse: '#0F1B2D',
+    onInverse: '#FFFFFF',
+    onInverseMuted: '#C3CAD5',
   },
   dark: {
-    text: '#F2F4FA',
-    background: '#0A0F1F',
-    backgroundElement: '#141B30',
-    backgroundSelected: '#1F2A52',
-    textSecondary: '#A3ACC4',
-    border: '#27304A',
-    accent: '#8FA6FF',
-    onAccent: '#0A1640',
+    text: '#F2F4F7',
+    background: '#0D0F12',
+    backgroundElement: '#16191D',
+    backgroundSubtle: '#1B1E23',
+    backgroundSelected: '#262A31',
+    textSecondary: '#A3AAB6',
+    border: '#272B32',
+    borderStrong: '#373C45',
+    accent: '#7BA4FF',
+    accentSoft: '#1B2539',
+    onAccent: '#0D0F12',
     danger: '#FF8A80',
     success: '#5DD6A0',
+    chrome: 'rgba(13, 15, 18, 0.92)',
+    inverse: '#F2F4F7',
+    onInverse: '#0F1B2D',
+    onInverseMuted: '#4A5466',
   },
 } as const;
 
@@ -90,19 +92,22 @@ export const Spacing = {
 } as const;
 
 export const Radius = {
-  tile: 2,
-  control: 4,
-  media: 14,
-  card: 20,
+  tile: 12,
+  control: 12,
+  media: 18,
+  card: 22,
   pill: 999,
 } as const;
 
 export const Elevation = {
   card: {
-    boxShadow: '0 6px 18px rgba(10, 22, 64, 0.07)',
+    boxShadow: '0 1px 2px rgba(15, 27, 45, 0.05), 0 4px 14px rgba(15, 27, 45, 0.06)',
+  },
+  raised: {
+    boxShadow: '0 2px 4px rgba(15, 27, 45, 0.05), 0 8px 24px rgba(15, 27, 45, 0.1)',
   },
   badge: {
-    boxShadow: '0 2px 6px rgba(10, 22, 64, 0.16)',
+    boxShadow: '0 1px 2px rgba(15, 27, 45, 0.12), 0 2px 6px rgba(15, 27, 45, 0.1)',
   },
 } as const;
 
