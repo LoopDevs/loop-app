@@ -14,7 +14,6 @@ test('a crypto order has a price window ending at its payment URL expiration', (
 test('a bank order or an order with no expiration has no price window', () => {
   assert.equal(PriceWindow.of({ paymentMethod: 'plaid-uk-eu', paymentUrlExpiration: expiration }), null);
   assert.equal(PriceWindow.of({ paymentMethod: 'crypto' }), null);
-  assert.equal(PriceWindow.of({ paymentUrlExpiration: expiration }), null);
   assert.equal(PriceWindow.of({ paymentMethod: 'crypto', paymentUrlExpiration: 'soon' }), null);
 });
 

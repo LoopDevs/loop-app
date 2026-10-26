@@ -12,6 +12,7 @@ import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal'
 import {
   giftCardStatusLabel,
   historyHiddenStatuses,
+  outcomeText,
   pollIntervalMs,
   settledStatuses,
 } from '@/ctx/gift-card-status';
@@ -31,6 +32,7 @@ import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
+import { holdCriticalReload } from '@/updates/update-checker';
 import type { Holdings } from '@/wallet/holdings';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
@@ -97,8 +99,8 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         continue;
       }
       if (isCurrent()) {
-        const { status } = current;
-        setOrder((held) => held && { ...held, status });
+        const { status, paymentStatus } = current;
+        setOrder((held) => held && { ...held, status, paymentStatus });
       }
     }
   }, []);
@@ -228,7 +230,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     try {
       await run(async () => {
         setPayment({ kind: 'sending' });
-        const next = await sendPayment(order);
+        const next = await holdCriticalReload(() => sendPayment(order));
         if (next.kind === 'confirming' && next.txId) {
           sentPayments.set(order.paymentId, next.txId);
         }
@@ -358,12 +360,14 @@ function OrderView({ order, payment, busy, onPay, onNewPrice, onDone }: OrderVie
   const shown: PaymentState =
     priceWindow && priceWindow.isClosed(now) && canPay(order, payment) ? { kind: 'priceExpired' } : payment;
   const payable = canPay(order, shown);
+  const outcome = outcomeText(order);
   return (
     <View style={styles.section}>
       <ThemedText type="smallBold">{card}</ThemedText>
       <ThemedText>Price: {price}</ThemedText>
       {payable && priceWindow && <ThemedText type="small">Pay within {priceWindow.remaining(now)}</ThemedText>}
       <ThemedText type="small">{orderStatus(order, shown)}</ThemedText>
+      {outcome && <ThemedText type="small">{outcome}</ThemedText>}
       {shown.kind === 'notSent' && shown.detail !== '' && <ThemedText type="small">{shown.detail}</ThemedText>}
       {payable && <Button label={`Pay ${price}`} onPress={onPay} disabled={busy} />}
       {needsNewPrice(order, shown) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}

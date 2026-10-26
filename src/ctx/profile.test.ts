@@ -72,6 +72,31 @@ test('a company without stable currencies has no currency step', () => {
   assert.deepEqual(profile.nextUpdate({ country: 'US' }), { country: 'US' });
 });
 
+test('an Apple or Google identity names its provider', () => {
+  const profile = Profile.fromMe({
+    user: {
+      id: 'u1',
+      email: 'a@b.co',
+      oauthIdentities: [{ provider: 'apple' }, { provider: 'google' }],
+    },
+    company,
+  });
+  assert.equal(profile.email, 'a@b.co');
+  assert.equal(profile.signInProviderLabel(), 'Signed in with Apple and Google');
+});
+
+test('an email-code user has no provider line', () => {
+  assert.equal(Profile.fromMe(newUser).signInProviderLabel(), null);
+});
+
+test('an unknown provider is not shown', () => {
+  const profile = Profile.fromMe({
+    user: { id: 'u1', oauthIdentities: [{ provider: 'other' }] },
+    company,
+  });
+  assert.equal(profile.signInProviderLabel(), null);
+});
+
 test('a stable currency is labelled by its asset code', () => {
   assert.equal(Profile.currencyLabel('XLM.GBPLOOP'), 'GBPLOOP');
   assert.equal(Profile.currencyLabel('XLM'), 'XLM');

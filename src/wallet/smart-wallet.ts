@@ -36,9 +36,11 @@ export class SmartWallet {
   private constructor(
     readonly id: string,
     readonly address: string,
+    readonly userId: string,
   ) {}
 
   static async load(): Promise<SmartWallet | null> {
+    const userId = await ctx.userId();
     const links = await ctx.wallets();
     const link = links.find(
       (candidate) => candidate.sponsored && candidate.chain === 'XLM' && candidate.status === 'active',
@@ -46,7 +48,7 @@ export class SmartWallet {
     if (!link) {
       return null;
     }
-    const wallet = new SmartWallet(link.id, link.address);
+    const wallet = new SmartWallet(link.id, link.address, userId);
     await wallet.verify();
     return wallet;
   }
@@ -56,20 +58,21 @@ export class SmartWallet {
     if (existing) {
       return existing;
     }
-    const devicePublicKey = await deviceSigner.create();
+    const userId = await ctx.userId();
+    const devicePublicKey = await deviceSigner.create(userId);
     const created = await passkey.create(label);
     const link = await ctx.deployWallet({
       credentialId: created.credentialId,
       passkeyPublicKey: base64.encode(created.publicKey),
       devicePublicKey,
     });
-    const wallet = new SmartWallet(link.id, link.address);
+    const wallet = new SmartWallet(link.id, link.address, userId);
     await wallet.verify(created.publicKey);
     return wallet;
   }
 
   async verify(passkeyPublicKey?: Uint8Array): Promise<void> {
-    const devicePublicKey = await deviceSigner.publicKey();
+    const devicePublicKey = await deviceSigner.publicKey(this.userId);
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
     }
@@ -138,11 +141,11 @@ export class SmartWallet {
     call: SponsoredCall,
     onSending?: () => void,
   ): Promise<SponsoredResult> {
-    const devicePublicKey = await deviceSigner.publicKey();
+    const devicePublicKey = await deviceSigner.publicKey(this.userId);
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
     }
-    const signature = await deviceSigner.sign(call.digest);
+    const signature = await deviceSigner.sign(this.userId, call.digest);
     onSending?.();
     return ctx.sponsorTransaction(this.id, intent, {
       transaction,
