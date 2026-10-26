@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
+import { OrderHelp } from '@/components/order-help';
 import { OrderDetailSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -12,7 +13,9 @@ import { ctx, type GiftCard } from '@/ctx/client';
 import {
   cashbackState,
   cashbackStateLabel,
+  emailNotice,
   giftCardStatusLabel,
+  outcomeText,
   pollIntervalMs,
 } from '@/ctx/gift-card-status';
 import { money } from '@/money';
@@ -72,12 +75,16 @@ export default function GiftCardScreen() {
 
 function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
   const cashback = cashbackState(giftCard);
+  const outcome = outcomeText(giftCard);
+  const notice = emailNotice(giftCard);
   return (
     <>
       <ThemedText type="smallBold">
         {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)} {giftCard.merchantName}
       </ThemedText>
       <ThemedText type="small">{giftCardStatusLabel(giftCard.status)}</ThemedText>
+      {outcome && <ThemedText type="small">{outcome}</ThemedText>}
+      {notice && <ThemedText type="small">{notice}</ThemedText>}
       {giftCard.paymentCryptoAmount && (
         <ThemedText type="small">
           Paid: {money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
@@ -90,6 +97,7 @@ function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
         </ThemedText>
       )}
       <GiftCardDetails giftCard={giftCard} />
+      <OrderHelp giftCard={giftCard} />
     </>
   );
 }

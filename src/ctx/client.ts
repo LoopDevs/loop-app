@@ -95,6 +95,8 @@ export type GiftCard = {
   cardFiatAmount: string;
   cardFiatCurrency: string;
   paymentId: string;
+  paymentStatus: 'unpaid' | 'paid' | 'error' | 'refunded' | 'cancelled' | 'expired';
+  paymentMethod: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
   paymentCryptoTxId?: string;
