@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import { loopEnvironment } from '@/environment';
 import { DeviceKey, type DeviceKeyStorage } from '@/wallet/device-key';
 
 const biometricOptions: SecureStore.SecureStoreOptions = {
@@ -14,13 +15,17 @@ const biometricsHelp: Partial<Record<typeof Platform.OS, string>> = {
 
 const secureStorage: DeviceKeyStorage = {
   read(name, biometric) {
-    return SecureStore.getItemAsync(name, biometric ? biometricOptions : undefined);
+    return SecureStore.getItemAsync(loopEnvironment.storageKey(name), biometric ? biometricOptions : undefined);
   },
   write(name, value, biometric) {
-    return SecureStore.setItemAsync(name, value, biometric ? biometricOptions : undefined);
+    return SecureStore.setItemAsync(
+      loopEnvironment.storageKey(name),
+      value,
+      biometric ? biometricOptions : undefined,
+    );
   },
   remove(name) {
-    return SecureStore.deleteItemAsync(name);
+    return SecureStore.deleteItemAsync(loopEnvironment.storageKey(name));
   },
 };
 

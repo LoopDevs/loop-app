@@ -28,7 +28,13 @@ The cashback, the wallet and the savings live in one place the user owns: a pass
 - Orders: list of purchased gift cards; detail with barcode, number, PIN, redeem link.
 - Savings: savings (vault) value, yield earned, withdraw.
 - Releases: `eas build --profile production` builds the store binary (`preview` builds go to testers, both on EAS-managed signing). A JS-only fix ships with `eas update --channel production`; it downloads in the background and applies on the next cold start. A critical update (must apply at once) is the same command after raising `extra.criticalIndex` in `app.json`, which only ever increases and does not change the runtime fingerprint; running binaries reload as soon as they fetch it, waiting for any payment being sent. To stop an old binary from paying, check out its release tag, replace `GiftCardPurchase` with a blocking "Update Loop" view that links to the store listing, raise `criticalIndex`, and publish with `eas update --channel production`; Orders stays usable so bought codes remain reachable.
-- Testnet builds expose a "fund with testnet XLM" action.
+- Environments: `EXPO_PUBLIC_LOOP_ENV` is `staging` (CTX staging + Stellar testnet) or `production` (CTX production + Stellar mainnet); any other value or none fails at startup. `EXPO_PUBLIC_CTX_CLIENT_ID` is separate. Device keys, refresh token and app-lock flag are stored under keys suffixed with the environment; staging passkeys are named `<email> (test)`.
+- Staging builds expose a "fund with testnet XLM" action; production has no friendbot, so no funding button.
+- Production release checklist (compare values, record them in the release PR):
+  - CTX production `crypto.xlm.smartWallet` `factory`, `ed25519Verifier` and `webauthnVerifier` equal the mainnet infrastructure deploy; relayer and system accounts are funded.
+  - The mainnet USDC DeFindex vault is `active` for `mainnet` in CTX, and `usdcVault` in `src/stellar/network.ts` equals its `ContractId`.
+  - The mainnet factory is the v2 deploy and its `config()` has `account_wasm_hash` = audited v2 account, both verifiers, `vaults` containing the active vault, `tokens` = XLM, USDC and EURC SACs, `payee` = CTX production payee, `recovery` = CTX production recovery address.
+  - `src/stellar/network.ts` mainnet `factory`, `payee`, `tokens`, `accountWasmHash`, `webauthnVerifier`, `ed25519Verifier` and `usdcVault` equal the values above. GBPLOOP stays testnet-only.
 
 ## Capabilities and Constraints
 
