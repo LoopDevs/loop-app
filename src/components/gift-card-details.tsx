@@ -1,11 +1,11 @@
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
+import { useToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
 
@@ -52,14 +52,14 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
 }
 
 function CopyableSecret({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   const copy = async () => {
     await Clipboard.setStringAsync(value, {
       android: { isSensitive: true },
       ios: { localOnly: true, expiresAt: new Date(Date.now() + clipboardLifetimeMs) },
     });
-    setCopied(true);
+    toast('Copied');
   };
 
   return (
@@ -67,7 +67,7 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
       <ThemedText type="code" selectable style={styles.secret}>
         {label}: {value}
       </ThemedText>
-      <Button label={copied ? 'Copied' : 'Copy'} onPress={copy} />
+      <Button label="Copy" onPress={copy} />
     </View>
   );
 }

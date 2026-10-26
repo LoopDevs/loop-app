@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { money } from '@/money';
+import { haptics } from '@/native/haptics';
 import { network } from '@/stellar/network';
 import { type Balances, SmartWallet } from '@/wallet/smart-wallet';
 
@@ -29,6 +30,7 @@ export default function HomeScreen() {
     try {
       await action();
     } catch (error) {
+      haptics.error();
       setMessage(errorMessage(error));
     } finally {
       setBusy(false);
