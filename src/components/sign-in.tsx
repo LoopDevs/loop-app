@@ -9,13 +9,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, SlideInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { PressScale } from '@/components/press-scale';
 import { SocialSignInButtons } from '@/components/social-sign-in-buttons';
 import { ThemedText } from '@/components/themed-text';
@@ -127,9 +128,7 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
     : (wide ? FadeInDown : SlideInDown).duration(Motion.transition).easing(Motion.easeOut);
   return (
     <Modal transparent visible animationType="none" onRequestClose={close} statusBarTranslucent>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={[styles.layer, wide ? styles.layerWide : styles.layerNarrow]}>
+      <KeyboardAvoid style={[styles.layer, wide ? styles.layerWide : styles.layerNarrow]}>
         <Animated.View entering={FadeIn.duration(Motion.state)} style={StyleSheet.absoluteFill}>
           <Pressable
             style={styles.backdrop}
@@ -163,7 +162,7 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
             <SignInForm reason={reason} onAuthenticated={() => setAuthenticated(true)} onSignedIn={onSignedIn} />
           </ScrollView>
         </Animated.View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
     </Modal>
   );
 }
@@ -173,9 +172,7 @@ export function SignInScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.layer, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid style={[styles.layer, { backgroundColor: theme.background }]}>
       <ScrollView
         contentContainerStyle={[
           styles.screenBody,
@@ -187,7 +184,7 @@ export function SignInScreen() {
           <SignInForm reason="" onAuthenticated={() => undefined} onSignedIn={finishSignIn} />
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

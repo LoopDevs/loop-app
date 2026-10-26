@@ -8,6 +8,7 @@ import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/form';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { useScrimScroll } from '@/components/home-panel';
 import { coverClearance, MerchantCover } from '@/components/merchant-card';
 import { PressScale } from '@/components/press-scale';
@@ -128,6 +129,7 @@ export default function MerchantScreen() {
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
       <Stack.Screen options={{ title: merchant.name }} />
+      <KeyboardAvoid>
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -160,6 +162,7 @@ export default function MerchantScreen() {
         <WhyShopWithLoop />
         <SiteFooter />
       </Animated.ScrollView>
+      </KeyboardAvoid>
     </ThemedView>
   );
 }

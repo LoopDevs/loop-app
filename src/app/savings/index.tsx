@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Button, Field, Notice } from '@/components/form';
 import { useScrimScroll } from '@/components/home-panel';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { SavingsCard } from '@/components/home-overview';
 import { PageHeader } from '@/components/page-header';
 import { useSignIn } from '@/components/sign-in';
@@ -84,6 +85,7 @@ export default function SavingsScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <KeyboardAvoid>
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -149,6 +151,7 @@ export default function SavingsScreen() {
         </PageWidth>
         <SiteFooter />
       </Animated.ScrollView>
+      </KeyboardAvoid>
       <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
   );
