@@ -52,8 +52,12 @@ export class SmartWallet {
   }
 
   static async create(label: string): Promise<SmartWallet> {
-    const created = await passkey.create(label);
+    const existing = await SmartWallet.load();
+    if (existing) {
+      return existing;
+    }
     const devicePublicKey = await deviceSigner.create();
+    const created = await passkey.create(label);
     const link = await ctx.deployWallet({
       credentialId: created.credentialId,
       passkeyPublicKey: base64.encode(created.publicKey),
