@@ -3,9 +3,11 @@ import { test } from 'node:test';
 
 import { Address, StrKey, nativeToScVal, type xdr } from '@stellar/stellar-sdk';
 
+import { money } from '../money.ts';
 import { network } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
-import { Savings } from './savings.ts';
+import { CtxError } from '../ctx/ctx-error.ts';
+import { Savings, SponsorReplyLost } from './savings.ts';
 import type { AuthorizedCall, ContractCall } from './sponsored-call.ts';
 import { VaultCall, type SentVaultCall } from './vault-call.ts';
 
@@ -139,12 +141,13 @@ test('a deposit amount must be a positive amount within the wallet USDC', () => 
 });
 
 test('each deposit outcome has its own message', () => {
-  assert.equal(Savings.depositMessage('success', units.parse('1'), 'HASH'), 'Added 1.00 USDC to savings');
+  assert.equal(Savings.depositMessage('success', units.parse('25')), `Added ${money.token(units.parse('25'), Savings.currency)} to savings`);
   assert.equal(
-    Savings.depositMessage('failed', units.parse('1'), ''),
-    'The deposit failed. Your USDC is still in your wallet.',
+    Savings.depositMessage('failed', units.parse('1')),
+    'The deposit failed. Your money is still in your balance.',
   );
-  assert.equal(Savings.depositMessage('pending', units.parse('1'), 'HASH'), 'Deposit sent, still confirming.\nHASH');
+  assert.equal(Savings.depositMessage('pending', units.parse('1')), 'Still confirming. Check back in a minute.');
+  assert.match(Savings.depositMessage('unconfirmed', units.parse('1')), /may still be confirming/);
 });
 
 function depositRun(send: () => Promise<SentVaultCall>) {
@@ -179,4 +182,27 @@ test('a deposit that fails after it is sent puts the amount back in the field', 
   const { result, events } = depositRun(async () => ({ hash: '', status: 'failed', expiryLedger: 10 }));
   assert.equal((await result).outcome, 'failed');
   assert.deepEqual(events, ['clear', 'restore']);
+});
+
+test('a lost sponsor reply clears the field and reports the deposit as unconfirmed', async () => {
+  const { result, events } = depositRun(async () => {
+    throw new SponsorReplyLost();
+  });
+  assert.equal((await result).outcome, 'unconfirmed');
+  assert.deepEqual(events, ['clear']);
+});
+
+test('only a reply-less sponsor failure is treated as possibly landed', () => {
+  const refusal = new CtxError(400, '{"error":"ErrSavingsUnavailable"}');
+  assert.equal(Savings.sponsorFailure(refusal), refusal);
+  const lost = Savings.sponsorFailure(new TypeError('Network request failed'));
+  assert.ok(lost instanceof SponsorReplyLost);
+});
+
+test('Max shows two decimals without rounding up and deposits the exact balance', () => {
+  const balance = units.parse('12.3456789');
+  assert.equal(Savings.maxInput(balance), '12.34');
+  assert.equal(Savings.depositAmount('12.34', balance, true), balance);
+  assert.equal(Savings.depositAmount('12.34', balance), units.parse('12.34'));
+  assert.equal(Savings.depositAmount('', 0n, true), null);
 });
