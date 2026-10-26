@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 import { Button } from '@/components/form';
-import { RoyalScreen } from '@/components/royal-screen';
+import { MessageScreen } from '@/components/message-screen';
 import { ctx, CtxError } from '@/ctx/client';
 import {
   blockingServiceState,
@@ -37,9 +37,9 @@ export function ServiceUnavailable({ state, onRecovered }: Props) {
   useAppRefresh(tryAgain);
 
   return (
-    <RoyalScreen title={serviceStateMessages[state]} message={message}>
-      <Button label="Try again" variant="onRoyal" onPress={tryAgain} disabled={busy} />
-    </RoyalScreen>
+    <MessageScreen title={serviceStateMessages[state]} message={message}>
+      <Button label="Try again" variant="primary" onPress={tryAgain} disabled={busy} />
+    </MessageScreen>
   );
 }
 

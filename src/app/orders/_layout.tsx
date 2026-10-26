@@ -1,26 +1,28 @@
 import { Stack } from 'expo-router';
 
-import { Brand, FontFamily } from '@/constants/theme';
+import { FontFamily } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export const unstable_settings = {
   anchor: 'index',
 };
 
-const royalHeader = {
-  title: '',
-  headerStyle: { backgroundColor: Brand.royal },
-  headerTintColor: Brand.onRoyal,
-  headerTitleStyle: { fontFamily: FontFamily.semibold },
-  headerShadowVisible: false,
-  headerBackButtonDisplayMode: 'minimal',
-} as const;
-
 export default function OrdersLayout() {
+  const theme = useTheme();
+  const detailHeader = {
+    title: '',
+    headerStyle: { backgroundColor: theme.background },
+    headerTintColor: theme.text,
+    headerTitleStyle: { fontFamily: FontFamily.semibold },
+    headerShadowVisible: false,
+    headerBackButtonDisplayMode: 'minimal',
+  } as const;
+
   return (
     <Stack>
       <Stack.Screen name="index" options={{ title: 'Orders', headerShown: false }} />
-      <Stack.Screen name="[id]" options={royalHeader} />
-      <Stack.Screen name="cashback" options={royalHeader} />
+      <Stack.Screen name="[id]" options={detailHeader} />
+      <Stack.Screen name="cashback" options={detailHeader} />
     </Stack>
   );
 }

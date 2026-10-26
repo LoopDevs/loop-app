@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Market } from '@/ctx/market';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -48,9 +48,9 @@ export function CountryMenu() {
           onPress={show}
           accessibilityRole="button"
           accessibilityLabel={`Shopping in ${Market.countryName(country)}. Change country`}
-          style={styles.trigger}>
-          <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={Brand.onRoyal} />
-          <Text style={styles.triggerText} maxFontSizeMultiplier={1.3}>
+          style={[styles.trigger, { backgroundColor: theme.backgroundSubtle }]}>
+          <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={theme.text} />
+          <Text style={[styles.triggerText, { color: theme.text }]}maxFontSizeMultiplier={1.3}>
             {country}
           </Text>
         </PressScale>
@@ -118,11 +118,9 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     minHeight: 44,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
+    borderRadius: Radius.pill,
   },
   triggerText: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 15,
   },

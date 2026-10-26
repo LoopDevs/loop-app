@@ -14,8 +14,9 @@ import { CountryMenu } from '@/components/country-menu';
 import { SignInButton, useSignIn } from '@/components/sign-in';
 import { SearchBar } from '@/components/storefront';
 import { Wordmark } from '@/components/wordmark';
-import { Brand, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   const { wide } = usePageLayout();
@@ -45,31 +46,42 @@ export default function AppTabs() {
 
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   const { wide } = usePageLayout();
+  const theme = useTheme();
   return (
     <Pressable
       {...props}
       style={({ pressed }) => [
         styles.tabButton,
         !wide && styles.tabButtonNarrow,
-        isFocused && styles.tabButtonFocused,
-        !isFocused && pressed && styles.tabButtonPressed,
+        wide && isFocused && { backgroundColor: theme.backgroundSelected },
+        !isFocused && pressed && { backgroundColor: theme.backgroundSubtle },
       ]}>
-      <Text style={[styles.tabLabel, isFocused && styles.tabLabelFocused]}>{children}</Text>
+      <Text
+        style={[
+          styles.tabLabel,
+          { color: isFocused ? (wide ? theme.text : theme.accent) : theme.textSecondary },
+          isFocused && styles.tabLabelFocused,
+        ]}>
+        {children}
+      </Text>
     </Pressable>
   );
 }
 
 export function CustomTabList(props: TabListProps) {
   const { wide, gutter } = usePageLayout();
+  const theme = useTheme();
   if (!wide) {
     return (
-      <View {...props} style={styles.bottomBar}>
+      <View
+        {...props}
+        style={[styles.bottomBar, { backgroundColor: theme.chrome, borderTopColor: theme.border }]}>
         {props.children}
       </View>
     );
   }
   return (
-    <View {...props} style={styles.header}>
+    <View {...props} style={[styles.header, { backgroundColor: theme.chrome, borderBottomColor: theme.border }]}>
       <View style={[styles.headerInner, { paddingHorizontal: gutter }]}>
         <HomeLink />
         <View style={styles.nav}>{props.children}</View>
@@ -128,7 +140,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    backgroundColor: Brand.navy,
+    borderBottomWidth: 1,
     height: Layout.headerHeight,
     justifyContent: 'center',
     zIndex: 10,
@@ -162,7 +174,7 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     flexDirection: 'row',
-    backgroundColor: Brand.navy,
+    borderTopWidth: 1,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.two,
     gap: Spacing.one,
@@ -172,7 +184,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
+    borderRadius: Radius.pill,
     transitionProperty: 'background-color',
     transitionDuration: `${Motion.feedback}ms`,
   },
@@ -180,20 +192,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.one,
   },
-  tabButtonPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  tabButtonFocused: {
-    backgroundColor: Brand.royal,
-  },
   tabLabel: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 14,
     lineHeight: 20,
   },
   tabLabelFocused: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
   },
 });

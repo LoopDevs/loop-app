@@ -16,7 +16,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
   BottomTabInset,
-  Brand,
   FontFamily,
   Layout,
   MaxContentWidth,
@@ -46,7 +45,7 @@ export default function GiftCardScreen() {
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
   const readSession = useSessionOwner();
-  const { onScroll, backdrop } = useScrimScroll();
+  const { onScroll } = useScrimScroll();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
   useOnSignIn(() => {
@@ -117,8 +116,7 @@ export default function GiftCardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -195,15 +193,15 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
       style={styles.summarySections}>
       <View style={styles.hero}>
         <View style={[styles.heroInner, pageWidth]}>
-          <Text style={styles.heroName} maxFontSizeMultiplier={1.6}>
+          <Text style={[styles.heroName, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
             {giftCard.merchantName}
           </Text>
-          <Text style={styles.heroAmount} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
+          <Text style={[styles.heroAmount, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
             {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)}
           </Text>
           <View style={styles.heroStatus}>
-            {processing && <ActivityIndicator size="small" color={Brand.onRoyal} />}
-            <Text style={styles.heroStatusText} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
+            {processing && <ActivityIndicator size="small" color={theme.textSecondary} />}
+            <Text style={[styles.heroStatusText, { color: theme.text }]} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
               {processing ? 'Processing. Your code shows here when it is ready.' : giftCardStatusLabel(giftCard.status)}
             </Text>
           </View>
@@ -288,7 +286,6 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
   },
   hero: {
-    backgroundColor: Brand.royal,
     paddingTop: Spacing.two,
     paddingBottom: Spacing.four,
   },
@@ -300,13 +297,11 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   heroName: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,
   },
   heroAmount: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.bold,
     fontSize: 40,
     lineHeight: 46,
@@ -320,7 +315,6 @@ const styles = StyleSheet.create({
   },
   heroStatusText: {
     flex: 1,
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 15,
     lineHeight: 20,

@@ -2,7 +2,8 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { PressScale } from '@/components/press-scale';
-import { Brand, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
 type HomeActionsProps = {
@@ -62,6 +63,7 @@ type ActionProps = {
 };
 
 function Action({ label, icon, onPress, selected = false, disabled = false, accessibilityLabel }: ActionProps) {
+  const theme = useTheme();
   return (
     <PressScale
       style={[styles.action, disabled && styles.disabled]}
@@ -74,10 +76,16 @@ function Action({ label, icon, onPress, selected = false, disabled = false, acce
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled, expanded: selected ? true : undefined }}>
-      <View style={[styles.square, selected && styles.squareSelected]}>
-        <SymbolView name={icon} size={24} tintColor={Brand.onRoyal} />
+      <View
+        style={[
+          styles.circle,
+          selected
+            ? { backgroundColor: theme.text, borderColor: theme.text }
+            : { backgroundColor: theme.backgroundSubtle, borderColor: theme.border },
+        ]}>
+        <SymbolView name={icon} size={24} tintColor={selected ? theme.background : theme.text} />
       </View>
-      <Text style={styles.label} maxFontSizeMultiplier={1.3} numberOfLines={2}>
+      <Text style={[styles.label, { color: theme.text }]} maxFontSizeMultiplier={1.3} numberOfLines={2}>
         {label}
       </Text>
     </PressScale>
@@ -97,24 +105,17 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
-  square: {
+  circle: {
     width: 56,
     height: 56,
     borderRadius: Radius.pill,
-    backgroundColor: Brand.actionGround,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  squareSelected: {
-    backgroundColor: Brand.actionGroundSelected,
-    borderColor: Brand.onRoyal,
   },
   label: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.medium,
     fontSize: 13,
     lineHeight: 16,

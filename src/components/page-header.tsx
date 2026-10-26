@@ -2,8 +2,9 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Brand, FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
+import { FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useTheme } from '@/hooks/use-theme';
 
 type PageHeaderProps = {
   title: string;
@@ -23,19 +24,23 @@ export function PageHeader({
   width = 'content',
 }: PageHeaderProps) {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const { gutter } = usePageLayout();
   const topInset = belowNavigationHeader ? 0 : insets.top;
   const pageWidth = width === 'page' ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
   return (
-    <View style={[styles.panel, { paddingTop: topInset + Spacing.three }]}>
+    <View style={[styles.header, { paddingTop: topInset + Spacing.three }]}>
       <View style={[styles.inner, pageWidth]}>
         <View style={styles.titleRow}>
           <View style={styles.titleBlock}>
-            <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
+            <Text
+              style={[styles.title, { color: theme.text }]}
+              accessibilityRole="header"
+              maxFontSizeMultiplier={1.4}>
               {title}
             </Text>
             {detail ? (
-              <Text style={styles.detail} maxFontSizeMultiplier={1.6}>
+              <Text style={[styles.detail, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
                 {detail}
               </Text>
             ) : null}
@@ -49,9 +54,8 @@ export function PageHeader({
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: Brand.royal,
-    paddingBottom: Spacing.four,
+  header: {
+    paddingBottom: Spacing.three,
   },
   inner: {
     width: '100%',
@@ -71,14 +75,12 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   title: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.bold,
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 32,
+    lineHeight: 38,
     letterSpacing: -0.8,
   },
   detail: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,

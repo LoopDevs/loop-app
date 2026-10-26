@@ -6,13 +6,13 @@ import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-rea
 
 import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/form';
-import { MerchantTile } from '@/components/merchant-tile';
+import { MerchantCard } from '@/components/merchant-card';
 import { PressScale } from '@/components/press-scale';
 import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
-import { Brand, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx, type MerchantPage, type MerchantQuery } from '@/ctx/client';
 import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
@@ -24,7 +24,7 @@ const catalogScanSize = 500;
 const boardSize = 5;
 const catalogPageSize = 24;
 const searchDelayMs = 300;
-const tileHeight = 140;
+const cardHeight = 230;
 
 export type Catalog = {
   top: Merchant[];
@@ -137,9 +137,10 @@ type HeroProps = {
 export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSearch, onOpen, accessory }: HeroProps) {
   const { wide } = usePageLayout();
   const reduceMotion = useReducedMotion();
+  const theme = useTheme();
   const best = catalog?.top[0];
   return (
-    <View style={styles.hero}>
+    <View>
       <PageWidth style={[styles.heroInner, wide && styles.heroInnerWide]}>
         <Animated.View
           entering={reduceMotion ? undefined : FadeInDown.duration(Motion.transition).easing(Motion.easeOut)}
@@ -150,10 +151,10 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
               {accessory}
             </View>
           )}
-          <Text style={[styles.headline, wide && styles.headlineWide]} accessibilityRole="header">
+          <Text style={[styles.headline, wide && styles.headlineWide, { color: theme.text }]} accessibilityRole="header">
             Gift cards that pay you back.
           </Text>
-          <Text style={styles.heroLine} maxFontSizeMultiplier={1.6}>
+          <Text style={[styles.heroLine, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
             {best
               ? `Buy gift cards for the shops you already use and earn up to ${best.rateFigure()} cashback in ${Market.countryName(country)}.`
               : 'Buy gift cards for the shops you already use and earn cashback on every card.'}
@@ -182,6 +183,7 @@ export function SearchBar({ value, onChangeText, onSubmit, large = false, placeh
       style={[
         styles.search,
         large && styles.searchLarge,
+        large && Elevation.raised,
         { backgroundColor: theme.backgroundElement, borderColor: focused ? theme.accent : theme.border },
         focused && styles.searchFocused,
       ]}>
@@ -217,12 +219,14 @@ export function SearchBar({ value, onChangeText, onSubmit, large = false, placeh
 
 function RateBoard({ merchants, onOpen }: { merchants: Merchant[] | null; onOpen: (merchant: Merchant) => void }) {
   const reduceMotion = useReducedMotion();
+  const theme = useTheme();
   if (merchants !== null && merchants.length === 0) {
     return null;
   }
   return (
-    <View style={styles.board}>
-      <Text style={styles.boardTitle}>Highest cashback</Text>
+    <View
+      style={[styles.board, Elevation.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <Text style={[styles.boardTitle, { color: theme.textSecondary }]}>Highest cashback</Text>
       {(merchants ?? Array.from({ length: boardSize }, () => null)).map((merchant, index) =>
         merchant ? (
           <Animated.View
@@ -235,8 +239,8 @@ function RateBoard({ merchants, onOpen }: { merchants: Merchant[] | null; onOpen
             <BoardRow merchant={merchant} onPress={() => onOpen(merchant)} />
           </Animated.View>
         ) : (
-          <View key={`placeholder-${index}`} style={styles.boardRow}>
-            <View style={styles.boardPlaceholder} />
+          <View key={`placeholder-${index}`} style={[styles.boardRow, { borderTopColor: theme.border }]}>
+            <View style={[styles.boardPlaceholder, { backgroundColor: theme.backgroundSubtle }]} />
           </View>
         ),
       )}
@@ -245,6 +249,7 @@ function RateBoard({ merchants, onOpen }: { merchants: Merchant[] | null; onOpen
 }
 
 function BoardRow({ merchant, onPress }: { merchant: Merchant; onPress: () => void }) {
+  const theme = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -252,19 +257,20 @@ function BoardRow({ merchant, onPress }: { merchant: Merchant; onPress: () => vo
       accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
       style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [
         styles.boardRow,
-        (hovered || pressed) && styles.boardRowActive,
+        { borderTopColor: theme.border },
+        (hovered || pressed) && { backgroundColor: theme.backgroundSubtle },
       ]}>
-      <View style={styles.boardLogo}>
+      <View style={[styles.boardLogo, { borderColor: theme.border }]}>
         {merchant.logoUrl ? (
           <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.boardLogoImage} />
         ) : (
-          <Text style={styles.boardInitial}>{merchant.initial()}</Text>
+          <Text style={[styles.boardInitial, { color: theme.text }]}>{merchant.initial()}</Text>
         )}
       </View>
-      <Text style={styles.boardName} numberOfLines={1}>
+      <Text style={[styles.boardName, { color: theme.text }]} numberOfLines={1}>
         {merchant.name}
       </Text>
-      <Text style={styles.boardRate}>{merchant.rateFigure()}</Text>
+      <Text style={[styles.boardRate, { color: theme.accent }]}>{merchant.rateFigure()}</Text>
     </Pressable>
   );
 }
@@ -293,9 +299,9 @@ export function MerchantGrid({ merchants, onOpen, stagger = true }: GridProps) {
           }
           style={[styles.cell, { width: cellWidth }]}>
           {merchant ? (
-            <MerchantTile merchant={merchant} onPress={() => onOpen(merchant)} />
+            <MerchantCard merchant={merchant} onPress={() => onOpen(merchant)} />
           ) : (
-            <Skeleton width="100%" height={tileHeight} />
+            <Skeleton width="100%" height={cardHeight} />
           )}
         </Animated.View>
       ))}
@@ -518,29 +524,30 @@ const trust = [
 
 export function HowLoopWorks() {
   const { wide } = usePageLayout();
+  const theme = useTheme();
   return (
-    <View style={styles.band}>
+    <View style={[styles.band, { backgroundColor: theme.backgroundSubtle }]}>
       <PageWidth style={styles.bandInner}>
-        <Text style={styles.bandTitle} accessibilityRole="header">
+        <Text style={[styles.bandTitle, { color: theme.text }]} accessibilityRole="header">
           How Loop works
         </Text>
         <View style={[styles.steps, wide && styles.stepsWide]}>
           {steps.map((step) => (
             <View key={step.title} style={[styles.step, wide && styles.stepWide]}>
-              <View style={styles.stepIcon}>
-                <SymbolView name={step.icon} size={22} tintColor={Brand.onRoyal} />
+              <View style={[styles.stepIcon, { backgroundColor: theme.accentSoft }]}>
+                <SymbolView name={step.icon} size={22} tintColor={theme.accent} />
               </View>
-              <Text style={styles.stepTitle}>{step.title}</Text>
-              <Text style={styles.stepBody}>{step.body}</Text>
+              <Text style={[styles.stepTitle, { color: theme.text }]}>{step.title}</Text>
+              <Text style={[styles.stepBody, { color: theme.textSecondary }]}>{step.body}</Text>
             </View>
           ))}
         </View>
-        <View style={styles.rule} />
+        <View style={[styles.rule, { backgroundColor: theme.border }]} />
         <View style={[styles.trust, wide && styles.trustWide]}>
           {trust.map((line) => (
             <View key={line} style={styles.trustItem}>
-              <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={16} tintColor={Brand.onRoyalMuted} />
-              <Text style={styles.trustText}>{line}</Text>
+              <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={16} tintColor={theme.success} />
+              <Text style={[styles.trustText, { color: theme.textSecondary }]}>{line}</Text>
             </View>
           ))}
         </View>
@@ -553,9 +560,9 @@ export function SiteFooter() {
   const theme = useTheme();
   const { wide } = usePageLayout();
   return (
-    <Animated.View entering={FadeIn} style={[styles.footer, { borderTopColor: theme.border }]}>
+    <Animated.View entering={FadeIn} style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.backgroundSubtle }]}>
       <PageWidth style={[styles.footerInner, wide && styles.footerInnerWide]}>
-        <Wordmark height={18} color={theme.text} />
+        <Wordmark height={18} />
         <View style={styles.footerLinks}>
           <ExternalLink href={loopLinks.terms}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.footerLink}>
@@ -582,9 +589,6 @@ const styles = StyleSheet.create({
     maxWidth: Layout.pageMaxWidth,
     alignSelf: 'center',
   },
-  hero: {
-    backgroundColor: Brand.royal,
-  },
   heroInner: {
     paddingTop: Spacing.four,
     paddingBottom: Spacing.five,
@@ -609,7 +613,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headline: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.bold,
     fontSize: 40,
     lineHeight: 44,
@@ -622,7 +625,6 @@ const styles = StyleSheet.create({
     maxWidth: 640,
   },
   heroLine: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 17,
     lineHeight: 25,
@@ -633,16 +635,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.pill,
     paddingHorizontal: Spacing.three,
     minHeight: 48,
     width: '100%',
   },
   searchLarge: {
-    minHeight: 60,
+    minHeight: 56,
     maxWidth: 560,
-    borderWidth: 0,
-    boxShadow: '0 12px 32px rgba(10, 22, 64, 0.32)',
+    paddingHorizontal: Spacing.four,
   },
   searchFocused: {
     outlineWidth: 0,
@@ -659,14 +660,12 @@ const styles = StyleSheet.create({
   },
   board: {
     flex: 1,
-    backgroundColor: Brand.navy,
-    borderRadius: Radius.control,
+    borderWidth: 1,
+    borderRadius: Radius.card,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.two,
-    boxShadow: '0 24px 48px rgba(10, 22, 64, 0.4)',
   },
   boardTitle: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.semibold,
     fontSize: 13,
     lineHeight: 16,
@@ -680,24 +679,20 @@ const styles = StyleSheet.create({
     minHeight: 64,
     paddingHorizontal: Spacing.two,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: Radius.tile,
     transitionProperty: 'background-color',
     transitionDuration: `${Motion.feedback}ms`,
-  },
-  boardRowActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   boardPlaceholder: {
     flex: 1,
     height: 20,
     borderRadius: Radius.tile,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   boardLogo: {
     width: 40,
     height: 40,
-    borderRadius: Radius.tile,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
     backgroundColor: '#FFFFFF',
     padding: Spacing.one,
     alignItems: 'center',
@@ -708,18 +703,15 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   boardInitial: {
-    color: Brand.navy,
     fontFamily: FontFamily.bold,
     fontSize: 18,
   },
   boardName: {
     flex: 1,
-    color: Brand.onRoyal,
     fontFamily: FontFamily.medium,
     fontSize: 17,
   },
   boardRate: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 30,
     letterSpacing: -0.8,
@@ -758,7 +750,7 @@ const styles = StyleSheet.create({
   chip: {
     minHeight: 36,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     justifyContent: 'center',
   },
@@ -779,14 +771,13 @@ const styles = StyleSheet.create({
     minWidth: 240,
   },
   band: {
-    backgroundColor: Brand.navy,
+    width: '100%',
   },
   bandInner: {
     paddingVertical: Spacing.six,
     gap: Spacing.five,
   },
   bandTitle: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.bold,
     fontSize: 34,
     lineHeight: 40,
@@ -807,28 +798,24 @@ const styles = StyleSheet.create({
   stepIcon: {
     width: 44,
     height: 44,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.royal,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.two,
   },
   stepTitle: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 20,
     lineHeight: 26,
   },
   stepBody: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.regular,
     fontSize: 16,
     lineHeight: 24,
     maxWidth: 360,
   },
   rule: {
-    height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    height: 1,
   },
   trust: {
     gap: Spacing.three,
@@ -844,7 +831,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   trustText: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,

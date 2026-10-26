@@ -1,12 +1,12 @@
 import { Button } from '@/components/form';
-import { RoyalScreen } from '@/components/royal-screen';
+import { MessageScreen } from '@/components/message-screen';
 
 export function CrashFallback({ onRetry }: { onRetry: () => void }) {
   return (
-    <RoyalScreen
+    <MessageScreen
       title="Something went wrong"
       detail="A payment already sent is not lost. Check Orders for its status.">
-      <Button label="Try again" variant="onRoyal" onPress={onRetry} />
-    </RoyalScreen>
+      <Button label="Try again" variant="primary" onPress={onRetry} />
+    </MessageScreen>
   );
 }

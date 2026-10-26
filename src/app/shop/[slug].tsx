@@ -9,7 +9,7 @@ import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/form';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
 import { useScrimScroll } from '@/components/home-panel';
-import { CashbackPill, MerchantCover } from '@/components/merchant-tile';
+import { coverClearance, MerchantCover } from '@/components/merchant-card';
 import { PressScale } from '@/components/press-scale';
 import { OrderDetailSkeleton, Skeleton } from '@/components/skeleton';
 import { cachedMerchant, loadMerchant } from '@/components/storefront';
@@ -17,7 +17,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { BottomTabInset, Brand, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
@@ -68,15 +68,15 @@ export default function MerchantScreen() {
     }, [load]),
   );
   useOnSignIn(load);
-  const { onScroll, backdrop } = useScrimScroll();
+  const { onScroll } = useScrimScroll();
 
   if (!merchant) {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="light" />
+        <StatusBar style="auto" />
         <View style={styles.panel}>
           <View style={styles.inner}>
-            <View style={[styles.coverPlaceholder, { backgroundColor: 'rgba(255, 255, 255, 0.16)' }]} />
+            <View style={[styles.coverPlaceholder, { backgroundColor: theme.backgroundSelected }]} />
           </View>
         </View>
         <ScrollView contentContainerStyle={styles.content}>
@@ -128,9 +128,8 @@ export default function MerchantScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="auto" />
       <Stack.Screen options={{ title: merchant.name }} />
-      <Animated.View pointerEvents="none" style={backdrop} />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -141,16 +140,22 @@ export default function MerchantScreen() {
             entering={reduceMotion ? undefined : FadeIn.duration(Motion.transition).easing(Motion.easeOut)}
             style={[styles.inner, pageWidth, wide && styles.innerWide]}>
             <View style={wide && styles.coverWide}>
-              <MerchantCover merchant={merchant} />
-              <CashbackPill merchant={merchant} />
+              <MerchantCover merchant={merchant} size="hero" />
             </View>
-            <View style={[styles.titleRow, wide && styles.titleRowWide]}>
+            <View
+              style={[
+                styles.titleRow,
+                wide ? styles.titleRowWide : { paddingTop: coverClearance('hero') - Spacing.three },
+              ]}>
               <View style={styles.titleBlock}>
-                <Text style={styles.name} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
+                <Text
+                  style={[styles.name, { color: theme.text }]}
+                  accessibilityRole="header"
+                  maxFontSizeMultiplier={1.4}>
                   {merchant.name}
                 </Text>
                 {merchant.cashbackBasisPoints() > 0 && (
-                  <Text style={styles.rate} maxFontSizeMultiplier={1.6}>
+                  <Text style={[styles.rate, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
                     {merchant.rateLabel()} on every card
                   </Text>
                 )}
@@ -212,6 +217,7 @@ export default function MerchantScreen() {
 }
 
 function FavouriteButton({ favourite, onPress }: { favourite: boolean; onPress: () => void }) {
+  const theme = useTheme();
   return (
     <PressScale
       onPress={() => {
@@ -222,15 +228,15 @@ function FavouriteButton({ favourite, onPress }: { favourite: boolean; onPress: 
       accessibilityRole="button"
       accessibilityLabel={favourite ? 'Remove from favourites' : 'Add to favourites'}
       accessibilityState={{ selected: favourite }}
-      style={styles.favourite}>
+      style={[styles.favourite, { backgroundColor: theme.backgroundElement, borderColor: theme.borderStrong }]}>
       <SymbolView
         name={
           favourite
             ? { ios: 'heart.fill', android: 'favorite', web: 'favorite' }
             : { ios: 'heart', android: 'favorite_border', web: 'favorite_border' }
         }
-        size={24}
-        tintColor={Brand.onRoyal}
+        size={22}
+        tintColor={favourite ? theme.accent : theme.text}
       />
     </PressScale>
   );
@@ -244,7 +250,6 @@ const styles = StyleSheet.create({
     paddingBottom: BottomTabInset + Spacing.five,
   },
   panel: {
-    backgroundColor: Brand.royal,
     paddingTop: Spacing.two,
     paddingBottom: Spacing.four,
   },
@@ -256,8 +261,8 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   coverPlaceholder: {
-    aspectRatio: 1.586,
-    borderRadius: Radius.tile,
+    aspectRatio: 16 / 10,
+    borderRadius: Radius.card,
   },
   titleRow: {
     flexDirection: 'row',
@@ -269,14 +274,12 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   name: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.bold,
     fontSize: 30,
     lineHeight: 36,
     letterSpacing: -0.6,
   },
   rate: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,
@@ -284,8 +287,8 @@ const styles = StyleSheet.create({
   favourite: {
     width: 48,
     height: 48,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -299,7 +302,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.card,
     padding: Spacing.three,
     gap: Spacing.three,
   },
@@ -327,6 +330,7 @@ const styles = StyleSheet.create({
   },
   coverWide: {
     width: 360,
+    marginBottom: Spacing.four,
   },
   titleRowWide: {
     flex: 1,

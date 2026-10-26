@@ -31,7 +31,6 @@ import { ThemedView } from "@/components/themed-view";
 import { loopLinks } from "@/constants/loop-links";
 import {
   BottomTabInset,
-  Brand,
   FontFamily,
   MaxContentWidth,
   Motion,
@@ -58,7 +57,8 @@ export default function OrdersScreen() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { wide } = usePageLayout();
-  const { scrollRef, onScroll, scrim, backdrop } =
+  const theme = useTheme();
+  const { scrollRef, onScroll, scrim } =
     useScrimScroll<FlatList<GiftCard>>();
   const wideScrollRef = useRef<ScrollViewInstance>(null);
   useScrollToTop(wideScrollRef);
@@ -181,7 +181,7 @@ export default function OrdersScreen() {
   if (wide) {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="light" />
+        <StatusBar style="auto" />
         <Animated.ScrollView
           ref={wideScrollRef}
           contentContainerStyle={styles.wideContent}
@@ -208,8 +208,7 @@ export default function OrdersScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.FlatList
         data={giftCards}
         ref={scrollRef}
@@ -221,7 +220,7 @@ export default function OrdersScreen() {
           <RefreshControl
             refreshing={loading && page <= 1 && giftCards.length > 0}
             onRefresh={reload}
-            tintColor={Brand.onRoyal}
+            tintColor={theme.textSecondary}
           />
         }
         ListHeaderComponent={
@@ -233,7 +232,10 @@ export default function OrdersScreen() {
                   onPress={openCashback}
                   accessibilityRole="button"
                   accessibilityLabel="Cashback"
-                  style={styles.cashbackButton}
+                  style={[
+                    styles.cashbackButton,
+                    { backgroundColor: theme.backgroundSubtle },
+                  ]}
                 >
                   <SymbolView
                     name={{
@@ -242,9 +244,10 @@ export default function OrdersScreen() {
                       web: "percent",
                     }}
                     size={18}
-                    tintColor={Brand.onRoyal}
+                    tintColor={theme.text}
                   />
-                  <Text style={styles.cashbackText} maxFontSizeMultiplier={1.3}>
+                  <Text
+                    style={[styles.cashbackText, { color: theme.text }]} maxFontSizeMultiplier={1.3}>
                     Cashback
                   </Text>
                 </PressScale>
@@ -422,11 +425,13 @@ function OrdersAside({ onOpenCashback }: { onOpenCashback: () => void }) {
   return (
     <>
       <View style={card}>
-        <View style={styles.asideIcon}>
+        <View
+          style={[styles.asideIcon, { backgroundColor: theme.backgroundSubtle }]}
+        >
           <SymbolView
             name={{ ios: "percent", android: "percent", web: "percent" }}
             size={18}
-            tintColor={Brand.onRoyal}
+            tintColor={theme.text}
           />
         </View>
         <ThemedText type="heading">Cashback</ThemedText>
@@ -589,11 +594,9 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     minHeight: 44,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
+    borderRadius: Radius.pill,
   },
   cashbackText: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 15,
   },
@@ -654,7 +657,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: Spacing.one,

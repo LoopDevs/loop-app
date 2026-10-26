@@ -4,35 +4,43 @@ import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Wordmark } from '@/components/wordmark';
-import { Brand, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
+import { FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-type RoyalScreenProps = {
+type MessageScreenProps = {
   title: string;
   detail?: string;
   message?: string;
   children: ReactNode;
 };
 
-export function RoyalScreen({ title, detail, message, children }: RoyalScreenProps) {
+export function MessageScreen({ title, detail, message, children }: MessageScreenProps) {
+  const theme = useTheme();
   return (
-    <View style={styles.screen}>
-      <StatusBar style="light" />
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      <StatusBar style="auto" />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content} accessibilityLiveRegion="polite">
-          <Wordmark height={32} />
+          <Wordmark height={28} />
           <View style={styles.copy}>
-            <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
+            <Text
+              style={[styles.title, { color: theme.text }]}
+              accessibilityRole="header"
+              maxFontSizeMultiplier={1.4}>
               {title}
             </Text>
             {detail ? (
-              <Text style={styles.detail} maxFontSizeMultiplier={1.6}>
+              <Text style={[styles.detail, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
                 {detail}
               </Text>
             ) : null}
           </View>
           {children}
           {message ? (
-            <Text style={styles.detail} selectable maxFontSizeMultiplier={1.6}>
+            <Text
+              style={[styles.detail, { color: theme.textSecondary }]}
+              selectable
+              maxFontSizeMultiplier={1.6}>
               {message}
             </Text>
           ) : null}
@@ -47,7 +55,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
-    backgroundColor: Brand.royal,
   },
   safeArea: {
     flex: 1,
@@ -63,14 +70,12 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   title: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.bold,
     fontSize: 30,
     lineHeight: 36,
     letterSpacing: -0.6,
   },
   detail: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.regular,
     fontSize: 16,
     lineHeight: 22,

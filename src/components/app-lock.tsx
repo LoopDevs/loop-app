@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ListGroup, ListRow } from '@/components/list-row';
 import { Wordmark } from '@/components/wordmark';
-import { Brand, FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useTheme } from '@/hooks/use-theme';
 import { biometrics } from '@/native/biometrics';
@@ -204,26 +204,31 @@ type LockViewProps = {
 };
 
 function LockView({ showUnlock, message, onUnlock }: LockViewProps) {
+  const theme = useTheme();
   return (
-    <View style={[StyleSheet.absoluteFill, styles.lock]}>
+    <View style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content} accessibilityLiveRegion="polite">
           <Wordmark height={32} />
           {showUnlock && (
             <>
-              <Text style={styles.lockTitle} accessibilityRole="header" maxFontSizeMultiplier={1.6}>
+              <Text style={[styles.lockTitle, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.6}>
                 Loop is locked
               </Text>
               <Pressable
                 onPress={onUnlock}
                 accessibilityRole="button"
-                style={({ pressed }) => [styles.unlock, pressed && styles.unlockPressed]}>
-                <Text style={styles.unlockLabel} maxFontSizeMultiplier={1.6}>
+                style={({ pressed }) => [
+                  styles.unlock,
+                  { backgroundColor: theme.accent },
+                  pressed && styles.unlockPressed,
+                ]}>
+                <Text style={[styles.unlockLabel, { color: theme.onAccent }]} maxFontSizeMultiplier={1.6}>
                   Unlock
                 </Text>
               </Pressable>
               {message !== '' && (
-                <Text style={styles.lockMessage} maxFontSizeMultiplier={1.6}>
+                <Text style={[styles.lockMessage, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
                   {message}
                 </Text>
               )}
@@ -242,7 +247,6 @@ const styles = StyleSheet.create({
   lock: {
     justifyContent: 'center',
     flexDirection: 'row',
-    backgroundColor: Brand.royal,
   },
   safeArea: {
     flex: 1,
@@ -255,7 +259,6 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
   },
   lockTitle: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.bold,
     fontSize: 30,
     lineHeight: 36,
@@ -263,7 +266,6 @@ const styles = StyleSheet.create({
   unlock: {
     minHeight: 50,
     borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
@@ -272,13 +274,11 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   unlockLabel: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 17,
     lineHeight: 22,
   },
   lockMessage: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.regular,
     fontSize: 15,
     lineHeight: 20,

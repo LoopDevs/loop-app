@@ -2,12 +2,12 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, type FlatList } from 'react-native';
+import { StyleSheet, Text, TextInput, View, type FlatList } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { CountryMenu } from '@/components/country-menu';
 import { CountryPicker } from '@/components/country-picker';
-import { Button, Field, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { CategoryTiles, MerchantCard, MerchantCardStrip } from '@/components/merchant-card';
 import { PageHeader } from '@/components/page-header';
@@ -25,7 +25,7 @@ import {
 } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Brand, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset, Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
 import type { CountryChoice } from '@/ctx/profile';
@@ -97,7 +97,7 @@ export default function ShopScreen() {
   const retryPage = useRef(1);
   const listedCountry = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
-  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll<FlatList<Merchant>>();
+  const { scrollRef, onScroll, scrim } = useScrimScroll<FlatList<Merchant>>();
 
   const loadAccount = useCallback(
     () =>
@@ -270,8 +270,7 @@ export default function ShopScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.FlatList
         ref={scrollRef}
         data={merchants}
@@ -296,14 +295,7 @@ export default function ShopScreen() {
                   <CountryButton country={profile.country} disabled={busy} onPress={() => setChangingCountry(true)} />
                 ) : null
               }>
-              <Field
-                onPanel
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search gift cards"
-                returnKeyType="search"
-                clearButtonMode="while-editing"
-              />
+              <SearchBar value={search} onChangeText={setSearch} />
             </PageHeader>
             <View style={[styles.body, styles.header, pageWidth]}>
               {activeOrder && (
@@ -394,11 +386,10 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
   const { wide } = usePageLayout();
   const catalog = useCatalog(country);
   const [search, setSearch] = useState(initialSearch);
-  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -424,11 +415,10 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
 }
 
 function SimplePage({ title, children }: { title: string; children: React.ReactNode }) {
-  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -443,16 +433,48 @@ function SimplePage({ title, children }: { title: string; children: React.ReactN
   );
 }
 
+function SearchBar({ value, onChangeText }: { value: string; onChangeText: (text: string) => void }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.searchBar,
+        Elevation.raised,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+      ]}>
+      <SymbolView
+        name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
+        size={20}
+        tintColor={theme.textSecondary}
+      />
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder="Search gift cards"
+        placeholderTextColor={theme.textSecondary}
+        selectionColor={theme.accent}
+        accessibilityLabel="Search gift cards"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        style={[styles.searchInput, { color: theme.text }]}
+      />
+    </View>
+  );
+}
+
 function CountryButton({ country, disabled, onPress }: { country: string; disabled: boolean; onPress: () => void }) {
+  const theme = useTheme();
   return (
     <PressScale
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={`Shopping in ${country}. Change country`}
-      style={[styles.countryButton, disabled && styles.disabled]}>
-      <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={Brand.onRoyal} />
-      <Text style={styles.countryText} maxFontSizeMultiplier={1.3}>
+      style={[styles.countryButton, { backgroundColor: theme.backgroundSelected }, disabled && styles.disabled]}>
+      <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={theme.text} />
+      <Text style={[styles.countryText, { color: theme.text }]} maxFontSizeMultiplier={1.3}>
         {country}
       </Text>
     </PressScale>
@@ -466,7 +488,11 @@ function ActiveOrderCard({ merchantName, onPress }: { merchantName: string; onPr
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Continue your ${merchantName} order`}
-      style={[styles.activeOrder, { backgroundColor: theme.backgroundElement, borderColor: theme.accent }]}>
+      style={[
+        styles.activeOrder,
+        Elevation.card,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+      ]}>
       <View style={styles.activeOrderText}>
         <ThemedText type="smallBold">Order in progress</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
@@ -476,7 +502,7 @@ function ActiveOrderCard({ merchantName, onPress }: { merchantName: string; onPr
       <SymbolView
         name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
         size={18}
-        tintColor={theme.accent}
+        tintColor={theme.textSecondary}
       />
     </PressScale>
   );
@@ -545,11 +571,24 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     minHeight: 44,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
+    borderRadius: Radius.pill,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 56,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: 44,
+    fontFamily: FontFamily.regular,
+    fontSize: 16,
   },
   countryText: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 15,
   },
@@ -562,8 +601,8 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
     minHeight: 64,
-    borderRadius: Radius.control,
-    borderWidth: 1,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   activeOrderText: {
     flex: 1,

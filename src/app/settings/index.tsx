@@ -52,7 +52,7 @@ export default function SettingsScreen() {
   const [chosenSection, setChosenSection] =
     useState<SettingsSection>("account");
   const profileUserId = useRef<string | null>(null);
-  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim } = useScrimScroll();
 
   const loadAccount = useCallback(
     () =>
@@ -126,8 +126,7 @@ export default function SettingsScreen() {
   if (!wide && profile && changingCountry) {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="light" />
-        <Animated.View pointerEvents="none" style={backdrop} />
+        <StatusBar style="auto" />
         <Animated.ScrollView
           ref={scrollRef}
           onScroll={onScroll}
@@ -318,7 +317,7 @@ export default function SettingsScreen() {
     }[section];
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="light" />
+        <StatusBar style="auto" />
         <Animated.ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.wideScroll}
@@ -362,8 +361,7 @@ export default function SettingsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}

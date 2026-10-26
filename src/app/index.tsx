@@ -11,7 +11,7 @@ import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
 import { NextStep, RecentGiftCards, SavingsCard, SpendingBalances } from '@/components/home-overview';
-import { HomePanel, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
+import { BalanceHeader, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { MerchantCardStrip } from '@/components/merchant-card';
 import { SignInButton, useOnSignIn } from '@/components/sign-in';
 import {
@@ -26,7 +26,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useToast } from '@/components/toast';
-import { BottomTabInset, Brand, Layout, MaxContentWidth, Motion, Spacing } from '@/constants/theme';
+import { BottomTabInset, Layout, MaxContentWidth, Motion, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -34,6 +34,7 @@ import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useTheme } from '@/hooks/use-theme';
 import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'wallet';
@@ -58,6 +59,7 @@ export default function HomeScreen() {
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const catalog = useCatalog(screen === 'wallet' ? profileCountry : undefined);
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
@@ -155,7 +157,7 @@ export default function HomeScreen() {
   };
 
   const [depositOpen, setDepositOpen] = useState(false);
-  const { scrollRef, onScroll, scrim, backdrop } = useScrimScroll();
+  const { scrollRef, onScroll, scrim } = useScrimScroll();
 
   const confirmWithdraw = () => {
     const prompt = 'Move your savings back to your account balance?';
@@ -197,8 +199,7 @@ export default function HomeScreen() {
   if (screen === 'signed-out') {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="light" />
-        <Animated.View pointerEvents="none" style={backdrop} />
+        <StatusBar style="auto" />
         <Animated.ScrollView
           ref={scrollRef}
           onScroll={onScroll}
@@ -214,8 +215,7 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -227,13 +227,13 @@ export default function HomeScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={pullToRefresh}
-              tintColor={Brand.onRoyal}
-              colors={[Brand.royal]}
+              tintColor={theme.textSecondary}
+              colors={[theme.accent]}
               progressViewOffset={insets.top}
             />
           ) : undefined
         }>
-        <HomePanel view={screen === 'wallet' ? view : null}>
+        <BalanceHeader view={screen === 'wallet' ? view : null}>
           {screen === 'wallet' && wallet && (
             <HomeActions
               depositOpen={depositOpen}
@@ -244,7 +244,7 @@ export default function HomeScreen() {
               withdrawDisabled={busy || vaultShares === 0n}
             />
           )}
-        </HomePanel>
+        </BalanceHeader>
 
         <View style={[styles.content, wide && styles.contentWide]}>
           {!wide && screen === 'wallet' && (

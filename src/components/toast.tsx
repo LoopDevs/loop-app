@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
-import { BottomTabInset, Brand, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset,FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const toastLifetimeMs = 2500;
@@ -45,8 +45,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={toast.id}
             entering={reduceMotion ? undefined : FadeInDown.duration(Motion.state).easing(Motion.easeOut)}
             exiting={reduceMotion ? undefined : FadeOut.duration(Motion.exit)}
-            style={[styles.toast, { borderColor: theme.border }]}>
-            <Text style={styles.text} maxFontSizeMultiplier={1.6}>
+            style={[styles.toast, { backgroundColor: theme.inverse, borderColor: theme.border, shadowColor: theme.inverse }]}>
+            <Text style={[styles.text, { color: theme.onInverse }]} maxFontSizeMultiplier={1.6}>
               {toast.text}
             </Text>
           </Animated.View>
@@ -65,19 +65,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toast: {
-    backgroundColor: Brand.navy,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.control,
+    borderRadius: Radius.pill,
     paddingVertical: Spacing.two + Spacing.one,
     paddingHorizontal: Spacing.three,
-    shadowColor: Brand.navy,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.24,
     shadowRadius: 16,
     elevation: 6,
   },
   text: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,

@@ -3,20 +3,16 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PressScale } from '@/components/press-scale';
-import { Brand, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
-type FieldProps = React.ComponentProps<typeof TextInput> & {
-  onPanel?: boolean;
-};
+type FieldProps = React.ComponentProps<typeof TextInput>;
 
-export function Field({ onPanel = false, ...props }: FieldProps) {
+export function Field(props: FieldProps) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
-  const focusBorder = onPanel
-    ? { borderColor: Brand.onRoyal, borderWidth: 2 }
-    : { borderColor: theme.accent };
+  const focusBorder = { borderColor: theme.text, borderWidth: 2 };
   return (
     <TextInput
       accessibilityLabel={props.placeholder}
@@ -31,7 +27,7 @@ export function Field({ onPanel = false, ...props }: FieldProps) {
         {
           color: theme.text,
           backgroundColor: theme.backgroundElement,
-          borderColor: theme.border,
+          borderColor: theme.borderStrong,
         },
         focused && focusBorder,
       ]}
@@ -40,7 +36,7 @@ export function Field({ onPanel = false, ...props }: FieldProps) {
   );
 }
 
-export type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'onRoyal';
+export type ButtonVariant = 'primary' | 'secondary' | 'quiet';
 
 type ButtonProps = {
   label: string;
@@ -68,16 +64,14 @@ export function Button({
     primary: { backgroundColor: theme.accent, borderColor: theme.accent },
     secondary: {
       backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement,
-      borderColor: selected ? theme.accent : theme.border,
+      borderColor: selected ? theme.text : theme.borderStrong,
     },
     quiet: { backgroundColor: 'transparent', borderColor: 'transparent' },
-    onRoyal: { backgroundColor: Brand.onRoyal, borderColor: Brand.onRoyal },
   }[variant];
   const labelColor = {
     primary: theme.onAccent,
     secondary: theme.text,
     quiet: theme.accent,
-    onRoyal: Brand.navy,
   }[variant];
   return (
     <PressScale
@@ -109,7 +103,7 @@ export function Notice({ message, actionLabel, onAction, disabled = false, tone 
   const tint = tone === 'danger' ? theme.danger : theme.accent;
   return (
     <View
-      style={[styles.notice, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
+      style={[styles.notice, { backgroundColor: theme.backgroundSubtle, borderColor: theme.border }]}
       accessibilityLiveRegion="polite">
       <View style={styles.noticeRow}>
         <SymbolView
@@ -163,8 +157,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 50,
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
+    paddingHorizontal: Spacing.four,
+    borderRadius: Radius.pill,
     borderWidth: 1,
   },
   selected: {

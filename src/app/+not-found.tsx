@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
 
 import { Button } from '@/components/form';
-import { RoyalScreen } from '@/components/royal-screen';
+import { MessageScreen } from '@/components/message-screen';
 
 export default function NotFoundScreen() {
   const router = useRouter();
   return (
-    <RoyalScreen title="Page not found" detail="This page doesn't exist.">
-      <Button label="Go home" variant="onRoyal" onPress={() => router.replace('/')} />
-    </RoyalScreen>
+    <MessageScreen title="Page not found" detail="This page doesn't exist.">
+      <Button label="Go home" variant="primary" onPress={() => router.replace('/')} />
+    </MessageScreen>
   );
 }

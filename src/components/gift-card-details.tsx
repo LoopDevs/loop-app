@@ -10,8 +10,9 @@ import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Collapsible } from '@/components/ui/collapsible';
-import { Brand, FontFamily, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Elevation, FontFamily, Fonts, Radius, Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
+import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { useBlockScreenCapture } from '@/native/screen-privacy';
 
@@ -34,13 +35,19 @@ export function statusTone(status: GiftCard['status']): 'success' | 'danger' | '
 
 export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
   useBlockScreenCapture();
+  const theme = useTheme();
   const hasCode = Boolean(
     giftCard.barcodeUrl || giftCard.number || giftCard.pin || giftCard.redeemUrlChallenge,
   );
   return (
     <View style={styles.section}>
       {hasCode && (
-        <View style={styles.panel}>
+        <View
+          style={[
+            styles.panel,
+            { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+            Elevation.card,
+          ]}>
           {giftCard.barcodeUrl && (
             <View style={styles.barcodeFrame}>
               <Image
@@ -82,6 +89,7 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
 
 function CopyableSecret({ label, value }: { label: string; value: string }) {
   const toast = useToast();
+  const theme = useTheme();
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -98,10 +106,10 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
       <View style={styles.secret}>
-        <Text style={styles.secretLabel} maxFontSizeMultiplier={1.6}>
+        <Text style={[styles.secretLabel, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
           {label}
         </Text>
-        <Text selectable style={styles.secretValue} maxFontSizeMultiplier={1.6}>
+        <Text selectable style={[styles.secretValue, { color: theme.text }]} maxFontSizeMultiplier={1.6}>
           {value}
         </Text>
       </View>
@@ -109,7 +117,7 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
         onPress={copy}
         accessibilityRole="button"
         accessibilityLabel={`Copy ${label}`}
-        style={styles.copy}>
+        style={[styles.copy, { backgroundColor: theme.backgroundSubtle }]}>
         <SymbolView
           name={
             copied
@@ -117,7 +125,7 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
               : { ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' }
           }
           size={20}
-          tintColor={Brand.navy}
+          tintColor={theme.text}
         />
       </PressScale>
     </View>
@@ -129,8 +137,8 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   panel: {
-    backgroundColor: Brand.navy,
-    borderRadius: Radius.control,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.card,
     padding: Spacing.three,
     gap: Spacing.three,
   },
@@ -153,13 +161,11 @@ const styles = StyleSheet.create({
     gap: Spacing.half,
   },
   secretLabel: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 13,
     lineHeight: 18,
   },
   secretValue: {
-    color: Brand.onRoyal,
     fontFamily: Fonts.mono,
     fontSize: 20,
     lineHeight: 28,
@@ -168,8 +174,7 @@ const styles = StyleSheet.create({
   copy: {
     width: 48,
     height: 48,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.onRoyal,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

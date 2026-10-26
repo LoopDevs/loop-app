@@ -1,5 +1,7 @@
 import { Image } from 'expo-image';
 
+import { useTheme } from '@/hooks/use-theme';
+
 const wordmarkAspect = 172.22 / 71;
 
 type WordmarkProps = {
@@ -7,11 +9,12 @@ type WordmarkProps = {
   color?: string;
 };
 
-export function Wordmark({ height = 24, color = '#FFFFFF' }: WordmarkProps) {
+export function Wordmark({ height = 24, color }: WordmarkProps) {
+  const theme = useTheme();
   return (
     <Image
       source={require('@/assets/images/wordmark.png')}
-      tintColor={color}
+      tintColor={color ?? theme.text}
       contentFit="contain"
       accessibilityRole="image"
       accessibilityLabel="Loop"

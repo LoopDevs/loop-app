@@ -2,18 +2,25 @@ import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { CashbackPill } from '@/components/merchant-tile';
 import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
+import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Merchant } from '@/ctx/merchant';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
-const stripCardWidth = 264;
-const mediaAspect = 16 / 10;
-const badgeSize = 48;
+const stripCardWidth = 248;
+const coverAspect = 16 / 10;
+const badgeSizes = { card: 52, hero: 76 } as const;
+const badgeOverhang = 0.25;
+
+type CoverSize = keyof typeof badgeSizes;
+
+export function coverClearance(size: CoverSize) {
+  return badgeSizes[size] * badgeOverhang + Spacing.three;
+}
 
 type Favourite = {
   saved: boolean;
@@ -27,23 +34,16 @@ type CardProps = {
 };
 
 export function MerchantCard({ merchant, onPress, favourite }: CardProps) {
-  const theme = useTheme();
-  const photo = Boolean(merchant.cardImageUrl);
   const category = merchant.categories[0];
   return (
-    <View style={[styles.shadow, { backgroundColor: theme.backgroundElement, borderRadius: Radius.card }]}>
+    <View style={styles.card}>
       <PressScale
-        style={[styles.card, { backgroundColor: theme.backgroundElement }]}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}>
-        <View>
-          <CardMedia merchant={merchant} />
-          <CashbackPill merchant={merchant} />
-          {photo && <LogoBadge merchant={merchant} borderColor={theme.backgroundElement} />}
-        </View>
-        <View style={[styles.text, photo && styles.textUnderBadge]}>
-          <ThemedText type="smallBold" style={styles.name} numberOfLines={2}>
+        <MerchantCover merchant={merchant} size="card" />
+        <View style={[styles.text, { paddingTop: coverClearance('card') }]}>
+          <ThemedText type="smallBold" style={styles.name} numberOfLines={1} ellipsizeMode="tail">
             {merchant.name}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
@@ -56,56 +56,83 @@ export function MerchantCard({ merchant, onPress, favourite }: CardProps) {
   );
 }
 
-function CardMedia({ merchant }: { merchant: Merchant }) {
+type CoverProps = {
+  merchant: Merchant;
+  size: CoverSize;
+};
+
+export function MerchantCover({ merchant, size }: CoverProps) {
   const theme = useTheme();
-  if (merchant.cardImageUrl) {
-    return (
-      <View style={[styles.media, { backgroundColor: theme.backgroundSelected }]}>
-        <Image
-          source={{ uri: merchant.cardImageUrl }}
-          contentFit="cover"
-          transition={Motion.state}
-          style={StyleSheet.absoluteFill}
-          accessible={false}
-        />
-      </View>
-    );
-  }
-  if (merchant.logoUrl) {
-    return (
-      <View style={[styles.media, styles.logoGround, { borderBottomColor: theme.border }]}>
-        <Image
-          source={{ uri: merchant.logoUrl }}
-          contentFit="contain"
-          transition={Motion.state}
-          style={styles.logoImage}
-          accessible={false}
-        />
-      </View>
-    );
-  }
+  const dark = useColorScheme() === 'dark';
+  const badgeSize = badgeSizes[size];
+  const tint = dark ? `hsl(${merchant.tileHue()}, 22%, 20%)` : `hsl(${merchant.tileHue()}, 45%, 92%)`;
   return (
-    <View style={[styles.media, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
-      <Text style={styles.initial}>{merchant.initial()}</Text>
+    <View>
+      <View
+        style={[
+          styles.cover,
+          size === 'hero' && styles.coverHero,
+          { backgroundColor: merchant.cardImageUrl ? theme.backgroundSelected : tint },
+        ]}>
+        {merchant.cardImageUrl && (
+          <Image
+            source={{ uri: merchant.cardImageUrl }}
+            contentFit="cover"
+            transition={Motion.state}
+            style={StyleSheet.absoluteFill}
+            accessible={false}
+          />
+        )}
+      </View>
+      <CashbackPill merchant={merchant} />
+      <View
+        style={[
+          styles.badge,
+          {
+            width: badgeSize,
+            height: badgeSize,
+            bottom: -badgeSize * badgeOverhang,
+            left: size === 'hero' ? Spacing.four : Spacing.three,
+            borderWidth: size === 'hero' ? 4 : 3,
+          },
+        ]}>
+        {merchant.logoUrl ? (
+          <Image
+            source={{ uri: merchant.logoUrl }}
+            contentFit="contain"
+            transition={Motion.state}
+            style={styles.badgeImage}
+            accessible={false}
+          />
+        ) : (
+          <View style={[styles.badgeInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
+            <Text style={[styles.badgeInitialText, { fontSize: badgeSize * 0.38 }]}>{merchant.initial()}</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
-function LogoBadge({ merchant, borderColor }: { merchant: Merchant; borderColor: string }) {
+function CashbackPill({ merchant }: { merchant: Merchant }) {
+  const theme = useTheme();
+  if (merchant.cashbackBasisPoints() <= 0) {
+    return null;
+  }
   return (
-    <View style={[styles.badge, { borderColor }]}>
-      {merchant.logoUrl ? (
-        <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.badgeImage} accessible={false} />
-      ) : (
-        <View style={[styles.badgeInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
-          <Text style={styles.badgeInitialText}>{merchant.initial()}</Text>
-        </View>
-      )}
+    <View
+      style={[styles.pill, { backgroundColor: theme.accentSoft }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants">
+      <Text maxFontSizeMultiplier={1.3} style={[styles.pillText, { color: theme.accent }]}>
+        {merchant.rateLabel()}
+      </Text>
     </View>
   );
 }
 
 function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourite: Favourite }) {
+  const theme = useTheme();
   const icon: SymbolViewProps['name'] = favourite.saved
     ? { ios: 'heart.fill', android: 'favorite', web: 'favorite' }
     : { ios: 'heart', android: 'favorite_border', web: 'favorite_border' };
@@ -113,7 +140,6 @@ function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourit
     <PressScale
       style={styles.favourite}
       scale={0.88}
-      hitSlop={6}
       onPress={() => {
         haptics.tap();
         favourite.onToggle();
@@ -123,8 +149,41 @@ function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourit
         favourite.saved ? `Remove ${merchant.name} from favourites` : `Add ${merchant.name} to favourites`
       }
       accessibilityState={{ selected: favourite.saved }}>
-      <SymbolView name={icon} size={18} tintColor={Brand.royal} />
+      <View style={styles.favouriteDisc}>
+        <SymbolView name={icon} size={20} tintColor={favourite.saved ? theme.accent : '#FFFFFF'} />
+      </View>
     </PressScale>
+  );
+}
+
+type SectionHeadingProps = {
+  title: string;
+  onSeeAll?: () => void;
+};
+
+export function SectionHeading({ title, onSeeAll }: SectionHeadingProps) {
+  const theme = useTheme();
+  return (
+    <View style={styles.heading}>
+      <ThemedText type="heading" accessibilityRole="header" style={styles.headingTitle}>
+        {title}
+      </ThemedText>
+      {onSeeAll && (
+        <PressScale
+          onPress={onSeeAll}
+          scale={0.92}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel={`See all: ${title}`}
+          style={[styles.seeAll, { backgroundColor: theme.backgroundSelected }]}>
+          <SymbolView
+            name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
+            size={18}
+            tintColor={theme.text}
+          />
+        </PressScale>
+      )}
+    </View>
   );
 }
 
@@ -137,36 +196,13 @@ type StripProps = {
 };
 
 export function MerchantCardStrip({ title, merchants, onOpen, onSeeAll, favouriteOf }: StripProps) {
-  const theme = useTheme();
   const { gutter } = usePageLayout();
   if (merchants.length === 0) {
     return null;
   }
   return (
     <View style={styles.strip}>
-      <View style={styles.stripHeading}>
-        <ThemedText type="heading" accessibilityRole="header" style={styles.stripTitle}>
-          {title}
-        </ThemedText>
-        {onSeeAll && (
-          <PressScale
-            onPress={onSeeAll}
-            scale={0.92}
-            accessibilityRole="button"
-            accessibilityLabel={`See all: ${title}`}
-            style={[styles.seeAll, { backgroundColor: theme.backgroundSelected }]}>
-            <SymbolView
-              name={{
-                ios: 'chevron.right',
-                android: 'chevron_right',
-                web: 'chevron_right',
-              }}
-              size={18}
-              tintColor={theme.accent}
-            />
-          </PressScale>
-        )}
-      </View>
+      <SectionHeading title={title} onSeeAll={onSeeAll} />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -269,9 +305,9 @@ export function CategoryTiles({ categories, selected, onSelect }: CategoryTilesP
       showsHorizontalScrollIndicator={false}
       style={{ marginHorizontal: -gutter }}
       contentContainerStyle={[styles.categoryRow, { paddingHorizontal: gutter }]}>
-      <CategoryTile label="All" icon={allIcon} selected={selected === null} onPress={() => onSelect(null)} />
+      <CategoryChip label="All" icon={allIcon} selected={selected === null} onPress={() => onSelect(null)} />
       {categories.map((category) => (
-        <CategoryTile
+        <CategoryChip
           key={category}
           label={Merchant.categoryLabel(category)}
           icon={categoryIcon(category)}
@@ -283,19 +319,18 @@ export function CategoryTiles({ categories, selected, onSelect }: CategoryTilesP
   );
 }
 
-type CategoryTileProps = {
+type CategoryChipProps = {
   label: string;
   icon: SymbolViewProps['name'];
   selected: boolean;
   onPress: () => void;
 };
 
-function CategoryTile({ label, icon, selected, onPress }: CategoryTileProps) {
+function CategoryChip({ label, icon, selected, onPress }: CategoryChipProps) {
   const theme = useTheme();
   return (
     <PressScale
-      style={styles.category}
-      scale={0.94}
+      scale={0.95}
       onPress={() => {
         haptics.tap();
         onPress();
@@ -305,60 +340,37 @@ function CategoryTile({ label, icon, selected, onPress }: CategoryTileProps) {
       accessibilityState={{ selected }}>
       <View
         style={[
-          styles.categoryIcon,
-          {
-            backgroundColor: selected ? theme.accent : theme.backgroundElement,
-          },
+          styles.chip,
+          selected
+            ? { backgroundColor: theme.backgroundSelected, borderColor: theme.backgroundSelected }
+            : { backgroundColor: theme.backgroundElement, borderColor: theme.border },
           !selected && Elevation.card,
         ]}>
-        <SymbolView name={icon} size={26} tintColor={selected ? theme.onAccent : theme.accent} />
+        <SymbolView name={icon} size={20} tintColor={theme.accent} />
+        <ThemedText type={selected ? 'smallBold' : 'small'} numberOfLines={1}>
+          {label}
+        </ThemedText>
       </View>
-      <ThemedText
-        type={selected ? 'smallBold' : 'small'}
-        themeColor={selected ? 'text' : 'textSecondary'}
-        numberOfLines={1}
-        style={styles.categoryLabel}>
-        {label}
-      </ThemedText>
     </PressScale>
   );
 }
 
 const styles = StyleSheet.create({
-  shadow: {
-    ...Elevation.card,
-  },
   card: {
+    flex: 1,
+  },
+  cover: {
+    aspectRatio: coverAspect,
+    borderRadius: Radius.media,
+    overflow: 'hidden',
+  },
+  coverHero: {
     borderRadius: Radius.card,
-    overflow: 'hidden',
-  },
-  media: {
-    aspectRatio: mediaAspect,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  logoGround: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  logoImage: {
-    width: '58%',
-    height: '58%',
-  },
-  initial: {
-    color: '#FFFFFF',
-    fontSize: 40,
-    fontFamily: FontFamily.bold,
   },
   badge: {
     position: 'absolute',
-    left: Spacing.three,
-    bottom: -badgeSize / 2,
-    width: badgeSize,
-    height: badgeSize,
     borderRadius: Radius.pill,
-    borderWidth: 3,
+    borderColor: '#FFFFFF',
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     alignItems: 'center',
@@ -366,8 +378,8 @@ const styles = StyleSheet.create({
     ...Elevation.badge,
   },
   badgeImage: {
-    width: '74%',
-    height: '74%',
+    width: '72%',
+    height: '72%',
   },
   badgeInitial: {
     position: 'absolute',
@@ -380,17 +392,25 @@ const styles = StyleSheet.create({
   },
   badgeInitialText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontFamily: FontFamily.bold,
+  },
+  pill: {
+    position: 'absolute',
+    top: Spacing.two + Spacing.one,
+    left: Spacing.two + Spacing.one,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.two + Spacing.one,
+    paddingVertical: Spacing.one,
+  },
+  pillText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontVariant: ['tabular-nums'],
     fontFamily: FontFamily.bold,
   },
   text: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.three,
+    paddingHorizontal: Spacing.half,
     gap: Spacing.half,
-  },
-  textUnderBadge: {
-    paddingTop: badgeSize / 2 + Spacing.two,
   },
   name: {
     fontSize: 16,
@@ -398,26 +418,35 @@ const styles = StyleSheet.create({
   },
   favourite: {
     position: 'absolute',
-    top: Spacing.two,
-    left: Spacing.two,
-    width: 36,
-    height: 36,
-    borderRadius: Radius.pill,
-    backgroundColor: '#FFFFFF',
+    top: 0,
+    right: 0,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Elevation.badge,
+  },
+  favouriteDisc: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(15, 27, 45, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   strip: {
     gap: Spacing.three,
   },
-  stripHeading: {
+  heading: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
   },
-  stripTitle: {
+  headingTitle: {
     flex: 1,
+    fontFamily: FontFamily.bold,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
   },
   seeAll: {
     width: 36,
@@ -429,29 +458,23 @@ const styles = StyleSheet.create({
   stripRow: {
     gap: Spacing.three,
     paddingTop: Spacing.one,
-    paddingBottom: Spacing.four,
+    paddingBottom: Spacing.two,
   },
   stripCard: {
     width: stripCardWidth,
   },
   categoryRow: {
-    gap: Spacing.three,
+    gap: Spacing.two,
     paddingTop: Spacing.one,
     paddingBottom: Spacing.three,
   },
-  category: {
-    width: 76,
+  chip: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-  },
-  categoryIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: Radius.media,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryLabel: {
-    textAlign: 'center',
+    minHeight: 44,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
   },
 });

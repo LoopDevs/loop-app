@@ -46,14 +46,14 @@ export function OverviewCard({
     <View style={styles.section}>
       <View style={styles.sectionHeading}>
         <Text
-          style={[styles.sectionTitle, { color: theme.accent }]}
+          style={[styles.sectionTitle, { color: theme.text }]}
           accessibilityRole="header"
           maxFontSizeMultiplier={1.4}>
           {title}
         </Text>
         {accessory}
       </View>
-      <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+      <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
         {rows.map((row, index) => (
           <Fragment key={index}>
             {index > 0 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
@@ -219,7 +219,6 @@ type SavingsCardProps = {
 };
 
 export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: SavingsCardProps) {
-  const theme = useTheme();
   if (!view) {
     return (
       <OverviewCard title="Savings">
@@ -230,6 +229,39 @@ export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: 
   const { holdings, stable } = view;
   const savings = holdings.savings();
   const onTheWay = stable ? holdings.onTheWayIn(stable) : null;
+  return (
+    <>
+      <SavingsOverview
+        savings={savings}
+        onTheWay={onTheWay}
+        stable={stable}
+        onWithdraw={onWithdraw}
+        withdrawDisabled={withdrawDisabled}
+        onCashback={onCashback}
+      />
+      {savings === 0n && <SavingsPromo onPress={onCashback} />}
+    </>
+  );
+}
+
+type SavingsOverviewProps = {
+  savings: bigint;
+  onTheWay: bigint | null;
+  stable: HoldingsView['stable'];
+  onWithdraw: () => void;
+  withdrawDisabled: boolean;
+  onCashback: () => void;
+};
+
+function SavingsOverview({
+  savings,
+  onTheWay,
+  stable,
+  onWithdraw,
+  withdrawDisabled,
+  onCashback,
+}: SavingsOverviewProps) {
+  const theme = useTheme();
   return (
     <OverviewCard
       title="Savings"
@@ -296,6 +328,7 @@ export function NextStep({ view, topMerchant, onAddMoney, onOpenMerchant }: Next
             android: 'add',
             web: 'add',
           } as SymbolViewProps['name'],
+          label: 'Get started',
           title: 'Add money to get started',
           body: 'Then buy your first gift card and earn cashback on it.',
           onPress: onAddMoney,
@@ -307,6 +340,7 @@ export function NextStep({ view, topMerchant, onAddMoney, onOpenMerchant }: Next
               android: 'redeem',
               web: 'redeem',
             } as SymbolViewProps['name'],
+            label: 'Top cashback',
             title: `Earn ${topMerchant.rateFigure()} back at ${topMerchant.name}`,
             body: 'The highest cashback rate in the shop right now.',
             onPress: () => onOpenMerchant(topMerchant),
@@ -323,17 +357,24 @@ export function NextStep({ view, topMerchant, onAddMoney, onOpenMerchant }: Next
       }}
       accessibilityRole="button"
       accessibilityLabel={`${step.title}. ${step.body}`}
-      style={[styles.nextStep, { backgroundColor: theme.backgroundSelected }]}>
-      <View style={[styles.nextIcon, { backgroundColor: theme.backgroundElement }]}>
-        <SymbolView name={step.icon} size={22} tintColor={theme.accent} />
-      </View>
+      style={[
+        styles.nextStep,
+        Elevation.card,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+      ]}>
       <View style={styles.rowText}>
+        <Text style={[styles.cardLabel, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.4}>
+          {step.label}
+        </Text>
         <ThemedText type="smallBold" style={styles.nextTitle}>
           {step.title}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {step.body}
         </ThemedText>
+      </View>
+      <View style={[styles.nextIcon, { backgroundColor: theme.accentSoft }]}>
+        <SymbolView name={step.icon} size={22} tintColor={theme.accent} />
       </View>
       <SymbolView
         name={{
@@ -342,9 +383,46 @@ export function NextStep({ view, topMerchant, onAddMoney, onOpenMerchant }: Next
           web: 'chevron_right',
         }}
         size={16}
-        tintColor={theme.accent}
+        tintColor={theme.textSecondary}
       />
     </PressScale>
+  );
+}
+
+function SavingsPromo({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.promo,
+        Elevation.card,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+      ]}>
+      <View style={styles.promoText}>
+        <Text style={[styles.promoTitle, { color: theme.text }]} maxFontSizeMultiplier={1.3}>
+          Cashback that grows while you save
+        </Text>
+        <PressScale
+          onPress={() => {
+            haptics.tap();
+            onPress();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="See how savings work"
+          style={[styles.promoButton, { backgroundColor: theme.backgroundSelected }]}>
+          <Text style={[styles.promoButtonLabel, { color: theme.text }]} maxFontSizeMultiplier={1.3}>
+            See how it works
+          </Text>
+        </PressScale>
+      </View>
+      <View style={[styles.promoDisc, { backgroundColor: theme.accentSoft }]}>
+        <SymbolView
+          name={{ ios: 'leaf.fill', android: 'savings', web: 'savings' }}
+          size={44}
+          tintColor={theme.accent}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -521,8 +599,8 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    ...Elevation.card,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -586,7 +664,48 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
     borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
     minHeight: 80,
+  },
+  cardLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  promo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.four,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  promoText: {
+    flex: 1,
+    alignItems: 'flex-start',
+    gap: Spacing.three,
+  },
+  promoTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 20,
+    lineHeight: 26,
+  },
+  promoButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+    borderRadius: Radius.pill,
+  },
+  promoButtonLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+  },
+  promoDisc: {
+    width: 96,
+    height: 96,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   nextIcon: {
     width: 44,

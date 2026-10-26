@@ -14,13 +14,14 @@ import { SplitLayout } from '@/components/split-layout';
 import { PageWidth } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Brand, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import type { Account, OnTheWayItem } from '@/ctx/account';
 import { ctx, type CashbackDestination } from '@/ctx/client';
 import { Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useTheme } from '@/hooks/use-theme';
 import { useProfile } from '@/hooks/use-profile';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { money } from '@/money';
@@ -43,7 +44,8 @@ export default function CashbackScreen() {
   const router = useRouter();
   const { wide } = usePageLayout();
   const scroll = useAnimatedRef<Animated.ScrollView>();
-  const { onScroll, backdrop } = useScrimScroll();
+  const { onScroll } = useScrimScroll();
+  const theme = useTheme();
   const destinationY = useRef(0);
   const { profile, setProfile } = useProfile();
   const destinationWrites = useRef(0);
@@ -159,15 +161,14 @@ export default function CashbackScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.View pointerEvents="none" style={backdrop} />
+      <StatusBar style="auto" />
       <Animated.ScrollView
         ref={scroll}
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={[styles.content, wide && styles.wideContent]}
         refreshControl={
-          <RefreshControl refreshing={loading && profile !== null} onRefresh={load} tintColor={Brand.onRoyal} />
+          <RefreshControl refreshing={loading && profile !== null} onRefresh={load} tintColor={theme.textSecondary} />
         }>
         <PageHeader
           title="Cashback"

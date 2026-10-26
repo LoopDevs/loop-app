@@ -12,26 +12,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Odometer } from '@/components/odometer';
 import { Wordmark } from '@/components/wordmark';
-import { Brand, FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
+import { FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
 import { Savings } from '@/wallet/savings';
 
-const scrimFadeDistance = 160;
-const balanceStyle = {
+const scrimFadeDistance = 48;
+const balanceType = {
   fontFamily: FontFamily.semibold,
-  fontSize: 54,
-  lineHeight: 62,
-  letterSpacing: -1.5,
-  color: Brand.onRoyal,
+  fontSize: 52,
+  lineHeight: 60,
+  letterSpacing: -1.6,
 };
 
 type Scrollable = NonNullable<Parameters<typeof useScrollToTop>[0]['current']>;
 
 export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const scrollRef = useRef<T>(null);
   useScrollToTop(scrollRef);
   const offset = useSharedValue(0);
@@ -41,12 +42,13 @@ export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
   const fade = useAnimatedStyle(() => ({
     opacity: interpolate(offset.value, [0, scrimFadeDistance], [0, 1], 'clamp'),
   }));
-  const overscroll = useAnimatedStyle(() => ({
-    height: Math.max(0, -offset.value),
-  }));
-  const scrim = [styles.scrim, { height: insets.top }, webBlur, fade];
-  const backdrop = [styles.backdrop, overscroll];
-  return { scrollRef, onScroll, scrim, backdrop };
+  const scrim = [
+    styles.scrim,
+    { height: insets.top, backgroundColor: theme.chrome, borderBottomColor: theme.border },
+    webBlur,
+    fade,
+  ];
+  return { scrollRef, onScroll, scrim };
 }
 
 const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(16px)' } as object) : null;
@@ -54,23 +56,24 @@ const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export function StatusBarScrim({ style }: { style: ComponentProps<typeof Animated.View>['style'] }) {
   if (Platform.OS === 'ios') {
-    return <AnimatedBlurView pointerEvents="none" intensity={40} tint="dark" style={style} />;
+    return <AnimatedBlurView pointerEvents="none" intensity={60} tint="systemChromeMaterial" style={style} />;
   }
   return <Animated.View pointerEvents="none" style={style} />;
 }
 
-type HomePanelProps = {
+type BalanceHeaderProps = {
   view: HoldingsView | null;
   children?: ReactNode;
 };
 
-export function HomePanel({ view, children }: HomePanelProps) {
+export function BalanceHeader({ view, children }: BalanceHeaderProps) {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const { wide, gutter } = usePageLayout();
   return (
-    <View style={[styles.panel, { paddingTop: insets.top + (wide ? Spacing.five : Spacing.three) }]}>
+    <View style={[styles.header, { paddingTop: insets.top + (wide ? Spacing.five : Spacing.three) }]}>
       <View style={[styles.inner, wide && { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter }]}>
-        {!wide && <Wordmark height={22} />}
+        {!wide && <Wordmark height={20} color={theme.text} />}
         <Balance view={view} />
         {children}
       </View>
@@ -79,25 +82,34 @@ export function HomePanel({ view, children }: HomePanelProps) {
 }
 
 function Balance({ view }: { view: HoldingsView | null }) {
+  const theme = useTheme();
   const stable = view?.stable;
   const total = view && stable ? view.holdings.totalIn(stable) : null;
   const formatted = total !== null && stable ? money.ctx(units.format(total, units.decimals), stable) : null;
   const unavailable = view !== null && !stable;
   return (
     <View style={styles.balanceBlock}>
-      <Text style={styles.balanceLabel} maxFontSizeMultiplier={1.4}>
+      <Text style={[styles.balanceLabel, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.4}>
         Total balance
       </Text>
       {formatted ? (
-        <Odometer value={formatted} style={balanceStyle} />
+        <Odometer value={formatted} style={{ ...balanceType, color: theme.text }} />
       ) : unavailable ? (
-        <Text style={styles.unavailable} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+        <Text
+          style={[styles.unavailable, { color: theme.text }]}
+          accessibilityRole="header"
+          maxFontSizeMultiplier={1.3}>
           Balance unavailable
         </Text>
       ) : (
-        <View style={styles.balancePlaceholder} accessibilityLabel="Loading your money" />
+        <View
+          style={[styles.balancePlaceholder, { backgroundColor: theme.backgroundSelected }]}
+          accessibilityLabel="Loading your money"
+        />
       )}
-      <Text style={styles.stateLine} accessibilityLiveRegion="polite">
+      <Text
+        style={[styles.stateLine, { color: theme.textSecondary }]}
+        accessibilityLiveRegion="polite">
         {accountState(view)}
       </Text>
     </View>
@@ -129,9 +141,8 @@ function accountState(view: HoldingsView | null): string {
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: Brand.royal,
-    paddingBottom: Spacing.five,
+  header: {
+    paddingBottom: Spacing.two,
   },
   inner: {
     width: '100%',
@@ -144,43 +155,32 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   balanceLabel: {
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,
   },
   balancePlaceholder: {
-    height: balanceStyle.lineHeight,
+    height: balanceType.lineHeight,
     width: '55%',
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 8,
   },
   unavailable: {
-    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 32,
-    lineHeight: balanceStyle.lineHeight,
+    lineHeight: balanceType.lineHeight,
     letterSpacing: -0.8,
   },
   stateLine: {
     marginTop: Spacing.one,
-    color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 15,
     lineHeight: 20,
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Brand.royal,
   },
   scrim: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: Brand.scrim,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });
