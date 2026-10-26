@@ -65,8 +65,8 @@ export default function ProfileScreen() {
   const signOut = async () => {
     await ctx.signOut();
     setEmail(null);
-    await check();
     router.navigate('/');
+    await check();
   };
 
   const confirmSignOut = () => {

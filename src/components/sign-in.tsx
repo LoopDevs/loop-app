@@ -39,6 +39,7 @@ type SignInState = {
   openSignIn: (reason?: string) => void;
   check: () => Promise<boolean>;
   onSignIn: (listener: SignInListener) => () => void;
+  finishSignIn: () => Promise<void>;
 };
 
 const SignInContext = createContext<SignInState | null>(null);
@@ -70,21 +71,23 @@ export function SignInProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const finish = useCallback(async () => {
+  const finishSignIn = useCallback(async () => {
     setReason(null);
     await check();
     listeners.current.forEach((listener) => listener());
   }, [check]);
 
   const value = useMemo(
-    () => ({ signedIn, openSignIn, check, onSignIn }),
-    [signedIn, openSignIn, check, onSignIn],
+    () => ({ signedIn, openSignIn, check, onSignIn, finishSignIn }),
+    [signedIn, openSignIn, check, onSignIn, finishSignIn],
   );
 
   return (
     <SignInContext.Provider value={value}>
       {children}
-      {reason !== null && <SignInSheet reason={reason} onClose={() => setReason(null)} onSignedIn={finish} />}
+      {reason !== null && (
+        <SignInSheet reason={reason} onClose={() => setReason(null)} onSignedIn={finishSignIn} />
+      )}
     </SignInContext.Provider>
   );
 }
@@ -162,6 +165,29 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+export function SignInScreen() {
+  const { finishSignIn } = useSignIn();
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={[styles.layer, { backgroundColor: theme.background }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.screenBody,
+          { paddingTop: insets.top + Spacing.four, paddingBottom: insets.bottom + Spacing.four },
+        ]}
+        keyboardShouldPersistTaps="handled">
+        <View style={styles.screenContent}>
+          <Wordmark height={24} />
+          <SignInForm reason="" onAuthenticated={() => undefined} onSignedIn={finishSignIn} />
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -457,6 +483,17 @@ const styles = StyleSheet.create({
   },
   sheetBody: {
     padding: Spacing.four,
+  },
+  screenBody: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+  },
+  screenContent: {
+    width: '100%',
+    maxWidth: Layout.formMaxWidth,
+    alignSelf: 'center',
+    gap: Spacing.five,
   },
   form: {
     gap: Spacing.three,

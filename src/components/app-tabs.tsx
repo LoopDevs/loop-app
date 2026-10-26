@@ -1,8 +1,22 @@
 import { NativeTabs } from 'expo-router/native-tabs';
+import { StyleSheet } from 'react-native';
 
+import { SignInScreen, useSignIn } from '@/components/sign-in';
+import { ThemedView } from '@/components/themed-view';
 import { Colors, FontFamily } from '@/constants/theme';
 
 export default function AppTabs() {
+  const { signedIn } = useSignIn();
+  if (signedIn === null) {
+    return <ThemedView style={styles.loading} />;
+  }
+  if (!signedIn) {
+    return <SignInScreen />;
+  }
+  return <SignedInTabs />;
+}
+
+function SignedInTabs() {
   const colors = Colors.light;
 
   return (
@@ -59,3 +73,9 @@ export default function AppTabs() {
     </NativeTabs>
   );
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+  },
+});

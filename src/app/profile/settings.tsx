@@ -91,8 +91,8 @@ export default function SettingsScreen() {
       await ctx.signOut();
       setSignedIn(false);
       setProfile(null);
-      await check();
       router.navigate("/");
+      await check();
     });
 
   const confirmSignOut = () => {
