@@ -1,14 +1,23 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
-import { Button } from '@/components/form';
+import { Button, Notice } from '@/components/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
 import { OrderHelp } from '@/components/order-help';
 import { OrderDetailSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import {
+  BottomTabInset,
+  Brand,
+  FontFamily,
+  MaxContentWidth,
+  Motion,
+  Radius,
+  Spacing,
+} from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import {
   cashbackState,
@@ -18,12 +27,14 @@ import {
   pollIntervalMs,
 } from '@/ctx/gift-card-status';
 import { useSessionOwner } from '@/hooks/use-session-owner';
-import { money } from '@/money';
+import { useTheme } from '@/hooks/use-theme';
+import { dates, money } from '@/money';
 
 const signInMessage = 'Sign in to see this order.';
 
 export default function GiftCardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const [giftCard, setGiftCard] = useState<GiftCard | null>(null);
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -93,12 +104,15 @@ export default function GiftCardScreen() {
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         {!giftCard && !message && <OrderDetailSkeleton />}
-        {message !== '' && (
-          <>
-            <ThemedText type="small">{message}</ThemedText>
-            <Button label="Retry" onPress={retry} />
-          </>
-        )}
+        {message !== '' &&
+          (message === signInMessage ? (
+            <View style={styles.section}>
+              <ThemedText type="heading">{signInMessage}</ThemedText>
+              <Button label="Sign in" variant="primary" onPress={() => router.navigate('/')} />
+            </View>
+          ) : (
+            <Notice message={message} actionLabel="Try again" onAction={retry} />
+          ))}
         {giftCard && <GiftCardSummary giftCard={giftCard} />}
       </ScrollView>
     </ThemedView>
@@ -106,29 +120,76 @@ export default function GiftCardScreen() {
 }
 
 function GiftCardSummary({ giftCard }: { giftCard: GiftCard }) {
+  const theme = useTheme();
+  const reduceMotion = useReducedMotion();
   const cashback = cashbackState(giftCard);
   const outcome = outcomeText(giftCard);
+  const processing = giftCard.status === 'paid';
   return (
-    <>
-      <ThemedText type="smallBold">
-        {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)} {giftCard.merchantName}
-      </ThemedText>
-      <ThemedText type="small">{giftCardStatusLabel(giftCard.status)}</ThemedText>
-      {outcome && <ThemedText type="small">{outcome}</ThemedText>}
-      {giftCard.paymentCryptoAmount && (
-        <ThemedText type="small">
-          Paid: {money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
-        </ThemedText>
-      )}
-      {cashback !== 'none' && (
-        <ThemedText type="small">
-          Cashback: {money.ctx(giftCard.cashbackAmount ?? '', giftCard.cashbackCurrency ?? '')},{' '}
-          {cashbackStateLabel(cashback)}
-        </ThemedText>
-      )}
+    <Animated.View
+      entering={reduceMotion ? undefined : FadeIn.duration(Motion.state).easing(Motion.easeOut)}
+      style={styles.section}>
+      <View style={styles.hero}>
+        <Text style={styles.heroName} maxFontSizeMultiplier={1.6}>
+          {giftCard.merchantName}
+        </Text>
+        <Text style={styles.heroAmount} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
+          {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)}
+        </Text>
+        <View style={styles.heroStatus}>
+          {processing && <ActivityIndicator size="small" color={Brand.onRoyal} />}
+          <Text style={styles.heroStatusText} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
+            {processing ? 'Processing. Your code shows here when it is ready.' : giftCardStatusLabel(giftCard.status)}
+          </Text>
+        </View>
+      </View>
+
+      {outcome && <Notice message={outcome} />}
+
       <GiftCardDetails giftCard={giftCard} />
+
+      {(giftCard.paymentCryptoAmount || cashback !== 'none') && (
+        <View style={[styles.summary, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+          {giftCard.paymentCryptoAmount && (
+            <SummaryRow
+              label="Paid"
+              value={money.payment(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency ?? '')}
+            />
+          )}
+          {cashback !== 'none' && (
+            <SummaryRow
+              label={`Cashback, ${cashbackStateLabel(cashback)}`}
+              value={money.ctx(giftCard.cashbackAmount ?? '', giftCard.cashbackCurrency ?? '')}
+              tone={cashback === 'reversed' ? 'danger' : 'success'}
+            />
+          )}
+          <SummaryRow label="Ordered" value={dates.day(giftCard.created)} />
+        </View>
+      )}
+
       <OrderHelp giftCard={giftCard} />
-    </>
+    </Animated.View>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  tone = 'text',
+}: {
+  label: string;
+  value: string;
+  tone?: 'text' | 'success' | 'danger';
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <ThemedText type="smallBold" themeColor={tone} style={styles.summaryValue}>
+        {value}
+      </ThemedText>
+    </View>
   );
 }
 
@@ -137,8 +198,64 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    padding: Spacing.three,
+    paddingBottom: BottomTabInset + Spacing.five,
     gap: Spacing.three,
+  },
+  section: {
+    gap: Spacing.three,
+  },
+  hero: {
+    backgroundColor: Brand.royal,
+    borderRadius: Radius.control,
+    padding: Spacing.three,
+    gap: Spacing.one,
+  },
+  heroName: {
+    color: Brand.onRoyalMuted,
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  heroAmount: {
+    color: Brand.onRoyal,
+    fontFamily: FontFamily.bold,
+    fontSize: 40,
+    lineHeight: 46,
+    letterSpacing: -1,
+  },
+  heroStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingTop: Spacing.two,
+  },
+  heroStatusText: {
+    flex: 1,
+    color: Brand.onRoyal,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  summary: {
+    borderWidth: 1,
+    borderRadius: Radius.control,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.three,
+    minHeight: 40,
+  },
+  summaryValue: {
+    flexShrink: 1,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
 });
