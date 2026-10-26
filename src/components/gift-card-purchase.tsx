@@ -13,6 +13,8 @@ import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { BuyPrice, type BuyQuote } from '@/ctx/buy-price';
+import { BuyTimer } from '@/ctx/buy-timer';
+import { OrderWake } from '@/ctx/order-wake';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal';
 import { InFlightPayments } from '@/ctx/in-flight-payments';
@@ -149,6 +151,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const shownBalance = balance === null ? null : balance > spent ? balance - spent : 0n;
 
   const following = useRef(0);
+  const buyTimer = useRef<BuyTimer | null>(null);
   const mounted = useRef(true);
   const live = useRef({ wallet, refresh });
   const heldOrder = useRef<GiftCard | null>(null);
@@ -192,9 +195,8 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     following.current += 1;
   };
 
-  const followOrder = useCallback(async (giftCard: GiftCard, sent: SentRecord | null) => {
-    const generation = ++following.current;
-    const isCurrent = () => following.current === generation;
+  const pollOrder = useCallback(
+    async (giftCard: GiftCard, sent: SentRecord | null, isCurrent: () => boolean, wake: OrderWake) => {
     let current = giftCard;
     let checkingChain = sent !== null;
     let landed = false;
@@ -219,7 +221,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       if (settledStatuses.includes(current.status)) {
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      await wake.wait(pollIntervalMs);
       try {
         current = await ctx.giftCard(current.id);
       } catch {
@@ -230,8 +232,13 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       }
       const fetched = current;
       setOrder((held) => OneTapBuy.merged(held, fetched));
+      if (current.status === 'fulfilled') {
+        buyTimer.current?.mark('card shown');
+        buyTimer.current = null;
+      }
       if (!landed && current.paymentStatus === 'paid') {
         landed = true;
+        buyTimer.current?.mark('paid seen');
         live.current
           .refresh()
           .then(() => {
@@ -242,7 +249,24 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           .catch(() => undefined);
       }
     }
-  }, []);
+    },
+    [],
+  );
+
+  const followOrder = useCallback(
+    async (giftCard: GiftCard, sent: SentRecord | null) => {
+      const generation = ++following.current;
+      const isCurrent = () => following.current === generation;
+      const wake = new OrderWake();
+      const stopWatching = ctx.watchOrder(giftCard.id, wake).catch(() => () => undefined);
+      try {
+        await pollOrder(giftCard, sent, isCurrent, wake);
+      } finally {
+        void stopWatching.then((stop) => stop());
+      }
+    },
+    [pollOrder],
+  );
 
   const show = useCallback(
     (shown: ShownOrder | null) => {
@@ -347,7 +371,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           }
         }
         setPayment({ kind: 'sending' });
-        return paymentSender.send(giftCard.paymentId, () => wallet.pay(giftCard));
+        return paymentSender.send(giftCard.paymentId, () => wallet.pay(giftCard, buyTimer.current));
       }),
     );
     if (!task) {
@@ -366,15 +390,16 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           fiatCurrency: merchant.currency,
           cryptoCurrency: payWith,
         });
+        buyTimer.current?.mark('order created');
         setOrder(created);
         return created;
       },
-      paymentStarted: async (giftCard) => {
+      paymentStarted: async (giftCard, refetch) => {
         if (inFlightPayments.has(giftCard.paymentId)) {
           return giftCard;
         }
         const sentHere = (await paymentSender.recorded(giftCard.paymentId)) !== null;
-        const fetched = await ctx.giftCard(giftCard.id);
+        const fetched = refetch ? await ctx.giftCard(giftCard.id) : giftCard;
         return OneTapBuy.paymentStarted(fetched, sentHere) ? fetched : null;
       },
       pay: (giftCard) => payOrder(giftCard, holdings),
@@ -452,6 +477,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       return;
     }
     const quote: BuyQuote = { shown: shownPrice, currency, usdPrice };
+    buyTimer.current = BuyTimer.dev();
     stopFollowing();
     setMessage('');
     setAmountError(null);
@@ -468,6 +494,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       return;
     }
     const quote: BuyQuote = { shown: confirmPrice, currency, usdPrice };
+    buyTimer.current = BuyTimer.dev();
     setConfirmPrice(null);
     setPayment({ kind: 'sending' });
     setSpent(confirmPrice);

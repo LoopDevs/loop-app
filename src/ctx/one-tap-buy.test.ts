@@ -69,6 +69,7 @@ type Sponsor = 'accepted' | 'closed' | 'paidElsewhere';
 class FakeShop implements BuySteps {
   readonly created: GiftCard[] = [];
   readonly sponsored: string[] = [];
+  readonly refetches: boolean[] = [];
   readonly records = new SentPayments(memoryStorage(), () => now);
   readonly sender = new PaymentSender(
     this.records,
@@ -85,8 +86,9 @@ class FakeShop implements BuySteps {
     return order;
   }
 
-  async paymentStarted(order: GiftCard): Promise<GiftCard | null> {
-    const fetched = { ...order, ...this.ctxOrders.get(order.id) };
+  async paymentStarted(order: GiftCard, refetch: boolean): Promise<GiftCard | null> {
+    this.refetches.push(refetch);
+    const fetched = refetch ? { ...order, ...this.ctxOrders.get(order.id) } : order;
     const sentHere = (await this.sender.recorded(order.paymentId)) !== null;
     return OneTapBuy.paymentStarted(fetched, sentHere) ? fetched : null;
   }
@@ -128,6 +130,15 @@ test('an order priced more than the tolerance above the shown price is not paid'
   const result = await new OneTapBuy().start(shop, quote);
   assert.deepEqual(result, { kind: 'confirm', order: shop.created[0], price: units.parse('25.26') });
   assert.deepEqual(shop.sponsored, []);
+});
+
+test('a just created order is not fetched again, a confirmed one is', async () => {
+  const shop = new FakeShop();
+  await new OneTapBuy().start(shop, quote);
+  assert.deepEqual(shop.refetches, [false]);
+  const confirmShop = new FakeShop();
+  await new OneTapBuy().confirm(confirmShop, giftCard(7), quote);
+  assert.deepEqual(confirmShop.refetches, [true]);
 });
 
 test('a confirmed price pays the same order without creating another', async () => {

@@ -1,6 +1,7 @@
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
+import { OrderWake } from '@/ctx/order-wake';
 import { Deadline } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
 import type { PayoutJson } from '@/ctx/payout';
@@ -332,6 +333,25 @@ class CtxClient {
 
   giftCard(id: string): Promise<GiftCard> {
     return this.auth.sessionRequest('GET', `/gift-cards/${id}`);
+  }
+
+  async watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
+    const accessToken = await this.auth.requireAccessToken();
+    const HeaderSocket = WebSocket as unknown as new (
+      url: string,
+      protocols: undefined,
+      options: { headers: Record<string, string> },
+    ) => WebSocket;
+    const socket = new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
+      headers: { Authorization: `Bearer ${accessToken}`, 'X-Client-Id': this.clientId },
+    });
+    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic: 'giftcard' }));
+    socket.onmessage = (message) => {
+      if (OrderWake.concerns(message.data, orderId)) {
+        wake.signal();
+      }
+    };
+    return () => socket.close();
   }
 
   async giftCards({ merchantId, status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
