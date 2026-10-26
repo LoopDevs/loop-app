@@ -147,6 +147,17 @@ export default function SettingsScreen() {
                 label="Request my data"
                 onPress={() => Linking.openURL(loopLinks.supportMail('Data request'))}
               />
+              <Button
+                label="Delete my account"
+                onPress={() =>
+                  Linking.openURL(
+                    loopLinks.supportMail(
+                      'Delete my account',
+                      `Please delete my Loop account.\n\nAccount email: ${profile.email ?? ''}`,
+                    ),
+                  )
+                }
+              />
             </Section>
 
             <Button label="Sign out" onPress={signOut} disabled={busy} />
