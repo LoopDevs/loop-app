@@ -9,8 +9,9 @@ import { AddMoney } from '@/components/add-money';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
-import { HomeGiftCards } from '@/components/home-gift-cards';
+import { NextStep, RecentGiftCards, SavingsCard, SpendingBalances } from '@/components/home-overview';
 import { HomePanel, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
+import { MerchantCardStrip } from '@/components/merchant-card';
 import { SignInButton, useOnSignIn } from '@/components/sign-in';
 import {
   HowLoopWorks,
@@ -36,6 +37,8 @@ import { SmartWallet } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'wallet';
 
+const topCashbackShown = 10;
+
 const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
 export default function HomeScreen() {
@@ -53,6 +56,7 @@ export default function HomeScreen() {
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
+  const catalog = useCatalog(screen === 'wallet' ? profileCountry : undefined);
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -175,6 +179,7 @@ export default function HomeScreen() {
     });
 
   const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
+  const topMerchant = catalog?.top[0] ?? null;
 
   if (screen === 'signed-out') {
     return (
@@ -229,6 +234,15 @@ export default function HomeScreen() {
         </HomePanel>
 
         <View style={[styles.content, wide && styles.contentWide]}>
+          {!wide && screen === 'wallet' && (
+            <NextStep
+              view={view}
+              topMerchant={topMerchant}
+              onAddMoney={() => setDepositOpen(true)}
+              onOpenMerchant={openMerchant}
+            />
+          )}
+
           {screen === 'wallet' && wallet && depositOpen && (
             <Animated.View entering={FadeInDown.duration(Motion.state)}>
               <AddMoney wallet={wallet} view={view} refresh={refresh} onClose={() => setDepositOpen(false)} />
@@ -239,8 +253,8 @@ export default function HomeScreen() {
             <Animated.View entering={FadeIn.duration(Motion.state)} style={[styles.sheet, styles.form]}>
               <ThemedText type="subtitle">Finish setting up Loop</ThemedText>
               <ThemedText themeColor="textSecondary">
-                Turn on Face ID or your fingerprint to keep your balance and cashback safe, with no
-                password to remember.
+                Turn on Face ID or your fingerprint to keep your balance and cashback safe, with no password to
+                remember.
               </ThemedText>
               <Button
                 label={busy ? 'Setting up…' : 'Turn on Face ID or fingerprint'}
@@ -251,14 +265,45 @@ export default function HomeScreen() {
             </Animated.View>
           )}
 
-          {screen === 'wallet' && wallet && (
-            <HomeGiftCards refreshKey={giftCardsRefreshKey} onOpen={(slug) => router.push(`/shop/${slug}`)} />
-          )}
-
           {message !== '' && <Notice message={message} />}
 
-          {wide && screen === 'wallet' && profileCountry && (
-            <SignedInStore country={profileCountry} onOpen={openMerchant} />
+          {screen === 'wallet' && wallet && (
+            <View style={[styles.overview, wide && styles.overviewWide]}>
+              <View style={[styles.column, wide && styles.columnWide]}>
+                <SpendingBalances view={view} />
+                <SavingsCard
+                  view={view}
+                  onWithdraw={confirmWithdraw}
+                  withdrawDisabled={busy || vaultShares === 0n}
+                  onCashback={() => router.navigate('/orders/cashback')}
+                />
+              </View>
+              <View style={[styles.column, wide && styles.columnWide]}>
+                {wide && (
+                  <NextStep
+                    view={view}
+                    topMerchant={topMerchant}
+                    onAddMoney={() => setDepositOpen(true)}
+                    onOpenMerchant={openMerchant}
+                  />
+                )}
+                <RecentGiftCards
+                  refreshKey={giftCardsRefreshKey}
+                  onOpenOrder={(id) => router.push(`/orders/${id}`)}
+                  onSeeAll={() => router.navigate('/orders')}
+                  onShop={() => router.navigate('/shop')}
+                />
+              </View>
+            </View>
+          )}
+
+          {screen === 'wallet' && (
+            <MerchantCardStrip
+              title="Top cashback"
+              merchants={catalog?.top.slice(0, topCashbackShown) ?? []}
+              onOpen={openMerchant}
+              onSeeAll={() => router.navigate('/shop')}
+            />
           )}
         </View>
         {wide && <SiteFooter />}
@@ -314,23 +359,6 @@ function SignedOutStore({ onOpen }: { onOpen: (merchant: Merchant) => void }) {
   );
 }
 
-function SignedInStore({ country, onOpen }: { country: string; onOpen: (merchant: Merchant) => void }) {
-  const catalog = useCatalog(country);
-  const [search, setSearch] = useState('');
-  return (
-    <View style={styles.signedInStore}>
-      <TopCashback catalog={catalog} onOpen={onOpen} />
-      <MerchantCatalog
-        country={country}
-        categories={catalog?.categories ?? []}
-        search={search}
-        onSearch={setSearch}
-        onOpen={onOpen}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -356,16 +384,28 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.four,
-    gap: Spacing.four,
+    gap: Spacing.five,
   },
   contentWide: {
+    paddingTop: Spacing.five,
     maxWidth: Layout.pageMaxWidth,
     paddingHorizontal: Layout.wideGutter,
     paddingBottom: Spacing.six,
   },
-  signedInStore: {
-    paddingTop: Spacing.five,
-    gap: Spacing.six,
+  overview: {
+    gap: Spacing.five,
+  },
+  overviewWide: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.five,
+  },
+  column: {
+    gap: Spacing.five,
+  },
+  columnWide: {
+    flex: 1,
+    minWidth: 0,
   },
   sheet: {
     gap: Spacing.three,

@@ -11,6 +11,8 @@ export const Brand = {
   pillGround: '#E3EAFF',
   pillText: '#1C3FAE',
   scrim: 'rgba(10, 22, 64, 0.5)',
+  actionGround: 'rgba(10, 22, 64, 0.42)',
+  actionGroundSelected: 'rgba(10, 22, 64, 0.72)',
 } as const;
 
 export const Colors = {
@@ -90,7 +92,26 @@ export const Spacing = {
 export const Radius = {
   tile: 2,
   control: 4,
+  media: 14,
+  card: 20,
   pill: 999,
+} as const;
+
+export const Elevation = {
+  card: {
+    shadowColor: '#0A1640',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    elevation: 2,
+  },
+  badge: {
+    shadowColor: '#0A1640',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 3,
+  },
 } as const;
 
 export const Motion = {

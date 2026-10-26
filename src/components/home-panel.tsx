@@ -85,6 +85,9 @@ function Balance({ view }: { view: HoldingsView | null }) {
   const unavailable = view !== null && !stable;
   return (
     <View style={styles.balanceBlock}>
+      <Text style={styles.balanceLabel} maxFontSizeMultiplier={1.4}>
+        Total balance
+      </Text>
       {formatted ? (
         <Odometer value={formatted} style={balanceStyle} />
       ) : unavailable ? (
@@ -94,7 +97,6 @@ function Balance({ view }: { view: HoldingsView | null }) {
       ) : (
         <View style={styles.balancePlaceholder} accessibilityLabel="Loading your money" />
       )}
-      <View style={styles.rule} />
       <Text style={styles.stateLine} accessibilityLiveRegion="polite">
         {accountState(view)}
       </Text>
@@ -129,7 +131,7 @@ function accountState(view: HoldingsView | null): string {
 const styles = StyleSheet.create({
   panel: {
     backgroundColor: Brand.royal,
-    paddingBottom: Spacing.four,
+    paddingBottom: Spacing.five,
   },
   inner: {
     width: '100%',
@@ -139,7 +141,13 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
   },
   balanceBlock: {
-    gap: Spacing.three,
+    gap: Spacing.one,
+  },
+  balanceLabel: {
+    color: Brand.onRoyalMuted,
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    lineHeight: 20,
   },
   balancePlaceholder: {
     height: balanceStyle.lineHeight,
@@ -154,11 +162,8 @@ const styles = StyleSheet.create({
     lineHeight: balanceStyle.lineHeight,
     letterSpacing: -0.8,
   },
-  rule: {
-    height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-  },
   stateLine: {
+    marginTop: Spacing.one,
     color: Brand.onRoyalMuted,
     fontFamily: FontFamily.medium,
     fontSize: 15,

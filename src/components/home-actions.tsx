@@ -31,7 +31,8 @@ export function HomeActions({
         selected={depositOpen}
       />
       <Action
-        label="Shop"
+        label="Gift cards"
+        accessibilityLabel="Buy a gift card"
         icon={{ ios: 'bag', android: 'shopping_bag', web: 'shopping_bag' }}
         onPress={onShop}
       />
@@ -88,6 +89,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: Spacing.two,
+    maxWidth: 440,
   },
   action: {
     flex: 1,
@@ -98,17 +100,17 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   square: {
-    width: '100%',
-    maxWidth: 72,
-    aspectRatio: 1,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
+    width: 56,
+    height: 56,
+    borderRadius: Radius.pill,
+    backgroundColor: Brand.actionGround,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Brand.navy,
+    borderColor: 'transparent',
   },
   squareSelected: {
+    backgroundColor: Brand.actionGroundSelected,
     borderColor: Brand.onRoyal,
   },
   label: {
