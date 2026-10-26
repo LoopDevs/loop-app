@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -35,7 +36,6 @@ const cardHeight = 230;
 const suggestionLimit = 6;
 const suggestionScanSize = 20;
 const suggestionDelayMs = 120;
-const blurGraceMs = 200;
 
 export type Catalog = {
   top: Merchant[];
@@ -251,33 +251,9 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [highlight, setHighlight] = useState(-1);
-  const blurTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const holdingSuggestion = useRef(false);
   const query = value.trim();
   const suggestions = useMemo(() => Merchant.matching(found, query, suggestionLimit), [found, query]);
   const open = focused && !dismissed && suggestions.length > 0;
-
-  useEffect(() => () => clearTimeout(blurTimer.current), []);
-
-  const changeFocus = (next: boolean) => {
-    clearTimeout(blurTimer.current);
-    if (next) {
-      setFocused(true);
-      return;
-    }
-    blurTimer.current = setTimeout(() => {
-      if (!holdingSuggestion.current) {
-        setFocused(false);
-      }
-    }, blurGraceMs);
-  };
-
-  const holdSuggestion = (holding: boolean) => {
-    holdingSuggestion.current = holding;
-    if (holding) {
-      clearTimeout(blurTimer.current);
-    }
-  };
 
   const change = (text: string) => {
     setHighlight(-1);
@@ -326,7 +302,7 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
         onChangeText={change}
         onSubmit={submit}
         onKeyPress={moveHighlight}
-        onFocusChange={changeFocus}
+        onFocusChange={setFocused}
         expanded={open}
         large={large}
       />
@@ -336,7 +312,6 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
           highlight={highlight}
           onHighlight={setHighlight}
           onPick={pick}
-          onHold={holdSuggestion}
         />
       )}
     </View>
@@ -372,10 +347,9 @@ type SuggestionsProps = {
   highlight: number;
   onHighlight: (index: number) => void;
   onPick: (merchant: Merchant) => void;
-  onHold: (holding: boolean) => void;
 };
 
-function SearchSuggestions({ merchants, highlight, onHighlight, onPick, onHold }: SuggestionsProps) {
+function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: SuggestionsProps) {
   const theme = useTheme();
   return (
     <Animated.View
@@ -384,9 +358,8 @@ function SearchSuggestions({ merchants, highlight, onHighlight, onPick, onHold }
       {merchants.map((merchant, index) => (
         <Pressable
           key={merchant.id}
-          onPressIn={() => onHold(true)}
-          onPressOut={() => onHold(false)}
-          onPress={() => onPick(merchant)}
+          {...(Platform.OS === 'web' ? { onPressIn: () => onPick(merchant) } : { onPress: () => onPick(merchant) })}
+          delayPressIn={0}
           onHoverIn={() => onHighlight(index)}
           accessibilityRole="button"
           accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
