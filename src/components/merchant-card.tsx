@@ -97,7 +97,7 @@ export function MerchantCover({ merchant, size }: CoverProps) {
         {merchant.logoUrl ? (
           <Image
             source={{ uri: merchant.logoUrl }}
-            contentFit="contain"
+            contentFit="cover"
             transition={Motion.state}
             style={styles.badgeImage}
             accessible={false}
@@ -376,8 +376,8 @@ const styles = StyleSheet.create({
     ...Elevation.badge,
   },
   badgeImage: {
-    width: '72%',
-    height: '72%',
+    width: '100%',
+    height: '100%',
   },
   badgeInitial: {
     position: 'absolute',

@@ -366,7 +366,9 @@ function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: Sugges
       {merchants.map((merchant, index) => (
         <Pressable
           key={merchant.id}
-          {...(Platform.OS === 'web' ? { onPressIn: () => onPick(merchant) } : { onPress: () => onPick(merchant) })}
+          {...(Platform.OS === 'web'
+            ? { onPressIn: () => onPick(merchant), delayPressIn: 0 }
+            : { onPress: () => onPick(merchant) })}
           onHoverIn={() => onHighlight(index)}
           accessibilityRole="button"
           accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
