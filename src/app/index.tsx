@@ -1,44 +1,31 @@
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Field } from '@/components/form';
-import { GiftCardPurchase } from '@/components/gift-card-purchase';
 import { BalanceSkeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
+import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { money } from '@/money';
-import { haptics } from '@/native/haptics';
 import { network } from '@/stellar/network';
 import { type Balances, SmartWallet } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'email' | 'code' | 'no-wallet' | 'wallet';
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [screen, setScreen] = useState<Screen>('loading');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const [balances, setBalances] = useState<Balances | null>(null);
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { busy, message, setMessage, run } = useBusyAction();
   const [refreshing, setRefreshing] = useState(false);
-
-  const run = useCallback(async (action: () => Promise<void>) => {
-    setBusy(true);
-    setMessage('');
-    try {
-      await action();
-    } catch (error) {
-      haptics.error();
-      setMessage(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }, []);
 
   const showWallet = useCallback(async (loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -55,7 +42,7 @@ export default function HomeScreen() {
       .isSignedIn()
       .then((signedIn) => (signedIn ? loadWallet() : setScreen('email')))
       .catch((error) => setMessage(errorMessage(error)));
-  }, [loadWallet]);
+  }, [loadWallet, setMessage]);
 
   const requestCode = () =>
     run(async () => {
@@ -83,8 +70,13 @@ export default function HomeScreen() {
     } catch (error) {
       setMessage(errorMessage(error));
     }
-  }, [wallet]);
+  }, [wallet, setMessage]);
 
+  useFocusEffect(
+    useCallback(() => {
+      refreshBalances();
+    }, [refreshBalances]),
+  );
   useAppRefresh(refreshBalances);
 
   const pullToRefresh = async () => {
@@ -188,7 +180,7 @@ export default function HomeScreen() {
                 onPress={withdraw}
                 disabled={busy || !balances || balances.vaultShares === 0n}
               />
-              <GiftCardPurchase wallet={wallet} busy={busy} run={run} onPaid={refreshBalances} />
+              <Button label="Shop gift cards" onPress={() => router.navigate('/shop')} />
             </>
           )}
 
@@ -205,10 +197,6 @@ export default function HomeScreen() {
       </SafeAreaView>
     </ThemedView>
   );
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 const styles = StyleSheet.create({

@@ -47,13 +47,32 @@ export type MerchantLinkJson = {
 
 export type MerchantJson = {
   id: string;
+  slug: string;
   name: string;
+  country: string;
   currency: string;
   denominationType: 'min-max' | 'min-max-major' | 'fixed';
   denominations: string[];
   logoUrl?: string;
+  cardImageUrl?: string;
+  website?: string;
+  info?: GiftCardInfo;
   userDiscount: number;
   link?: MerchantLinkJson;
+};
+
+export type MerchantQuery = {
+  country: string;
+  name?: string;
+  ids?: string[];
+  order?: 'name' | '-discount';
+  page?: number;
+  perPage?: number;
+};
+
+export type MerchantPage = {
+  result: Merchant[];
+  pagination: Pagination;
 };
 
 export type GiftCardOrderIn = {
@@ -114,6 +133,7 @@ export type GiftCardPage = {
 };
 
 export type GiftCardQuery = {
+  merchantId?: string;
   status?: GiftCard['status'][];
   notStatus?: GiftCard['status'][];
   order?: string;
@@ -196,6 +216,10 @@ class CtxClient {
     await tokenStore.clear();
   }
 
+  async userId(): Promise<string> {
+    return this.userIdFrom(await this.requireAccessToken());
+  }
+
   async me(): Promise<Profile> {
     return Profile.fromMe(await this.sessionRequest<MeJson>('GET', '/me'));
   }
@@ -204,13 +228,31 @@ class CtxClient {
     return this.userRequest('PUT', '', update);
   }
 
-  async merchants(name: string, country: string): Promise<Merchant[]> {
-    const query = new URLSearchParams({ enabled: '1', perPage: '20', order: 'name', country });
-    if (name.trim()) {
-      query.set('name', name.trim());
+  async merchants({ country, name, ids, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
+    const query = new URLSearchParams({ enabled: '1', order, country });
+    const pattern = Merchant.searchPattern(name ?? '');
+    if (pattern) {
+      query.set('name', pattern);
     }
-    const { result } = await this.sessionRequest<{ result: MerchantJson[] }>('GET', `/merchants?${query}`);
-    return result.map((json) => new Merchant(json));
+    if (ids) {
+      query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
+    }
+    if (page) {
+      query.set('page', String(page));
+    }
+    if (perPage) {
+      query.set('perPage', String(perPage));
+    }
+    const { result, pagination } = await this.sessionRequest<{
+      result: MerchantJson[] | null;
+      pagination: Pagination;
+    }>('GET', `/merchants?${query}`);
+    return { result: (result ?? []).map((json) => new Merchant(json)), pagination };
+  }
+
+  async merchant(idOrSlug: string): Promise<Merchant> {
+    const json = await this.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
+    return new Merchant(json);
   }
 
   orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
@@ -222,8 +264,11 @@ class CtxClient {
     return this.sessionRequest('GET', `/gift-cards/${id}`);
   }
 
-  async giftCards({ status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
+  async giftCards({ merchantId, status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
     const query = new URLSearchParams();
+    if (merchantId) {
+      query.set('merchantId', Merchant.searchPattern(merchantId));
+    }
     if (status) {
       query.set('status', status.join(','));
     }
@@ -246,8 +291,8 @@ class CtxClient {
     return { result: result ?? [], pagination };
   }
 
-  async activeGiftCard(): Promise<GiftCard | null> {
-    const { result } = await this.giftCards({ status: ['unpaid', 'paid'], perPage: 5 });
+  async activeGiftCard(merchantId?: string): Promise<GiftCard | null> {
+    const { result } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], perPage: 5 });
     const newest = result[0];
     return newest ? this.giftCard(newest.id) : null;
   }
