@@ -1,8 +1,6 @@
 import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 
-const pricePattern = /^(\d+)(?:\.(\d+))?$/;
-
 export class Rates {
   static readonly source = 'https://rates.ctx.com/rates';
   static readonly usd = 'USD';
@@ -17,7 +15,7 @@ export class Rates {
   static fromPrices(prices: Record<string, string | null>): Rates {
     const parsed = new Map<string, bigint>();
     for (const [currency, price] of Object.entries(prices)) {
-      const value = price === null ? null : Rates.parsePrice(price);
+      const value = price === null ? null : units.parseTruncated(price);
       if (value !== null && value > 0n) {
         parsed.set(currency, value);
       }
@@ -40,15 +38,6 @@ export class Rates {
 
   private static isUsdPegged(currency: string): boolean {
     return currency === Rates.usd || (Object.hasOwn(stablePeg, currency) && stablePeg[currency as PaymentCurrency] === Rates.usd);
-  }
-
-  private static parsePrice(price: string): bigint | null {
-    const match = pricePattern.exec(price.trim());
-    if (!match) {
-      return null;
-    }
-    const [, whole, fraction = ''] = match;
-    return units.parse(fraction ? `${whole}.${fraction.slice(0, units.decimals)}` : whole);
   }
 
   private static async fetchUsdPrice(currency: PaymentCurrency): Promise<string | null> {

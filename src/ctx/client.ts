@@ -162,6 +162,7 @@ export type UserUpdate = { country: string } | { stableCurrency: string };
 export type BalanceJson = {
   currency: string;
   amount: string;
+  estimates?: Record<string, string>;
 };
 
 type AccountJson = {

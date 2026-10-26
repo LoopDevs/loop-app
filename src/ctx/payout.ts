@@ -3,6 +3,8 @@ export type PayoutJson = {
   status: string;
   currency: string;
   amount: string;
+  address?: string;
+  sentAmount?: string;
   kind?: string;
   reservationTransferId?: string;
   reversalTransferId?: string;
@@ -15,6 +17,8 @@ export class Payout {
   readonly status: string;
   readonly currency: string;
   readonly amount: string;
+  readonly address?: string;
+  readonly sentAmount?: string;
   readonly kind?: string;
   readonly reservationTransferId?: string;
   readonly reversalTransferId?: string;
@@ -24,6 +28,8 @@ export class Payout {
     this.status = json.status;
     this.currency = json.currency;
     this.amount = json.amount;
+    this.address = json.address;
+    this.sentAmount = json.sentAmount;
     this.kind = json.kind;
     this.reservationTransferId = json.reservationTransferId;
     this.reversalTransferId = json.reversalTransferId;

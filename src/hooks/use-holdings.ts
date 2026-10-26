@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { ctx } from '@/ctx/client';
 import { Rates } from '@/ctx/rates';
@@ -15,8 +15,10 @@ export type HoldingsView = {
 
 export function useHoldings(wallet: SmartWallet | null) {
   const [view, setView] = useState<HoldingsView | null>(null);
+  const latestRequest = useRef(0);
 
   const refresh = useCallback(async () => {
+    const request = ++latestRequest.current;
     if (!wallet) {
       setView(null);
       return;
@@ -25,11 +27,14 @@ export function useHoldings(wallet: SmartWallet | null) {
       wallet.balances(),
       ctx
         .account()
-        .then(Holdings.onTheWayFrom)
+        .then((json) => Holdings.onTheWayFrom(json, wallet.address))
         .catch((error: unknown) => new Error(errorMessage(error))),
       ctx.me().catch((error: unknown) => new Error(errorMessage(error))),
       Rates.fetch(network.tokens.map((token) => token.currency)),
     ]);
+    if (request !== latestRequest.current) {
+      return;
+    }
     const failure = [account, profile].find((result) => result instanceof Error);
     setView({
       holdings: new Holdings(balances, account instanceof Error ? null : account, rates),

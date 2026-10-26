@@ -8,7 +8,7 @@ import { useToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
-import { currencyRefusalMessage } from '@/ctx/currency-refusal';
+import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal';
 import {
   giftCardStatusLabel,
   historyHiddenStatuses,
@@ -31,7 +31,7 @@ import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
-import { Holdings } from '@/wallet/holdings';
+import type { Holdings } from '@/wallet/holdings';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
 type Props = {
@@ -56,10 +56,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const currencies = network.tokens.map((token) => token.currency);
   const stable = view?.stable ?? Rates.usd;
   const currency =
-    chosenCurrency ??
-    (view
-      ? view.holdings.preferredCurrency(currencies, stable, refusedCurrencies)
-      : Holdings.fallbackCurrency(currencies, stable, refusedCurrencies));
+    chosenCurrency ?? view?.holdings.preferredCurrency(currencies, stable, refusedCurrencies) ?? null;
 
   const following = useRef(0);
   const paying = useRef(false);
@@ -143,13 +140,17 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const createOrder = () =>
     run(async () => {
+      const payWith = currency;
+      if (!payWith) {
+        return;
+      }
       try {
         showNewOrder(
           await ctx.orderGiftCard({
             merchantId: merchant.id,
             fiatAmount: amount.trim(),
             fiatCurrency: merchant.currency,
-            cryptoCurrency: currency,
+            cryptoCurrency: payWith,
           }),
         );
       } catch (error) {
@@ -161,12 +162,14 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           setAmountError(amountMessage);
           return;
         }
-        const refusal = currencyRefusalMessage(error.errorName(), tokenSymbol(currency));
+        const refusal = currencyRefusalMessage(error.errorName(), tokenSymbol(payWith));
         if (!refusal) {
           throw error;
         }
-        setRefusedCurrencies((refused) => new Set([...refused, currency]));
-        setChosenCurrency(null);
+        if (refusesCurrency(error.errorName())) {
+          setRefusedCurrencies((refused) => new Set([...refused, payWith]));
+          setChosenCurrency(null);
+        }
         setMessage(refusal);
       }
     });
@@ -320,7 +323,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           />
         ))}
       </View>
-      <Button label="Get price" onPress={createOrder} disabled={busy || !amount.trim()} />
+      <Button label="Get price" onPress={createOrder} disabled={busy || !amount.trim() || !currency} />
       {errorText}
     </View>
   );

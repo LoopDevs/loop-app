@@ -1,12 +1,13 @@
 import type { Account } from '../ctx/client.ts';
 import type { Rates } from '../ctx/rates.ts';
-import type { PaymentCurrency } from '../stellar/network.ts';
+import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 import type { Balances } from './smart-wallet.ts';
 
 export type Holding = {
   currency: string;
   amount: bigint;
+  estimates?: Readonly<Record<string, string>>;
 };
 
 export class Holdings {
@@ -24,30 +25,31 @@ export class Holdings {
     this.rates = rates;
   }
 
-  static onTheWayFrom(account: Account): Holding[] {
-    const ledger = account.wallet.map(({ currency, amount }) => ({ currency, amount: units.parse(amount) }));
+  static onTheWayFrom(account: Account, address: string): Holding[] {
+    const ledger = account.wallet.flatMap(({ currency, amount, estimates }) =>
+      Holdings.holdingOf(currency, amount, estimates),
+    );
     const payouts = account.payouts
-      .filter((payout) => payout.isInFlight())
-      .map(({ currency, amount }) => ({ currency, amount: units.parse(amount) }));
-    return [...ledger, ...payouts].filter(({ amount }) => amount > 0n);
+      .filter((payout) => payout.isInFlight() && payout.address === address)
+      .flatMap(({ currency, amount, sentAmount }) => Holdings.holdingOf(currency, sentAmount ?? amount));
+    return [...ledger, ...payouts];
   }
 
   static floorOf(value: bigint): bigint {
     return (value * (10_000n - Holdings.withdrawSlippageBasisPoints)) / 10_000n;
   }
 
-  static fallbackCurrency(
-    currencies: readonly PaymentCurrency[],
-    stable: string,
-    refused: ReadonlySet<string>,
-  ): PaymentCurrency {
-    const open = currencies.filter((currency) => !refused.has(currency));
-    return (
-      open.find((currency) => currency === stable) ??
-      open.find((currency) => currency === Holdings.savingsCurrency) ??
-      open[0] ??
-      Holdings.savingsCurrency
-    );
+  static isPaymentCurrency(currency: string): boolean {
+    return Object.hasOwn(stablePeg, currency);
+  }
+
+  private static holdingOf(currency: string, amount: string, estimates?: Record<string, string>): Holding[] {
+    const parsed = units.parseTruncated(amount);
+    return parsed !== null && parsed > 0n ? [{ currency, amount: parsed, estimates }] : [];
+  }
+
+  private static shown(sum: bigint): bigint {
+    return sum - (sum % Holdings.shownUnit);
   }
 
   savings(): bigint {
@@ -72,14 +74,31 @@ export class Holdings {
   }
 
   spendableIn(stable: string): bigint | null {
-    return this.sumIn(
-      this.balances.tokens.map(({ token }) => ({ currency: token.currency, amount: this.spendable(token.currency) })),
-      stable,
-    );
+    let sum = 0n;
+    for (const { token } of this.balances.tokens) {
+      const value = this.valueIn(this.spendable(token.currency), token.currency, stable);
+      if (value === null) {
+        return null;
+      }
+      sum += value;
+    }
+    return Holdings.shown(sum);
   }
 
   onTheWayIn(stable: string): bigint | null {
-    return this.onTheWay ? this.sumIn(this.onTheWay, stable) : null;
+    if (!this.onTheWay) {
+      return null;
+    }
+    let sum = 0n;
+    for (const holding of this.onTheWay) {
+      const value = this.estimateIn(holding, stable);
+      if (value !== null) {
+        sum += value;
+      } else if (Holdings.isPaymentCurrency(holding.currency)) {
+        return null;
+      }
+    }
+    return Holdings.shown(sum);
   }
 
   totalIn(stable: string): bigint | null {
@@ -92,11 +111,11 @@ export class Holdings {
     currencies: readonly PaymentCurrency[],
     stable: string,
     refused: ReadonlySet<string>,
-  ): PaymentCurrency {
+  ): PaymentCurrency | null {
+    const funded = currencies.filter((currency) => !refused.has(currency) && this.spendable(currency) > 0n);
     let best: { currency: PaymentCurrency; value: bigint } | null = null;
-    for (const currency of currencies) {
-      const amount = this.spendable(currency);
-      const value = refused.has(currency) || amount === 0n ? null : this.valueIn(amount, currency, stable);
+    for (const currency of funded) {
+      const value = this.valueIn(this.spendable(currency), currency, stable);
       if (value === null) {
         continue;
       }
@@ -104,18 +123,21 @@ export class Holdings {
         best = { currency, value };
       }
     }
-    return best?.currency ?? Holdings.fallbackCurrency(currencies, stable, refused);
+    return (
+      best?.currency ??
+      funded.find((currency) => currency === stable) ??
+      funded.find((currency) => currency === Holdings.savingsCurrency) ??
+      funded[0] ??
+      null
+    );
   }
 
-  private sumIn(holdings: readonly Holding[], stable: string): bigint | null {
-    let sum = 0n;
-    for (const { currency, amount } of holdings) {
-      const value = this.valueIn(amount, currency, stable);
-      if (value === null) {
-        return null;
-      }
-      sum += value;
+  private estimateIn(holding: Holding, stable: string): bigint | null {
+    if (holding.currency === stable) {
+      return holding.amount;
     }
-    return sum - (sum % Holdings.shownUnit);
+    const estimate = holding.estimates?.[stable];
+    const parsed = estimate === undefined ? null : units.parseTruncated(estimate);
+    return parsed ?? this.valueIn(holding.amount, holding.currency, stable);
   }
 }

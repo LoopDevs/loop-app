@@ -7,7 +7,9 @@ import type { PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 import { Holdings, type Holding } from './holdings.ts';
 
-const currencies: PaymentCurrency[] = ['XLM', 'XLM.USDC', 'XLM.EURC', 'XLM.GBPLOOP'];
+const walletAddress = 'CWALLET';
+
+const currencies: PaymentCurrency[] =['XLM', 'XLM.USDC', 'XLM.EURC', 'XLM.GBPLOOP'];
 
 const marketRates = Rates.fromPrices({
   XLM: '0.16870',
@@ -37,6 +39,7 @@ function payout(overrides: Partial<PayoutJson>): Payout {
     status: 'pending',
     currency: 'XLM.GBPLOOP',
     amount: '1',
+    address: walletAddress,
     reservationTransferId: 't1',
     ...overrides,
   });
@@ -121,32 +124,88 @@ test('a token with no rate hides the converted spendable figure', () => {
   assert.equal(held.totalIn('USD'), null);
 });
 
-test('on the way lists ledger balances and in-flight payouts only', () => {
-  const onTheWay = Holdings.onTheWayFrom({
-    wallet: [
-      { currency: 'XLM.GBPLOOP', amount: '2.50' },
-      { currency: 'XLM.EURC', amount: '0' },
-    ],
-    payouts: [
-      payout({ amount: '1.25' }),
-      payout({ status: 'complete', amount: '9' }),
-      payout({ reservationTransferId: undefined, amount: '9' }),
-      payout({ reversalTransferId: 'r1', amount: '9' }),
-    ],
-  });
+test('on the way lists ledger balances and in-flight payouts to this wallet only', () => {
+  const onTheWay = Holdings.onTheWayFrom(
+    {
+      wallet: [
+        { currency: 'XLM.GBPLOOP', amount: '2.50', estimates: { USD: '3.3' } },
+        { currency: 'XLM.EURC', amount: '0' },
+      ],
+      payouts: [
+        payout({ amount: '1.25' }),
+        payout({ address: 'GELSEWHERE', amount: '9' }),
+        payout({ address: undefined, amount: '9' }),
+        payout({ status: 'complete', amount: '9' }),
+        payout({ reservationTransferId: undefined, amount: '9' }),
+        payout({ reversalTransferId: 'r1', amount: '9' }),
+      ],
+    },
+    walletAddress,
+  );
   assert.deepEqual(onTheWay, [
-    { currency: 'XLM.GBPLOOP', amount: units.parse('2.5') },
-    { currency: 'XLM.GBPLOOP', amount: units.parse('1.25') },
+    { currency: 'XLM.GBPLOOP', amount: units.parse('2.5'), estimates: { USD: '3.3' } },
+    { currency: 'XLM.GBPLOOP', amount: units.parse('1.25'), estimates: undefined },
   ]);
 });
 
-test('a submitted payout already on chain is counted twice until CTX completes it', () => {
-  const account = { wallet: [], payouts: [payout({ status: 'submitted', currency: 'XLM.USDC', amount: '4' })] };
-  const landed = holdings({ 'XLM.USDC': '4' }, { onTheWay: Holdings.onTheWayFrom(account) });
-  assert.equal(landed.totalIn('USD'), units.parse('8'));
-  const completed = { wallet: [], payouts: [payout({ status: 'complete', currency: 'XLM.USDC', amount: '4' })] };
-  const settled = holdings({ 'XLM.USDC': '4' }, { onTheWay: Holdings.onTheWayFrom(completed) });
-  assert.equal(settled.totalIn('USD'), units.parse('4'));
+test('a payout counts what CTX sends after the network fee', () => {
+  const account = { wallet: [], payouts: [payout({ currency: 'XLM.USDC', amount: '4', sentAmount: '3.99' })] };
+  const held = holdings({}, { onTheWay: Holdings.onTheWayFrom(account, walletAddress) });
+  assert.equal(held.onTheWayIn('USD'), units.parse('3.99'));
+});
+
+test('a payout to another address adds nothing to the total', () => {
+  const account = { wallet: [], payouts: [payout({ address: 'GELSEWHERE', currency: 'XLM.USDC', amount: '4' })] };
+  const held = holdings({ 'XLM.USDC': '4' }, { onTheWay: Holdings.onTheWayFrom(account, walletAddress) });
+  assert.equal(held.totalIn('USD'), units.parse('4'));
+});
+
+test('a ledger balance that does not parse is skipped and the rest still count', () => {
+  const account = {
+    wallet: [
+      { currency: 'XLM.USDC', amount: '-1' },
+      { currency: 'XLM.USDC', amount: 'abc' },
+      { currency: 'XLM.USDC', amount: '1.123456789' },
+    ],
+    payouts: [],
+  };
+  assert.deepEqual(Holdings.onTheWayFrom(account, walletAddress), [
+    { currency: 'XLM.USDC', amount: units.parse('1.1234567'), estimates: undefined },
+  ]);
+});
+
+test('on the way uses the CTX estimate in the stable before market rates', () => {
+  const held = holdings(
+    {},
+    {
+      rates: Rates.fromPrices({}),
+      onTheWay: [{ currency: 'XLM', amount: units.parse('10'), estimates: { 'XLM.GBPLOOP': '1.259876543' } }],
+    },
+  );
+  assert.equal(held.onTheWayIn('XLM.GBPLOOP'), units.parse('1.25'));
+});
+
+test('an unreadable estimate falls back to market rates', () => {
+  const held = holdings(
+    {},
+    { onTheWay: [{ currency: 'XLM.EURC', amount: units.parse('10'), estimates: { USD: 'n/a' } }] },
+  );
+  assert.equal(held.onTheWayIn('USD'), units.parse('11.21'));
+});
+
+test('an unknown currency with no estimate is skipped, an unpriced known one hides the figure', () => {
+  const unknown = holdings(
+    {},
+    {
+      onTheWay: [
+        { currency: 'BTC', amount: units.parse('1') },
+        { currency: 'XLM.USDC', amount: units.parse('2') },
+      ],
+    },
+  );
+  assert.equal(unknown.onTheWayIn('USD'), units.parse('2'));
+  const unpriced = holdings({}, { rates: Rates.fromPrices({}), onTheWay: [{ currency: 'XLM', amount: units.parse('1') }] });
+  assert.equal(unpriced.onTheWayIn('USD'), null);
 });
 
 test('the preferred currency has the largest spendable value', () => {
@@ -166,10 +225,21 @@ test('a refused currency is skipped and the next candidate is preferred', () => 
   assert.equal(held.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set(['XLM.EURC', 'XLM'])), 'XLM.GBPLOOP');
 });
 
-test('with no priced candidate the stable is preferred, else USDC', () => {
-  const unpriced = holdings({ XLM: '100' }, { rates: Rates.fromPrices({}) });
-  assert.equal(unpriced.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set()), 'XLM.GBPLOOP');
-  assert.equal(unpriced.preferredCurrency(currencies, 'USD', new Set()), 'XLM.USDC');
-  assert.equal(unpriced.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set(['XLM.GBPLOOP'])), 'XLM.USDC');
-  assert.equal(Holdings.fallbackCurrency(['XLM', 'XLM.EURC'], 'USD', new Set()), 'XLM');
+test('with no priced candidate a funded currency is preferred, the stable first, then USDC', () => {
+  const unpriced = holdings({ XLM: '100', 'XLM.USDC': '5', 'XLM.GBPLOOP': '1' }, { rates: Rates.fromPrices({}) });
+  assert.equal(unpriced.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set(['XLM.USDC'])), 'XLM.GBPLOOP');
+  assert.equal(unpriced.preferredCurrency(currencies, 'XLM.EURC', new Set()), 'XLM.USDC');
+  assert.equal(unpriced.preferredCurrency(currencies, 'XLM.EURC', new Set(['XLM.USDC', 'XLM.GBPLOOP'])), 'XLM');
+});
+
+test('an unfunded stable is never preferred over a funded currency', () => {
+  const held = holdings({ 'XLM.USDC': '5' }, { rates: Rates.fromPrices({}) });
+  assert.equal(held.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set()), 'XLM.USDC');
+});
+
+test('nothing is preferred when no funded currency is accepted', () => {
+  const onlyXlm = holdings({ XLM: '100' });
+  assert.equal(onlyXlm.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set(['XLM'])), null);
+  assert.equal(holdings({}).preferredCurrency(currencies, 'USD', new Set()), null);
+  assert.equal(holdings({ 'XLM.USDC': '1' }).preferredCurrency(currencies, 'USD', new Set(currencies)), null);
 });

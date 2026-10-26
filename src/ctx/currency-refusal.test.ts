@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { currencyRefusalMessage } from './currency-refusal.ts';
+import { currencyRefusalMessage, refusesCurrency } from './currency-refusal.ts';
 
 test('a cashback refusal names the currency', () => {
   assert.equal(
@@ -17,4 +17,10 @@ test('a missing rate names the currency', () => {
 test('other errors are not currency refusals', () => {
   assert.equal(currencyRefusalMessage('ErrAmountBelowMinimum', 'USDC'), null);
   assert.equal(currencyRefusalMessage(undefined, 'USDC'), null);
+});
+
+test('only a cashback refusal rules the currency out', () => {
+  assert.equal(refusesCurrency('ErrCashbackNotStable'), true);
+  assert.equal(refusesCurrency('ErrRateUnavailable'), false);
+  assert.equal(refusesCurrency(undefined), false);
 });

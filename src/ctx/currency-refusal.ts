@@ -1,3 +1,7 @@
+export function refusesCurrency(errorName: string | undefined): boolean {
+  return errorName === 'ErrCashbackNotStable';
+}
+
 export function currencyRefusalMessage(errorName: string | undefined, symbol: string): string | null {
   switch (errorName) {
     case 'ErrCashbackNotStable':

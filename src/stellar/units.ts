@@ -14,6 +14,15 @@ export const units = {
     return BigInt(whole) * scale + BigInt(fraction.padEnd(decimals, '0'));
   },
 
+  parseTruncated(amount: string): bigint | null {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(amount.trim());
+    if (!match) {
+      return null;
+    }
+    const [, whole, fraction = ''] = match;
+    return BigInt(whole) * scale + BigInt(fraction.slice(0, decimals).padEnd(decimals, '0'));
+  },
+
   format(amount: bigint, shownDecimals = 2): string {
     const fraction = (amount % scale).toString().padStart(decimals, '0').slice(0, shownDecimals);
     return `${amount / scale}.${fraction}`;
