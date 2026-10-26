@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.loopfinance.app",
+      "sha256_cert_fingerprints": [
+        "44:D5:3A:68:AD:68:1E:27:B0:67:CA:7F:25:E5:78:69:E8:DE:71:53:D4:7F:21:EC:F8:3C:21:A6:3A:7E:9F:06"
+      ]
+    }
+  }
+]
