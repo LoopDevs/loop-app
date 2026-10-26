@@ -270,7 +270,7 @@ export default function ShopScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.FlatList
         ref={scrollRef}
         data={merchants}
@@ -392,7 +392,7 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -421,7 +421,7 @@ function SimplePage({ title, children }: { title: string; children: React.ReactN
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}

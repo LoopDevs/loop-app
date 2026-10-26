@@ -82,7 +82,7 @@ export default function MerchantScreen() {
   if (!merchant) {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="auto" />
+        <StatusBar style="dark" />
         <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scroll}>
           <MerchantLayout
             wide={wide}
@@ -126,7 +126,7 @@ export default function MerchantScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Stack.Screen options={{ title: merchant.name }} />
       <Animated.ScrollView
         onScroll={onScroll}

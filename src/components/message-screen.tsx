@@ -18,7 +18,7 @@ export function MessageScreen({ title, detail, message, children }: MessageScree
   const theme = useTheme();
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content} accessibilityLiveRegion="polite">
           <Wordmark height={28} />

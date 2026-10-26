@@ -4,6 +4,7 @@ import { ErrorBoundary } from '@sentry/react-native';
 import { useFonts } from 'expo-font';
 import { DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { AppLockProvider } from '@/components/app-lock';
@@ -43,6 +44,7 @@ export default function TabLayout() {
   }
   return (
     <ThemeProvider value={DefaultTheme}>
+      <StatusBar style="dark" />
       <ErrorBoundary fallback={({ resetError }) => <CrashFallback onRetry={resetError} />}>
         <AppLockProvider>
           <ToastProvider>
