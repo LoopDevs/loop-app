@@ -40,7 +40,7 @@ export function Skeleton({ width, height }: { width: DimensionValue; height: num
 
 export function BalanceSkeleton() {
   return (
-    <View style={styles.stack} accessibilityLabel="Loading balances">
+    <View style={styles.stack} accessible accessibilityLabel="Loading balances">
       <Skeleton width="40%" height={14} />
       <Skeleton width="70%" height={20} />
       <Skeleton width="60%" height={20} />
@@ -51,7 +51,7 @@ export function BalanceSkeleton() {
 
 export function OrderRowsSkeleton() {
   return (
-    <View style={styles.stack} accessibilityLabel="Loading orders">
+    <View style={styles.stack} accessible accessibilityLabel="Loading orders">
       {Array.from({ length: orderRowCount }, (_, index) => (
         <Skeleton key={index} width="100%" height={64} />
       ))}
@@ -61,7 +61,7 @@ export function OrderRowsSkeleton() {
 
 export function OrderDetailSkeleton() {
   return (
-    <View style={styles.stack} accessibilityLabel="Loading order">
+    <View style={styles.stack} accessible accessibilityLabel="Loading order">
       <Skeleton width="60%" height={20} />
       <Skeleton width="35%" height={16} />
       <Skeleton width="50%" height={16} />

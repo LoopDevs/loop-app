@@ -10,8 +10,11 @@ test('a cashback refusal names the currency', () => {
   );
 });
 
-test('a missing rate names the currency', () => {
-  assert.equal(currencyRefusalMessage('ErrRateUnavailable', 'EURC'), "Can't price this card in EURC");
+test('an unavailable rate reads as temporary and names the currency', () => {
+  assert.equal(
+    currencyRefusalMessage('ErrRateUnavailable', 'EURC'),
+    'Pricing in EURC is unavailable right now. Try again shortly.',
+  );
 });
 
 test('other errors are not currency refusals', () => {

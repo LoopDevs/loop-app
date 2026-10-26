@@ -16,6 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { Account, OnTheWayItem } from '@/ctx/account';
 import { ctx, type CashbackDestination } from '@/ctx/client';
+import { Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useProfile } from '@/hooks/use-profile';
@@ -31,7 +32,7 @@ const destinationCopy: Record<CashbackDestination, { label: string; detail: stri
   },
 };
 
-const savingsNote = `Loop savings holds ${Savings.currency}. Cashback in another currency stays with Loop; switch to Account to have it paid to your wallet.`;
+const savingsNote = `Loop savings holds ${Profile.currencyLabel(Savings.currency)}. Cashback in another currency stays with Loop; switch to Account to have it paid to your wallet.`;
 
 export default function CashbackScreen() {
   const router = useRouter();

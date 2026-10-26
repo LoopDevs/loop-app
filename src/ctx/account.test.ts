@@ -40,11 +40,34 @@ test('zero balances are not listed', () => {
   assert.deepEqual(labels(json, nonSaver), []);
 });
 
+test('balances that display as zero are not listed', () => {
+  const json = {
+    wallet: [
+      { currency: 'XLM', amount: '0.0040000' },
+      { currency: 'XLM.USDC', amount: '0.0099999' },
+      { currency: 'XLM.USDC', amount: '0.0100000' },
+    ],
+    payouts: [],
+  };
+  assert.deepEqual(labels(json, nonSaver), ['XLM.USDC waiting for payout']);
+});
+
 test('an XLM balance waits to convert whatever the destination', () => {
   const json = { wallet: [{ currency: 'XLM', amount: '3' }], payouts: [] };
   for (const routing of [saver, nonSaver]) {
-    assert.deepEqual(labels(json, routing), ['XLM converts to XLM.USDC when a conversion is available']);
+    assert.deepEqual(labels(json, routing), ['XLM converts to USDC when a conversion is available']);
   }
+});
+
+test('a reversed or unreserved failed payout leaves the balance label normal', () => {
+  const json = {
+    wallet: [{ currency: 'XLM.USDC', amount: '1' }],
+    payouts: [
+      payout({ status: 'failed', reversalTransferId: 't2' }),
+      payout({ id: 'p2', status: 'failed', reservationTransferId: undefined }),
+    ],
+  };
+  assert.deepEqual(labels(json, nonSaver), ['XLM.USDC waiting for payout']);
 });
 
 test("a saver's balance goes to savings when savings takes it and is held otherwise", () => {
@@ -59,7 +82,7 @@ test("a saver's balance goes to savings when savings takes it and is held otherw
     items.map((item) => [item.label, item.heldBySavings]),
     [
       ['goes to savings when savings is available', false],
-      ['held: Loop savings holds XLM.USDC, switch to Account to receive it', true],
+      ['held: Loop savings holds USDC, switch to Account to receive it', true],
     ],
   );
 });
