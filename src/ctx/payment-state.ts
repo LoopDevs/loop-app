@@ -1,5 +1,6 @@
 export type PaymentState =
   | { kind: 'ready' }
+  | { kind: 'movingSavings' }
   | { kind: 'sending' }
   | { kind: 'confirming'; txId?: string }
   | { kind: 'failed' }

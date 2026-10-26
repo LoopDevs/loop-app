@@ -9,6 +9,7 @@ import { base64 } from '@/wallet/base64';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
+import { SavingsTopUp } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 
 export type TokenBalance = {
@@ -133,6 +134,17 @@ export class SmartWallet {
     const call = SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId]);
     await this.requireWithdraw(call, shares);
     return this.signAndSponsor(intent, built.transaction, call);
+  }
+
+  savingsTopUp(): SavingsTopUp {
+    return new SavingsTopUp({
+      balances: () => this.balances(),
+      valueOf: (shares) => this.valueOf(shares),
+      withdraw: (shares) => this.withdraw(shares),
+      transactionStatus: (hash) => soroban.transactionStatus(hash),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      now: () => Date.now(),
+    });
   }
 
   private async signAndSponsor(
