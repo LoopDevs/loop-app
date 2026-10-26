@@ -10,7 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
-import { Merchant } from '@/ctx/merchant';
+import { Merchant, type MerchantCategory } from '@/ctx/merchant';
 import { type CountryChoice, Profile } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
@@ -58,6 +58,7 @@ export default function ShopScreen() {
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<MerchantCategory | null>(null);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
@@ -118,6 +119,7 @@ export default function ShopScreen() {
           name: query,
           page: next,
           perPage: merchantsPerPage,
+          category: category?.value,
         });
         if (request !== latestRequest.current) {
           return;
@@ -126,7 +128,7 @@ export default function ShopScreen() {
         setPage(next);
         setPages(pagination.pages);
       }),
-    [runListing, country, query],
+    [runListing, country, query, category],
   );
 
   useEffect(() => {
@@ -265,7 +267,23 @@ export default function ShopScreen() {
               placeholder="Search gift cards"
               returnKeyType="search"
             />
-            {query === '' && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.chips}>
+              <Button label="All" selected={category === null} onPress={() => setCategory(null)} />
+              {Merchant.categories.map((choice) => (
+                <Button
+                  key={choice.value}
+                  label={choice.label}
+                  selected={category?.value === choice.value}
+                  onPress={() => setCategory(choice)}
+                />
+              ))}
+            </ScrollView>
+            {query === '' && category && <ThemedText type="smallBold">{`${category.label} gift cards`}</ThemedText>}
+            {query === '' && !category && (
               <>
                 <MerchantStrip title="Favourites" merchants={shownFavourites} onOpen={openMerchant} />
                 <MerchantStrip title="Bought recently" merchants={recentlyBought} onOpen={openMerchant} />
@@ -278,9 +296,14 @@ export default function ShopScreen() {
         ListEmptyComponent={
           busy ? (
             <OrderRowsSkeleton />
-          ) : listing.message === '' ? (
+          ) : listing.message !== '' ? undefined : category ? (
+            <>
+              <ThemedText type="small">{`No ${category.label} gift cards here yet`}</ThemedText>
+              <Button label="See all" onPress={() => setCategory(null)} />
+            </>
+          ) : (
             <ThemedText type="small">No gift cards found.</ThemedText>
-          ) : undefined
+          )
         }
         ListFooterComponent={
           <>
@@ -318,6 +341,9 @@ const styles = StyleSheet.create({
   header: {
     gap: Spacing.two,
     marginBottom: Spacing.two,
+  },
+  chips: {
+    gap: Spacing.two,
   },
   columns: {
     gap: Spacing.two,

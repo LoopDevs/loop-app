@@ -1,11 +1,28 @@
 import { money } from '../money.ts';
 import { units } from '../stellar/units.ts';
-import type { GiftCard, GiftCardInfo, MerchantJson, MerchantLinkJson } from './client.ts';
+import type { GiftCard, GiftCardInfo, MerchantJson, MerchantLinkJson, MerchantQuery } from './client.ts';
 
 const basisPointsPerWhole = 10_000n;
 const hueCount = 360;
 
+export type MerchantCategory = {
+  value: string;
+  label: string;
+};
+
 export class Merchant {
+  static readonly categories: readonly MerchantCategory[] = [
+    { value: 'food', label: 'Food' },
+    { value: 'fashion', label: 'Fashion' },
+    { value: 'entertainment', label: 'Entertainment' },
+    { value: 'home', label: 'Home' },
+    { value: 'travel', label: 'Travel' },
+    { value: 'groceries', label: 'Groceries' },
+    { value: 'beauty', label: 'Beauty' },
+    { value: 'electronics', label: 'Electronics' },
+    { value: 'sports', label: 'Sports' },
+  ];
+
   readonly id: string;
   readonly slug: string;
   readonly name: string;
@@ -38,6 +55,27 @@ export class Merchant {
 
   static searchPattern(name: string): string {
     return name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  static listQuery({ country, name, ids, order = 'name', page, perPage, category }: MerchantQuery): URLSearchParams {
+    const query = new URLSearchParams({ enabled: '1', order, country });
+    const pattern = Merchant.searchPattern(name ?? '');
+    if (pattern) {
+      query.set('name', pattern);
+    }
+    if (ids) {
+      query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
+    }
+    if (page) {
+      query.set('page', String(page));
+    }
+    if (perPage) {
+      query.set('perPage', String(perPage));
+    }
+    if (category) {
+      query.set('category', category);
+    }
+    return query;
   }
 
   static idsByRecentPurchase(giftCards: Pick<GiftCard, 'merchantId'>[], limit: number): string[] {

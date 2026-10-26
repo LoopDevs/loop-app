@@ -110,3 +110,48 @@ test('merchants sort by the cashback rate shown, overrides included', () => {
     ['overridden', 'high', 'low'],
   );
 });
+
+const fullQuery = {
+  country: 'US',
+  name: ' a.b ',
+  ids: ['m.1', 'm2'],
+  page: 2,
+  perPage: 20,
+};
+
+test('list query sends the enabled, ordered, escaped catalogue params', () => {
+  assert.deepEqual([...Merchant.listQuery(fullQuery)], [
+    ['enabled', '1'],
+    ['order', 'name'],
+    ['country', 'US'],
+    ['name', 'a\\.b'],
+    ['ids', 'm\\.1,m2'],
+    ['page', '2'],
+    ['perPage', '20'],
+  ]);
+});
+
+test('list query for a country alone sends only enabled, order and country', () => {
+  assert.deepEqual([...Merchant.listQuery({ country: 'GB' })], [
+    ['enabled', '1'],
+    ['order', 'name'],
+    ['country', 'GB'],
+  ]);
+});
+
+test('a category adds only the category param', () => {
+  for (const query of [fullQuery, { country: 'GB' }]) {
+    assert.deepEqual(
+      [...Merchant.listQuery({ ...query, category: 'food' })],
+      [...Merchant.listQuery(query), ['category', 'food']],
+    );
+    assert.equal(Merchant.listQuery(query).has('category'), false);
+  }
+});
+
+test('categories list the CTX values in chip order', () => {
+  assert.deepEqual(
+    Merchant.categories.map((category) => category.value),
+    ['food', 'fashion', 'entertainment', 'home', 'travel', 'groceries', 'beauty', 'electronics', 'sports'],
+  );
+});

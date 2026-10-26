@@ -79,6 +79,7 @@ export type MerchantQuery = {
   order?: 'name';
   page?: number;
   perPage?: number;
+  category?: string;
 };
 
 export type MerchantPage = {
@@ -271,21 +272,8 @@ class CtxClient {
     return new Account(await this.userRequest<AccountJson>('GET', '/account'));
   }
 
-  async merchants({ country, name, ids, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
-    const query = new URLSearchParams({ enabled: '1', order, country });
-    const pattern = Merchant.searchPattern(name ?? '');
-    if (pattern) {
-      query.set('name', pattern);
-    }
-    if (ids) {
-      query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
-    }
-    if (page) {
-      query.set('page', String(page));
-    }
-    if (perPage) {
-      query.set('perPage', String(perPage));
-    }
+  async merchants(merchantQuery: MerchantQuery): Promise<MerchantPage> {
+    const query = Merchant.listQuery(merchantQuery);
     const { result, pagination } = await this.auth.sessionRequest<{
       result: MerchantJson[] | null;
       pagination: Pagination;
