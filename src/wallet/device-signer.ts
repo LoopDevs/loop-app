@@ -1,6 +1,7 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { randomBytes } from '@noble/hashes/utils';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 import { base64 } from '@/wallet/base64';
 
@@ -10,6 +11,10 @@ const biometricOptions: SecureStore.SecureStoreOptions = {
   requireAuthentication: true,
   authenticationPrompt: 'Approve with Face ID',
 };
+const biometricsHelp: Partial<Record<typeof Platform.OS, string>> = {
+  ios: 'Turn on Face ID or Touch ID in Settings, then try again.',
+  android: 'Add a fingerprint in Settings, then try again.',
+};
 
 export const deviceSigner = {
   publicKey(): Promise<string | null> {
@@ -17,6 +22,9 @@ export const deviceSigner = {
   },
 
   async create(): Promise<string> {
+    if (!SecureStore.canUseBiometricAuthentication()) {
+      throw new Error(biometricsHelp[Platform.OS] ?? biometricsHelp.ios);
+    }
     const secret = randomBytes(32);
     const publicKey = base64.encode(ed25519.getPublicKey(secret));
     await SecureStore.setItemAsync(secretKey, base64.encode(secret), biometricOptions);
