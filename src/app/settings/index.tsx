@@ -5,6 +5,7 @@ import { openBrowserAsync } from 'expo-web-browser';
 import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { AppLockToggle } from '@/components/app-lock';
 import { CountryPicker } from '@/components/country-picker';
 import { Button } from '@/components/form';
 import { OrderRowsSkeleton } from '@/components/skeleton';
@@ -130,6 +131,8 @@ export default function SettingsScreen() {
             </Section>
           </>
         )}
+
+        <AppLockToggle />
 
         <Section title="Help and legal">
           <Button label="Contact support" onPress={() => Linking.openURL(loopLinks.supportMail())} />
