@@ -5,7 +5,8 @@ import { Button, Field } from '@/components/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import { ctx, type GiftCard, type Merchant } from '@/ctx/client';
+import { amountErrorMessage } from '@/ctx/amount-error';
+import { ctx, CtxError, type GiftCard, type Merchant } from '@/ctx/client';
 import { network, type PaymentCurrency } from '@/stellar/network';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
@@ -25,6 +26,7 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [amount, setAmount] = useState('');
+  const [amountError, setAmountError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<PaymentCurrency>(network.tokens[0].currency);
   const [order, setOrder] = useState<GiftCard | null>(null);
 
@@ -43,7 +45,12 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   const chooseMerchant = (chosen: Merchant) => {
     setMerchant(chosen);
     setOrder(null);
-    setAmount(chosen.denominationType === 'fixed' ? chosen.denominations[0] : '');
+    changeAmount(chosen.denominationType === 'fixed' ? chosen.denominations[0] : '');
+  };
+
+  const changeAmount = (next: string) => {
+    setAmount(next);
+    setAmountError(null);
   };
 
   const createOrder = () =>
@@ -51,14 +58,22 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
       if (!merchant) {
         return;
       }
-      setOrder(
-        await ctx.orderGiftCard({
-          merchantId: merchant.id,
-          fiatAmount: amount.trim(),
-          fiatCurrency: merchant.currency,
-          cryptoCurrency: currency,
-        }),
-      );
+      try {
+        setOrder(
+          await ctx.orderGiftCard({
+            merchantId: merchant.id,
+            fiatAmount: amount.trim(),
+            fiatCurrency: merchant.currency,
+            cryptoCurrency: currency,
+          }),
+        );
+      } catch (error) {
+        const message = error instanceof CtxError ? amountErrorMessage(error.errorName(), merchant) : null;
+        if (!message) {
+          throw error;
+        }
+        setAmountError(message);
+      }
     });
 
   const pay = () =>
@@ -77,7 +92,7 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   const startOver = () => {
     setMerchant(null);
     setOrder(null);
-    setAmount('');
+    changeAmount('');
   };
 
   if (order) {
@@ -95,7 +110,7 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
               <Button
                 key={denomination}
                 label={denomination}
-                onPress={() => setAmount(denomination)}
+                onPress={() => changeAmount(denomination)}
                 selected={amount === denomination}
               />
             ))}
@@ -103,11 +118,12 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
         ) : (
           <Field
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={changeAmount}
             placeholder={`Amount in ${merchant.currency}`}
-            keyboardType="decimal-pad"
+            keyboardType={merchant.denominationType === 'min-max-major' ? 'number-pad' : 'decimal-pad'}
           />
         )}
+        {amountError && <ThemedText type="small">{amountError}</ThemedText>}
         <ThemedText type="small">Pay with</ThemedText>
         <View style={styles.row}>
           {network.tokens.map((token) => (
@@ -174,7 +190,8 @@ function denominationHint(merchant: Merchant): string {
     return `Choose an amount in ${merchant.currency}`;
   }
   const [min, max] = merchant.denominations;
-  return `${min}–${max} ${merchant.currency}`;
+  const range = `${min}–${max} ${merchant.currency}`;
+  return merchant.denominationType === 'min-max-major' ? `${range}, whole amounts` : range;
 }
 
 async function waitUntilSettled(id: string, onUpdate: (giftCard: GiftCard) => void): Promise<GiftCard> {
