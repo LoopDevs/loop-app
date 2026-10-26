@@ -1,5 +1,5 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -9,8 +9,6 @@ import { ListGroup, ListRow } from '@/components/list-row';
 import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { Motion, Radius, Spacing } from '@/constants/theme';
-import type { Account } from '@/ctx/account';
-import { ctx } from '@/ctx/client';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
@@ -25,7 +23,6 @@ export function WalletSummary() {
   const params = useLocalSearchParams<{ add?: string }>();
   const { state, wallet, view, refresh } = useWallet();
   const [opened, setOpened] = useState(false);
-  const [account, setAccount] = useState<Account | null>(null);
   const addRequested = params.add === '1';
   const adding = opened || addRequested;
 
@@ -35,17 +32,6 @@ export function WalletSummary() {
       router.setParams({ add: undefined });
     }
   };
-
-  useFocusEffect(
-    useCallback(() => {
-      if (state === 'ready') {
-        ctx
-          .account()
-          .then(setAccount)
-          .catch(() => undefined);
-      }
-    }, [state]),
-  );
 
   if (state === 'signed-out' || state === 'failed') {
     return null;
@@ -65,7 +51,7 @@ export function WalletSummary() {
 
   const balance = view ? money.token(view.holdings.inWallet(dollars), dollars) : null;
   const onTheWay = view?.stable ? view.holdings.onTheWayIn(view.stable) : null;
-  const received = account?.payouts
+  const received = view?.account?.payouts
     .filter((payout) => payout.status === 'complete' && offeredCurrencies.has(payout.currency))
     .reduce((sum, payout) => sum + units.parse(payout.netAmount()), 0n);
 
