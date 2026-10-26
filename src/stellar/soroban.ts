@@ -11,13 +11,19 @@ import {
   xdr,
 } from '@stellar/stellar-sdk';
 
-import { chainOutcome } from '@/ctx/payment-state';
+import { Deadline } from '@/ctx/deadline';
 import { network } from '@/stellar/network';
+import { TransferEvents, type LedgerRange } from '@/stellar/transfer-events';
 
 const simulationSource = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
 class Soroban {
-  private readonly server = new rpc.Server(network.rpcUrl);
+  private readonly server = new rpc.Server(network.rpcUrl, { timeout: Deadline.requestMs });
+
+  async latestLedger(): Promise<number> {
+    const { sequence } = await this.server.getLatestLedger();
+    return sequence;
+  }
 
   async read(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<unknown> {
     const transaction = new TransactionBuilder(new Account(simulationSource, '0'), {
@@ -38,14 +44,19 @@ class Soroban {
     return (await this.read(contractId, 'balance', [new Address(owner).toScVal()])) as bigint;
   }
 
-  async transactionStatus(hash: string): Promise<'pending' | 'success' | 'failed'> {
-    const { status } = await this.transaction(hash);
-    return chainOutcome(status);
-  }
-
   async transaction(hash: string): Promise<{ status: string; latestLedger: number }> {
     const { status, latestLedger } = await this.server.getTransaction(hash);
     return { status, latestLedger };
+  }
+
+  async transfers(
+    contractId: string,
+    from: string,
+    to: string,
+    ledgers: LedgerRange,
+  ): Promise<unknown[]> {
+    const { events } = await this.server.getEvents(TransferEvents.request(contractId, from, to, ledgers));
+    return events.map((event) => scValToNative(event.value));
   }
 
   async wasmHash(contractId: string): Promise<string> {

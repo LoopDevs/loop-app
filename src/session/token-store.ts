@@ -12,4 +12,7 @@ export const tokenStore = {
   clear(): Promise<void> {
     return SecureStore.deleteItemAsync(refreshTokenKey);
   },
+  exclusive<T>(task: () => Promise<T>): Promise<T> {
+    return task();
+  },
 };
