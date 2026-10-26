@@ -8,10 +8,12 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
+import { useBlockScreenCapture } from '@/native/screen-privacy';
 
 const clipboardLifetimeMs = 60_000;
 
 export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
+  useBlockScreenCapture();
   return (
     <View style={styles.section}>
       {giftCard.barcodeUrl && (

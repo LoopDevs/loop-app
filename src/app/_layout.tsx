@@ -9,12 +9,14 @@ import AppTabs from '@/components/app-tabs';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ToastProvider } from '@/components/toast';
 import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
+import { useAppSwitcherProtection } from '@/native/screen-privacy';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   useAppRefreshTriggers();
+  useAppSwitcherProtection();
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <ToastProvider>
