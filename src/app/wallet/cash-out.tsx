@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Button, Field } from '@/components/form';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
 import { PreviewBadge } from '@/components/preview-badge';
@@ -53,6 +54,7 @@ export default function CashOutScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <KeyboardAvoid>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <PageHeader title="Cash out to your bank" belowNavigationHeader accessory={<PreviewBadge />} />
         <View style={styles.body}>
@@ -145,6 +147,7 @@ export default function CashOutScreen() {
         </View>
         <SiteFooter />
       </ScrollView>
+      </KeyboardAvoid>
     </ThemedView>
   );
 }
