@@ -7,6 +7,7 @@ const FILTERED = '[Filtered]';
 const STATIC_ROUTE_WORDS = new Set([
   'users',
   'gift-cards',
+  'bank-withdrawals',
   'merchants',
   'wallets',
   'stellar',
@@ -29,7 +30,7 @@ const SAFE_CONTEXT_KEYS = new Set(['app', 'os', 'runtime', 'culture', 'device'])
 const SAFE_BREADCRUMB_KEYS = new Set(['method', 'status_code', 'url', 'from', 'to']);
 
 const SENSITIVE_FIELDS =
-  'access_?token|refresh_?token|id_?token|identity_?token|token|authorization|password|secret|seed|mnemonic|private_?key|pin|number|redeem_?url|barcode_?url|code|otp|email|signature|xdr|transaction';
+  'access_?token|refresh_?token|id_?token|identity_?token|token|authorization|password|secret|seed|mnemonic|private_?key|pin|sort_?code|account_?number|account_?name|number|redeem_?url|barcode_?url|code|otp|email|signature|xdr|transaction';
 
 const FIELD_PAIR = new RegExp(`(["']?(?:\\b|(?<=[a-z]))(?:${SENSITIVE_FIELDS})["']?\\s*[:=]\\s*)("[^"]*"|'[^']*'|[^\\s,;&}]+)`, 'gi');
 

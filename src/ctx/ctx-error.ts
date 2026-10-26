@@ -1,4 +1,4 @@
-import { rateLimitedMessage } from './payment-state.ts';
+import { rateLimitedMessage, type PayRejection } from './payment-state.ts';
 import { serviceState, serviceStateMessages } from './service-state.ts';
 
 export class CtxError extends Error {
@@ -19,11 +19,30 @@ export class CtxError extends Error {
     return CtxError.field(this.body, name);
   }
 
+  static readonly savingsUnavailableMessage = "Savings isn't available right now.";
+
+  payRejection(): PayRejection {
+    return {
+      status: this.status,
+      errorName: this.errorName(),
+      message: this.bodyField('message'),
+      txId: this.bodyField('txId'),
+    };
+  }
+
+  static payRejectionOf(error: unknown): PayRejection | undefined {
+    return error instanceof CtxError ? error.payRejection() : undefined;
+  }
+
   private static displayMessage(status: number, body: string): string {
     if (status === 429) {
       return rateLimitedMessage;
     }
-    const state = serviceState(CtxError.field(body, 'error'));
+    const name = CtxError.field(body, 'error');
+    if (name === 'ErrSavingsUnavailable') {
+      return CtxError.savingsUnavailableMessage;
+    }
+    const state = serviceState(name);
     return state ? serviceStateMessages[state] : `CTX ${status}: ${body}`;
   }
 
