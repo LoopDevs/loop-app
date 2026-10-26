@@ -6,20 +6,33 @@ import { PriceWindow } from '../ctx/price-window.ts';
 import { Rates } from '../ctx/rates.ts';
 import { units } from '../stellar/units.ts';
 import { Holdings } from './holdings.ts';
-import { SavingsTopUp, type TopUpChain } from './savings-top-up.ts';
+import {
+  SavingsTopUp,
+  type ChainTransaction,
+  type PendingWithdrawal,
+  type SentWithdrawal,
+  type TopUpChain,
+} from './savings-top-up.ts';
 import type { Balances } from './smart-wallet.ts';
 
 const usdc = { currency: 'XLM.USDC' as const, symbol: 'USDC', contract: 'CUSDC' };
 const start = Date.parse('2026-10-26T12:00:00Z');
+
+type Status = 'NOT_FOUND' | 'SUCCESS' | 'FAILED';
 
 type FakeVault = {
   wallet: string;
   shares: string;
   value: string;
   withdrawal?: SponsoredResult;
-  statuses?: ('pending' | 'success' | 'failed')[];
+  statuses?: Status[];
+  statusesOf?: Record<string, Status[]>;
   landed?: (shares: bigint, value: bigint) => bigint;
 };
+
+const firstLedger = 1_000;
+const ledgerMs = 5_000;
+const signatureLedgers = 60;
 
 class FakeChain implements TopUpChain {
   clock = start;
@@ -27,24 +40,37 @@ class FakeChain implements TopUpChain {
   shares: bigint;
   value: bigint;
   withdrawn: bigint[] = [];
+  sent = new Map<string, bigint>();
+  polls = new Map<string, number>();
   polled = 0;
   readsAfterSuccess = 0;
-  succeeded = false;
-  readonly withdrawal: SponsoredResult;
-  readonly statuses: ('pending' | 'success' | 'failed')[];
+  readonly landedHashes = new Set<string>();
+  readonly withdrawal?: SponsoredResult;
+  readonly statuses: Status[];
+  readonly statusesOf: Record<string, Status[]>;
   readonly landed: (shares: bigint, value: bigint) => bigint;
 
   constructor(vault: FakeVault) {
     this.wallet = units.parse(vault.wallet);
     this.shares = units.parse(vault.shares);
     this.value = units.parse(vault.value);
-    this.withdrawal = vault.withdrawal ?? { hash: 'HASH', status: 'pending' };
-    this.statuses = vault.statuses ?? ['success'];
+    this.withdrawal = vault.withdrawal;
+    this.statuses = vault.statuses ?? ['SUCCESS'];
+    this.statusesOf = vault.statusesOf ?? {};
     this.landed = vault.landed ?? ((_, value) => Holdings.floorOf(value));
   }
 
+  latestLedger(): number {
+    return firstLedger + Math.floor((this.clock - start) / ledgerMs);
+  }
+
+  pendingSent(shares: string, hash = 'OLD'): PendingWithdrawal {
+    this.sent.set(hash, units.parse(shares));
+    return { hash, expiryLedger: this.latestLedger() + signatureLedgers };
+  }
+
   async balances(): Promise<Balances> {
-    if (this.succeeded) {
+    if (this.landedHashes.size > 0) {
       this.readsAfterSuccess += 1;
     }
     return {
@@ -58,20 +84,26 @@ class FakeChain implements TopUpChain {
     return (shares * this.value) / this.shares;
   }
 
-  async withdraw(shares: bigint): Promise<SponsoredResult> {
+  async withdraw(shares: bigint): Promise<SentWithdrawal> {
     this.withdrawn.push(shares);
-    return this.withdrawal;
+    const hash = `HASH-${this.withdrawn.length}`;
+    this.sent.set(hash, shares);
+    const expiryLedger = this.latestLedger() + signatureLedgers;
+    return { ...(this.withdrawal ?? { hash, status: 'pending' }), expiryLedger };
   }
 
-  async transactionStatus(): Promise<'pending' | 'success' | 'failed'> {
-    const status = this.statuses[Math.min(this.polled, this.statuses.length - 1)];
+  async transaction(hash: string): Promise<ChainTransaction> {
+    const statuses = this.statusesOf[hash] ?? this.statuses;
+    const poll = this.polls.get(hash) ?? 0;
+    this.polls.set(hash, poll + 1);
     this.polled += 1;
-    if (status === 'success' && !this.succeeded) {
-      this.succeeded = true;
-      const shares = this.withdrawn.at(-1) ?? 0n;
+    const status = statuses[Math.min(poll, statuses.length - 1)];
+    if (status === 'SUCCESS' && !this.landedHashes.has(hash)) {
+      this.landedHashes.add(hash);
+      const shares = this.sent.get(hash) ?? 0n;
       this.wallet += this.landed(shares, await this.valueOf(shares));
     }
-    return status;
+    return { status, latestLedger: this.latestLedger() };
   }
 
   async sleep(ms: number): Promise<void> {
@@ -155,7 +187,7 @@ test('an order with no price window sends no withdrawal', async () => {
 });
 
 test('a withdrawal that succeeds after the price expires is not followed by a payment', async () => {
-  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['pending', 'success'] });
+  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['NOT_FOUND', 'SUCCESS'] });
   const window = new PriceWindow(start + 90_000 + PriceWindow.closingMs);
   const sleep = chain.sleep.bind(chain);
   chain.sleep = async (ms) => {
@@ -185,26 +217,80 @@ test('a withdrawal refused at the sponsor is not followed by a payment or a conf
 });
 
 test('a withdrawal that fails on chain is not followed by a payment', async () => {
-  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['pending', 'failed'] });
+  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['NOT_FOUND', 'FAILED'] });
   assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), { kind: 'withdrawFailed' });
   assert.equal(chain.withdrawn.length, 1);
 });
 
-test('a withdrawal still pending after 30 seconds stops with its hash and no payment', async () => {
-  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['pending'] });
-  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), { kind: 'stillMoving', hash: 'HASH' });
+test('a withdrawal still pending after 30 seconds stops with its hash and expiry and no payment', async () => {
+  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['NOT_FOUND'] });
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), {
+    kind: 'stillMoving',
+    withdrawal: { hash: 'HASH-1', expiryLedger: firstLedger + signatureLedgers },
+  });
   assert.equal(chain.clock - start, SavingsTopUp.confirmTimeoutMs);
 });
 
-test('a retry with a pending withdrawal confirms it and never withdraws again', async () => {
+test('a retry with a pending withdrawal that covers the price confirms it and never withdraws again', async () => {
   const chain = new FakeChain({ wallet: '0', shares: '50', value: '50' });
-  chain.withdrawn.push(units.parse('11'));
-  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow, 'HASH'), { kind: 'covered' });
+  const pending = chain.pendingSent('11');
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow, pending), { kind: 'covered' });
+  assert.deepEqual(chain.withdrawn, []);
+});
+
+test('a pending withdrawal from an abandoned order is confirmed before the new shortfall is withdrawn', async () => {
+  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50' });
+  const pending = chain.pendingSent('6.0606061');
+  const outcome = await new SavingsTopUp(chain).run(price, openWindow, pending);
+  assert.deepEqual(outcome, { kind: 'covered' });
   assert.equal(chain.withdrawn.length, 1);
+  const [shares] = chain.withdrawn;
+  assert.ok(Holdings.floorOf(await chain.valueOf(shares)) >= price - units.parse('6'));
+  assert.ok(shares < SavingsTopUp.estimatedShares(price, chain.shares, chain.value));
+});
+
+test('a pending withdrawal still unconfirmed stops before any new withdrawal', async () => {
+  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['NOT_FOUND'] });
+  const pending = chain.pendingSent('11');
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow, pending), {
+    kind: 'stillMoving',
+    withdrawal: pending,
+  });
+  assert.deepEqual(chain.withdrawn, []);
+});
+
+test('a withdrawal not found once its signature has expired counts as failed', () => {
+  const pending = { hash: 'OLD', expiryLedger: 1_060 };
+  assert.equal(SavingsTopUp.outcomeOf({ status: 'NOT_FOUND', latestLedger: 1_060 }, pending), 'pending');
+  assert.equal(SavingsTopUp.outcomeOf({ status: 'NOT_FOUND', latestLedger: 1_061 }, pending), 'failed');
+  assert.equal(SavingsTopUp.outcomeOf({ status: 'SUCCESS', latestLedger: 1_061 }, pending), 'success');
+  assert.equal(SavingsTopUp.outcomeOf({ status: 'FAILED', latestLedger: 1_000 }, pending), 'failed');
+});
+
+test('a dropped pending withdrawal is given up after its expiry and a new one is sent', async () => {
+  const chain = new FakeChain({
+    wallet: '0',
+    shares: '50',
+    value: '50',
+    statusesOf: { OLD: ['NOT_FOUND'] },
+  });
+  const pending = chain.pendingSent('11');
+  const topUp = new SavingsTopUp(chain);
+  assert.equal((await topUp.run(price, openWindow, pending)).kind, 'stillMoving');
+  chain.clock = start + (signatureLedgers + 1) * ledgerMs;
+  const window = new PriceWindow(chain.clock + 600_000);
+  assert.deepEqual(await topUp.run(price, window, pending), { kind: 'covered' });
+  assert.equal(chain.withdrawn.length, 1);
+  assert.equal(chain.landedHashes.has('OLD'), false);
 });
 
 test('the wallet balance is read again only after the withdrawal confirms', async () => {
-  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', statuses: ['pending', 'pending', 'success'] });
+  const chain = new FakeChain({
+    wallet: '0',
+    shares: '50',
+    value: '50',
+    statuses: ['NOT_FOUND', 'NOT_FOUND', 'SUCCESS'],
+  });
   await new SavingsTopUp(chain).run(price, openWindow);
   assert.equal(chain.polled, 3);
   assert.equal(chain.readsAfterSuccess, 1);
@@ -213,13 +299,13 @@ test('the wallet balance is read again only after the withdrawal confirms', asyn
 test('a read error while confirming counts as pending', async () => {
   const chain = new FakeChain({ wallet: '0', shares: '50', value: '50' });
   let calls = 0;
-  const status = chain.transactionStatus.bind(chain);
-  chain.transactionStatus = async () => {
+  const transaction = chain.transaction.bind(chain);
+  chain.transaction = async (hash) => {
     calls += 1;
     if (calls === 1) {
       throw new Error('rpc down');
     }
-    return status();
+    return transaction(hash);
   };
   assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), { kind: 'covered' });
 });

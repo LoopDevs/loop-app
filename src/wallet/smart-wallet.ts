@@ -9,7 +9,7 @@ import { base64 } from '@/wallet/base64';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
-import { SavingsTopUp } from '@/wallet/savings-top-up';
+import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 
 export type TokenBalance = {
@@ -124,7 +124,7 @@ export class SmartWallet {
     return this.signAndSponsor(intent, built.transaction, call, onSending);
   }
 
-  async withdraw(shares: bigint): Promise<SponsoredResult> {
+  async withdraw(shares: bigint): Promise<SentWithdrawal> {
     const intent: SmartWalletIntent = {
       intent: 'vault_withdraw',
       currency: SmartWallet.vaultCurrency,
@@ -133,7 +133,8 @@ export class SmartWallet {
     const built = await ctx.buildTransaction(this.id, intent);
     const call = SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId]);
     await this.requireWithdraw(call, shares);
-    return this.signAndSponsor(intent, built.transaction, call);
+    const result = await this.signAndSponsor(intent, built.transaction, call);
+    return { ...result, expiryLedger: built.expiryLedger };
   }
 
   savingsTopUp(): SavingsTopUp {
@@ -141,7 +142,7 @@ export class SmartWallet {
       balances: () => this.balances(),
       valueOf: (shares) => this.valueOf(shares),
       withdraw: (shares) => this.withdraw(shares),
-      transactionStatus: (hash) => soroban.transactionStatus(hash),
+      transaction: (hash) => soroban.transaction(hash),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       now: () => Date.now(),
     });
