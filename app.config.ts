@@ -4,7 +4,7 @@ import { SocialSignInConfig } from './src/session/social-sign-in.ts';
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const socialSignIn = new SocialSignInConfig({
-    appleClientId: process.env.EXPO_PUBLIC_APPLE_CLIENT_ID,
+    appleSignIn: process.env.EXPO_PUBLIC_APPLE_SIGN_IN,
     googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
   });
   const usesAppleSignIn = socialSignIn.providers('ios').includes('apple');

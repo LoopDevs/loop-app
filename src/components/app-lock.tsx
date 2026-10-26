@@ -11,6 +11,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
+import { useRecentsProtection } from '@/native/screen-privacy';
 import { AppLock, type AuthenticationResult } from '@/session/app-lock';
 import { appLockStore } from '@/session/app-lock-store';
 
@@ -142,6 +143,8 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     () => authenticate('Unlock Loop').then(applyUnlockResult),
     [authenticate, applyUnlockResult],
   );
+
+  useRecentsProtection(lock.isOn());
 
   const covered = lock.covers();
   useEffect(() => {

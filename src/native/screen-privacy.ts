@@ -13,3 +13,16 @@ export function useAppSwitcherProtection(): void {
     }
   }, []);
 }
+
+export function useRecentsProtection(enabled: boolean): void {
+  const key = useId();
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !enabled) {
+      return;
+    }
+    ScreenCapture.preventScreenCaptureAsync(key).catch(() => {});
+    return () => {
+      ScreenCapture.allowScreenCaptureAsync(key).catch(() => {});
+    };
+  }, [enabled, key]);
+}
