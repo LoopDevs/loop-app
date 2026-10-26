@@ -42,6 +42,9 @@ export function Odometer({ value, style, accessibilityLabel }: OdometerProps) {
       accessibilityLabel={accessibilityLabel ?? value}>
       <View
         style={styles.row}
+        aria-hidden
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         onLayout={(event) => setNaturalWidth(event.nativeEvent.layout.width / scale)}>
         {[...value].map((character, index) => {
           if (!/\d/.test(character)) {
@@ -72,7 +75,11 @@ function columnKeys(value: string): string[] {
   const characters = [...value];
   const decimalIndex = value.search(/[.,]\d{1,2}\D*$/);
   const integerEnd = decimalIndex >= 0 ? decimalIndex : characters.length;
+  const firstDigit = characters.findIndex(isDigit);
   return characters.map((character, index) => {
+    if (firstDigit < 0 || index < firstDigit) {
+      return `lead-${index}-${character}`;
+    }
     if (index === decimalIndex) {
       return 'point';
     }
@@ -81,7 +88,7 @@ function columnKeys(value: string): string[] {
       return isDigit(character) ? `frac-${fromPoint}` : `frac-${index - integerEnd}-${character}`;
     }
     const toPoint = characters.slice(index + 1, integerEnd).filter(isDigit).length;
-    return isDigit(character) ? `int-${toPoint}` : `int-${toPoint}-${index}-${character}`;
+    return isDigit(character) ? `int-${toPoint}` : `int-${toPoint}-${character}`;
   });
 }
 

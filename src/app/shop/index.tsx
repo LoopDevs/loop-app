@@ -8,7 +8,7 @@ import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated'
 import { CountryMenu } from '@/components/country-menu';
 import { CountryPicker } from '@/components/country-picker';
 import { Button, Field, Notice } from '@/components/form';
-import { useScrimScroll } from '@/components/home-panel';
+import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { MerchantStrip, MerchantTile } from '@/components/merchant-tile';
 import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/press-scale';
@@ -366,7 +366,7 @@ export default function ShopScreen() {
           </Animated.View>
         )}
       />
-      <Animated.View pointerEvents="none" style={scrim} />
+      <StatusBarScrim style={scrim} />
     </ThemedView>
   );
 }
@@ -400,7 +400,7 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
         </PageWidth>
         <SiteFooter />
       </Animated.ScrollView>
-      <Animated.View pointerEvents="none" style={scrim} />
+      <StatusBarScrim style={scrim} />
     </ThemedView>
   );
 }
@@ -420,7 +420,7 @@ function SimplePage({ title, children }: { title: string; children: React.ReactN
         <PageHeader title={title} />
         <View style={[styles.body, styles.simpleBody]}>{children}</View>
       </Animated.ScrollView>
-      <Animated.View pointerEvents="none" style={scrim} />
+      <StatusBarScrim style={scrim} />
     </ThemedView>
   );
 }

@@ -3,13 +3,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useRef, useState } from 'react';
 import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddMoney } from '@/components/add-money';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
 import { HomeGiftCards } from '@/components/home-gift-cards';
-import { HomePanel, useScrimScroll } from '@/components/home-panel';
+import { HomePanel, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { SignInButton, useOnSignIn } from '@/components/sign-in';
 import {
   HowLoopWorks,
@@ -51,6 +52,7 @@ export default function HomeScreen() {
   const walletLoadStarted = useRef(false);
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
+  const insets = useSafeAreaInsets();
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -187,7 +189,7 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled">
           <SignedOutStore onOpen={openMerchant} />
         </Animated.ScrollView>
-        <Animated.View pointerEvents="none" style={scrim} />
+        <StatusBarScrim style={scrim} />
       </ThemedView>
     );
   }
@@ -204,7 +206,13 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={
           screen === 'wallet' ? (
-            <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={Brand.onRoyal} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={pullToRefresh}
+              tintColor={Brand.onRoyal}
+              colors={[Brand.royal]}
+              progressViewOffset={insets.top}
+            />
           ) : undefined
         }>
         <HomePanel view={screen === 'wallet' ? view : null}>
@@ -255,7 +263,7 @@ export default function HomeScreen() {
         </View>
         {wide && <SiteFooter />}
       </Animated.ScrollView>
-      <Animated.View pointerEvents="none" style={scrim} />
+      <StatusBarScrim style={scrim} />
     </ThemedView>
   );
 }

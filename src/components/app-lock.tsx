@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   unlock: {
     minHeight: 50,
     borderRadius: Radius.control,
-    backgroundColor: Brand.onRoyal,
+    backgroundColor: Brand.navy,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   unlockLabel: {
-    color: Brand.navy,
+    color: Brand.onRoyal,
     fontFamily: FontFamily.semibold,
     fontSize: 17,
     lineHeight: 22,

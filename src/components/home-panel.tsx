@@ -1,7 +1,8 @@
 import { useScrollToTop } from 'expo-router';
-import { useRef, type ReactNode } from 'react';
+import { BlurView } from 'expo-blur';
+import { useRef, type ComponentProps, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
-import {
+import Animated, {
   interpolate,
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -49,6 +50,14 @@ export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
 }
 
 const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(16px)' } as object) : null;
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+
+export function StatusBarScrim({ style }: { style: ComponentProps<typeof Animated.View>['style'] }) {
+  if (Platform.OS === 'ios') {
+    return <AnimatedBlurView pointerEvents="none" intensity={40} tint="dark" style={style} />;
+  }
+  return <Animated.View pointerEvents="none" style={style} />;
+}
 
 type HomePanelProps = {
   view: HoldingsView | null;

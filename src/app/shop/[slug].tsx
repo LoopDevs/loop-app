@@ -8,6 +8,7 @@ import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/form';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
+import { useScrimScroll } from '@/components/home-panel';
 import { CashbackPill, MerchantCover } from '@/components/merchant-tile';
 import { PressScale } from '@/components/press-scale';
 import { OrderDetailSkeleton, Skeleton } from '@/components/skeleton';
@@ -67,6 +68,7 @@ export default function MerchantScreen() {
     }, [load]),
   );
   useOnSignIn(load);
+  const { onScroll, backdrop } = useScrimScroll();
 
   if (!merchant) {
     return (
@@ -128,7 +130,12 @@ export default function MerchantScreen() {
     <ThemedView style={styles.container}>
       <StatusBar style="light" />
       <Stack.Screen options={{ title: merchant.name }} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
+      <Animated.View pointerEvents="none" style={backdrop} />
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scroll}>
         <View style={styles.panel}>
           <Animated.View
             entering={reduceMotion ? undefined : FadeIn.duration(Motion.transition).easing(Motion.easeOut)}
@@ -199,7 +206,7 @@ export default function MerchantScreen() {
           )}
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </ThemedView>
   );
 }
