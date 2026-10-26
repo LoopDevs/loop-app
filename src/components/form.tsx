@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PressScale } from '@/components/press-scale';
-import { FontFamily, Radius, Spacing } from '@/constants/theme';
+import { Brand, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
@@ -32,7 +32,7 @@ export function Field(props: React.ComponentProps<typeof TextInput>) {
   );
 }
 
-export type ButtonVariant = 'primary' | 'secondary' | 'quiet';
+export type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'onRoyal';
 
 type ButtonProps = {
   label: string;
@@ -63,8 +63,14 @@ export function Button({
       borderColor: selected ? theme.accent : theme.border,
     },
     quiet: { backgroundColor: 'transparent', borderColor: 'transparent' },
+    onRoyal: { backgroundColor: Brand.onRoyal, borderColor: Brand.onRoyal },
   }[variant];
-  const labelColor = variant === 'primary' ? theme.onAccent : variant === 'quiet' ? theme.accent : theme.text;
+  const labelColor = {
+    primary: theme.onAccent,
+    secondary: theme.text,
+    quiet: theme.accent,
+    onRoyal: Brand.navy,
+  }[variant];
   return (
     <PressScale
       onPress={press}

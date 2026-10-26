@@ -1,11 +1,7 @@
 import { useCallback } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { RoyalScreen } from '@/components/royal-screen';
 import { ctx, CtxError } from '@/ctx/client';
 import {
   blockingServiceState,
@@ -41,19 +37,9 @@ export function ServiceUnavailable({ state, onRecovered }: Props) {
   useAppRefresh(tryAgain);
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.content} accessibilityLiveRegion="polite">
-          <ThemedText type="subtitle">{serviceStateMessages[state]}</ThemedText>
-          <Button label="Try again" onPress={tryAgain} disabled={busy} />
-          {message !== '' && (
-            <ThemedText type="small" selectable>
-              {message}
-            </ThemedText>
-          )}
-        </View>
-      </SafeAreaView>
-    </ThemedView>
+    <RoyalScreen title={serviceStateMessages[state]} message={message}>
+      <Button label="Try again" variant="onRoyal" onPress={tryAgain} disabled={busy} />
+    </RoyalScreen>
   );
 }
 
@@ -63,21 +49,3 @@ const recoveryChecks: RecoveryChecks = {
   readProfile: () => ctx.me(),
   isBlocking: (error) => error instanceof CtxError && blockingServiceState(error.errorName()) !== null,
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    maxWidth: MaxContentWidth,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.three,
-  },
-});
