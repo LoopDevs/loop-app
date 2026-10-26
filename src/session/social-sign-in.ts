@@ -3,7 +3,7 @@ export type SocialProvider = 'apple' | 'google';
 export type SignInMethod = 'email' | SocialProvider;
 
 export type SocialSignInEnv = {
-  appleClientId?: string;
+  appleSignIn?: string;
   googleWebClientId?: string;
   googleIosClientId?: string;
 };
@@ -21,12 +21,12 @@ const providerNames: Record<SocialProvider, string> = {
 const googleClientIdSuffix = '.apps.googleusercontent.com';
 
 export class SocialSignInConfig {
-  readonly appleClientId: string;
+  readonly appleSignIn: boolean;
   readonly googleWebClientId: string;
   readonly googleIosClientId: string;
 
   constructor(env: SocialSignInEnv) {
-    this.appleClientId = env.appleClientId?.trim() ?? '';
+    this.appleSignIn = env.appleSignIn?.trim() === 'true';
     this.googleWebClientId = env.googleWebClientId?.trim() ?? '';
     this.googleIosClientId = env.googleIosClientId?.trim() ?? '';
   }
@@ -34,7 +34,7 @@ export class SocialSignInConfig {
   providers(platform: string): SocialProvider[] {
     switch (platform) {
       case 'ios':
-        if (!this.appleClientId) {
+        if (!this.appleSignIn) {
           return [];
         }
         return this.googleWebClientId && this.googleIosClientId ? ['apple', 'google'] : ['apple'];

@@ -17,6 +17,7 @@ import {
   type SignInMethod,
   type SocialProvider,
 } from '@/session/social-sign-in';
+import { SessionTokens } from '@/session/session-tokens';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -249,9 +250,8 @@ export class CtxError extends Error {
 }
 
 class CtxClient {
-  private accessToken: string | null = null;
-  private refreshInFlight: Promise<string | null> | null = null;
-  private sessionGeneration = 0;
+  private readonly session = new SessionTokens();
+  private refreshInFlight: { generation: number; accessToken: Promise<string | null> } | null = null;
   private serviceStateListener: ServiceStateListener | null = null;
 
   constructor(
@@ -274,7 +274,7 @@ class CtxClient {
   }
 
   async hasSession(): Promise<boolean> {
-    return this.accessToken !== null || (await tokenStore.readRefreshToken()) !== null;
+    return this.session.token() !== null || (await tokenStore.readRefreshToken()) !== null;
   }
 
   async requestCode(email: string): Promise<void> {
@@ -407,10 +407,7 @@ class CtxClient {
   }
 
   private async getAccessToken(): Promise<string | null> {
-    if (this.accessToken) {
-      return this.accessToken;
-    }
-    return this.refresh();
+    return this.session.token() ?? this.refresh();
   }
 
   private async userRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -432,6 +429,7 @@ class CtxClient {
     body?: unknown,
     reportServiceState = true,
   ): Promise<T> {
+    const generation = this.session.current();
     const accessToken = await this.requireAccessToken();
     try {
       return await this.authorized<T>(accessToken, method, path, body, reportServiceState);
@@ -439,9 +437,11 @@ class CtxClient {
       if (!(error instanceof CtxError) || error.status !== 401) {
         throw error;
       }
-      this.accessToken = null;
-      const refreshed = await this.refresh();
-      if (!refreshed) {
+      if (!this.session.reject(generation, accessToken)) {
+        throw error;
+      }
+      const refreshed = await this.getAccessToken();
+      if (!refreshed || !this.session.isCurrent(generation)) {
         throw error;
       }
       return this.authorized<T>(refreshed, method, path, body, reportServiceState);
@@ -465,29 +465,29 @@ class CtxClient {
   }
 
   private refresh(): Promise<string | null> {
-    if (!this.refreshInFlight) {
-      this.refreshInFlight = this.rotateRefreshToken().finally(() => {
-        this.refreshInFlight = null;
-      });
+    const generation = this.session.current();
+    if (this.refreshInFlight?.generation === generation) {
+      return this.refreshInFlight.accessToken;
     }
-    return this.refreshInFlight;
+    const accessToken = this.rotateRefreshToken(generation).finally(() => {
+      if (this.refreshInFlight?.accessToken === accessToken) {
+        this.refreshInFlight = null;
+      }
+    });
+    this.refreshInFlight = { generation, accessToken };
+    return accessToken;
   }
 
-  private async rotateRefreshToken(): Promise<string | null> {
-    const generation = this.sessionGeneration;
+  private async rotateRefreshToken(generation: number): Promise<string | null> {
     const refreshToken = await tokenStore.readRefreshToken();
-    if (!refreshToken) {
+    if (!refreshToken || !this.session.isCurrent(generation)) {
       return null;
     }
     try {
       const tokens = await this.send<TokenPair>('POST', '/refresh-token', { refreshToken });
-      if (generation !== this.sessionGeneration) {
-        return null;
-      }
-      await this.storeTokens(tokens);
-      return tokens.accessToken;
+      return (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null;
     } catch (error) {
-      if (generation !== this.sessionGeneration) {
+      if (!this.session.isCurrent(generation)) {
         return null;
       }
       if (error instanceof CtxError && error.status === 401) {
@@ -499,14 +499,12 @@ class CtxClient {
   }
 
   private async clearSession(): Promise<void> {
-    this.sessionGeneration += 1;
-    this.accessToken = null;
+    this.session.begin();
     await tokenStore.clear();
   }
 
   private async startSession(tokens: TokenPair): Promise<void> {
-    this.sessionGeneration += 1;
-    await this.storeTokens(tokens);
+    await this.storeTokens(this.session.begin(), tokens);
   }
 
   private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {
@@ -518,9 +516,12 @@ class CtxClient {
     }
   }
 
-  private async storeTokens(tokens: TokenPair): Promise<void> {
+  private async storeTokens(generation: number, tokens: TokenPair): Promise<boolean> {
+    if (!this.session.isCurrent(generation)) {
+      return false;
+    }
     await tokenStore.writeRefreshToken(tokens.refreshToken);
-    this.accessToken = tokens.accessToken;
+    return this.session.adopt(generation, tokens.accessToken);
   }
 
   private userIdFrom(accessToken: string): string {
