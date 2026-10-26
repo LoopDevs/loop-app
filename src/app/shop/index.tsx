@@ -2,11 +2,10 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View, type FlatList } from 'react-native';
+import { StyleSheet, TextInput, View, type FlatList } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { CountryMenu } from '@/components/country-menu';
-import { CountryPicker } from '@/components/country-picker';
 import { Button, Notice } from '@/components/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { CategoryTiles, MerchantCard, MerchantCardStrip } from '@/components/merchant-card';
@@ -30,7 +29,6 @@ import { Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollE
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
 import { MerchantPaging } from '@/ctx/merchant-paging';
-import type { CountryChoice } from '@/ctx/profile';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
@@ -78,8 +76,8 @@ export default function ShopScreen() {
   const runAccount = account.run;
   const runListing = listing.run;
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const { profile, setProfile, applyCountryChoice } = useProfile();
-  const [changingCountry, setChangingCountry] = useState(false);
+  const { profile, setProfile } = useProfile();
+  const { country: marketCountry } = useMarket();
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
   const { q } = useLocalSearchParams<{ q?: string }>();
   const [search, setSearch] = useState(q ?? '');
@@ -137,7 +135,7 @@ export default function ShopScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const country = profile && !profile.needsSetup() ? profile.country : undefined;
+  const country = profile ? (profile.country ?? marketCountry) : undefined;
   const catalog = useCatalog(country, stripSize);
   const topCashback = catalog?.top ?? [];
   const category = pickedCategory.country === country ? pickedCategory.category : null;
@@ -228,13 +226,6 @@ export default function ShopScreen() {
     favouriteMerchants.length > 0 || !country ? favouriteMerchants : cachedByIds(country, favourites.ids);
   const shownFavourites = Merchant.inOrder(knownFavourites, favourites.ids);
 
-  const chooseCountry = (choice: CountryChoice) =>
-    runAccount(async () => {
-      await applyCountryChoice(choice);
-      setChangingCountry(false);
-      setSearch('');
-    });
-
   const loadMore = () => {
     const next = MerchantPaging.nextPage(page, pages, busy || listing.message !== '');
     if (next) {
@@ -252,20 +243,6 @@ export default function ShopScreen() {
 
   if (!profile) {
     return <SimplePage title="Shop">{account.message === '' ? <MerchantGridSkeleton columns={cardColumns} /> : accountError}</SimplePage>;
-  }
-
-  if (profile.needsSetup() || changingCountry) {
-    return (
-      <SimplePage title={profile.needsSetup() ? 'Where do you shop?' : 'Change country'}>
-        <CountryPicker
-          profile={profile}
-          busy={busy}
-          onChoose={chooseCountry}
-          onCancel={profile.needsSetup() ? undefined : () => setChangingCountry(false)}
-        />
-        {accountError}
-      </SimplePage>
-    );
   }
 
   const searching = query !== '';
@@ -290,14 +267,7 @@ export default function ShopScreen() {
         onEndReachedThreshold={0.5}
         ListHeaderComponent={
           <View>
-            <PageHeader
-              title="Shop"
-              width={wide ? 'page' : 'content'}
-              accessory={
-                profile.country ? (
-                  <CountryButton country={profile.country} disabled={busy} onPress={() => setChangingCountry(true)} />
-                ) : null
-              }>
+            <PageHeader title="Shop" width={wide ? 'page' : 'content'}>
               <SearchBar value={search} onChangeText={setSearch} />
             </PageHeader>
             <View style={[styles.body, styles.header, pageWidth]}>
@@ -480,23 +450,6 @@ function SearchBar({ value, onChangeText }: { value: string; onChangeText: (text
   );
 }
 
-function CountryButton({ country, disabled, onPress }: { country: string; disabled: boolean; onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <PressScale
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={`Shopping in ${country}. Change country`}
-      style={[styles.countryButton, { backgroundColor: theme.backgroundSelected }, disabled && styles.disabled]}>
-      <SymbolView name={{ ios: 'globe', android: 'public', web: 'public' }} size={18} tintColor={theme.text} />
-      <Text style={[styles.countryText, { color: theme.text }]} maxFontSizeMultiplier={1.3}>
-        {country}
-      </Text>
-    </PressScale>
-  );
-}
-
 function ActiveOrderCard({ merchantName, onPress }: { merchantName: string; onPress: () => void }) {
   const theme = useTheme();
   return (
@@ -597,14 +550,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.five,
     gap: Spacing.six,
   },
-  countryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    minHeight: 44,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
-  },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -619,10 +564,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
     fontFamily: FontFamily.regular,
     fontSize: 16,
-  },
-  countryText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 15,
   },
   disabled: {
     opacity: 0.5,
