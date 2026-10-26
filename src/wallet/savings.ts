@@ -6,7 +6,12 @@ import { money } from '../money.ts';
 import { network, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 import type { AuthorizedCall, ContractCall } from './sponsored-call.ts';
-import type { VaultCallOutcome } from './vault-call.ts';
+import type { SentVaultCall, VaultCall, VaultCallOutcome } from './vault-call.ts';
+
+export type DepositInput = {
+  clear(): void;
+  restore(): void;
+};
 
 export class Savings {
   static readonly currency: PaymentCurrency = 'XLM.USDC';
@@ -43,6 +48,20 @@ export class Savings {
       case 'pending':
         return `Deposit sent, still confirming.\n${hash}`;
     }
+  }
+
+  static async sendDeposit(
+    send: () => Promise<SentVaultCall>,
+    vaultCall: VaultCall,
+    input: DepositInput,
+  ): Promise<{ sent: SentVaultCall; outcome: VaultCallOutcome }> {
+    const sent = await send();
+    input.clear();
+    const outcome = await vaultCall.settle(sent);
+    if (outcome === 'failed') {
+      input.restore();
+    }
+    return { sent, outcome };
   }
 
   static requireDeposit(call: AuthorizedCall, wallet: string, amount: bigint): void {

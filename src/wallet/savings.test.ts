@@ -7,6 +7,7 @@ import { network } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 import { Savings } from './savings.ts';
 import type { AuthorizedCall, ContractCall } from './sponsored-call.ts';
+import { VaultCall, type SentVaultCall } from './vault-call.ts';
 
 const wallet = StrKey.encodeContract(Buffer.alloc(32, 1));
 const stranger = StrKey.encodeContract(Buffer.alloc(32, 3));
@@ -144,4 +145,38 @@ test('each deposit outcome has its own message', () => {
     'The deposit failed. Your USDC is still in your wallet.',
   );
   assert.equal(Savings.depositMessage('pending', units.parse('1'), 'HASH'), 'Deposit sent, still confirming.\nHASH');
+});
+
+function depositRun(send: () => Promise<SentVaultCall>) {
+  const events: string[] = [];
+  const vaultCall = new VaultCall({
+    transaction: async () => ({ status: 'SUCCESS', latestLedger: 1 }),
+    sleep: async () => {},
+    now: () => 0,
+  });
+  const result = Savings.sendDeposit(send, vaultCall, {
+    clear: () => events.push('clear'),
+    restore: () => events.push('restore'),
+  });
+  return { result, events };
+}
+
+test('a deposit refused before it is sent keeps the amount in the field', async () => {
+  const { result, events } = depositRun(async () => {
+    throw new Error('Savings are unavailable');
+  });
+  await assert.rejects(result, /Savings are unavailable/);
+  assert.deepEqual(events, []);
+});
+
+test('a deposit the sponsor accepts clears the field and keeps it clear once it lands', async () => {
+  const { result, events } = depositRun(async () => ({ hash: 'HASH', status: 'pending', expiryLedger: 10 }));
+  assert.equal((await result).outcome, 'success');
+  assert.deepEqual(events, ['clear']);
+});
+
+test('a deposit that fails after it is sent puts the amount back in the field', async () => {
+  const { result, events } = depositRun(async () => ({ hash: '', status: 'failed', expiryLedger: 10 }));
+  assert.equal((await result).outcome, 'failed');
+  assert.deepEqual(events, ['clear', 'restore']);
 });

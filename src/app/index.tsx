@@ -193,12 +193,14 @@ export default function HomeScreen() {
       if (!wallet || depositAmount === null) {
         return;
       }
-      setDepositInput('');
-      const sent = await wallet.deposit(depositAmount);
-      const outcome = await wallet.vaultCall().settle(sent);
-      if (outcome === 'failed') {
-        setDepositInput(depositInput);
-      }
+      const { sent, outcome } = await Savings.sendDeposit(
+        () => wallet.deposit(depositAmount),
+        wallet.vaultCall(),
+        {
+          clear: () => setDepositInput(''),
+          restore: () => setDepositInput(depositInput),
+        },
+      );
       const refreshError = await refresh().then(
         () => '',
         (error: unknown) => errorMessage(error),
