@@ -1,3 +1,4 @@
+import { rateLimitedMessage } from '@/ctx/payment-state';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
 
@@ -84,7 +85,7 @@ export class CtxError extends Error {
     readonly status: number,
     readonly body: string,
   ) {
-    super(`CTX ${status}: ${body}`);
+    super(status === 429 ? rateLimitedMessage : `CTX ${status}: ${body}`);
   }
 
   errorName(): string | undefined {

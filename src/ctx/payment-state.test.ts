@@ -5,6 +5,7 @@ import {
   canPay,
   chainOutcome,
   needsNewPrice,
+  rateLimitedMessage,
   rejectedPaymentState,
   resumedPaymentState,
   sendFailureState,
@@ -40,6 +41,13 @@ test('another bad request keeps the order payable with the detail', () => {
     kind: 'notSent',
     detail: 'insufficient balance',
   });
+});
+
+test('a rate-limited payment was not sent and stays payable', () => {
+  const rateLimited = { kind: 'notSent', detail: rateLimitedMessage } as const;
+  assert.deepEqual(rejectedPaymentState({ status: 429 }), rateLimited);
+  assert.deepEqual(sendFailureState(true, { status: 429 }), rateLimited);
+  assert.equal(canPay(unpaid, rateLimited), true);
 });
 
 test('other rejections are not payment states', () => {
