@@ -1,4 +1,3 @@
-import { bytesToHex } from '@noble/hashes/utils';
 import { MuxedAccount, scValToNative, StrKey, xdr } from '@stellar/stellar-sdk';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,6 +15,7 @@ import { network, type Token } from '@/stellar/network';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { base64 } from '@/wallet/base64';
+import { DeviceRotation } from '@/wallet/device-rotation';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
@@ -24,6 +24,7 @@ import { Savings } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 import { WalletPin } from '@/wallet/wallet-pin';
+import { WalletRules, type ContextRule, type WalletCheck } from '@/wallet/wallet-rules';
 
 export type TokenBalance = {
   token: Token;
@@ -36,15 +37,16 @@ export type Balances = {
   vaultValue: bigint;
 };
 
-type ContextRule = {
-  id: number;
-  signers: [string, string, Uint8Array][];
-  valid_until: number | null | undefined;
-};
+export class UnlinkedDevice extends Error {
+  constructor(readonly wallet: SmartWallet) {
+    super('Loop is not set up on this device yet. Open Home to set it up.');
+  }
+}
 
 export class SmartWallet {
   static readonly passkeyRuleId = 0;
   static readonly deviceRuleId = 1;
+  private static readonly deviceRulePollMs = 2_000;
 
   private constructor(
     readonly id: string,
@@ -61,9 +63,12 @@ export class SmartWallet {
       return null;
     }
     const wallet = new SmartWallet(link.id, link.address, userId);
-    const passkeyPublicKey = await wallet.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
+    const checked = await wallet.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
+    if (checked.thisDevice === 'unlinked') {
+      throw new UnlinkedDevice(wallet);
+    }
     if (!pinned) {
-      await pin.write({ address: wallet.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
+      await pin.write({ address: wallet.address, passkeyPublicKey: base64.encode(checked.passkeyPublicKey) });
     }
     return wallet;
   }
@@ -82,7 +87,9 @@ export class SmartWallet {
       devicePublicKey,
     });
     const wallet = new SmartWallet(link.id, link.address, userId);
-    await wallet.verify(created.publicKey);
+    if ((await wallet.verify(created.publicKey)).thisDevice !== 'linked') {
+      throw new Error('The new wallet does not hold this device key');
+    }
     await new WalletPin(AsyncStorage, userId).write({
       address: wallet.address,
       passkeyPublicKey: base64.encode(created.publicKey),
@@ -90,26 +97,51 @@ export class SmartWallet {
     return wallet;
   }
 
-  async verify(passkeyPublicKey?: Uint8Array): Promise<Uint8Array> {
-    const devicePublicKey = await deviceSigner.publicKey(this.userId);
-    if (!devicePublicKey) {
-      throw new Error('This device has no wallet key');
-    }
-    const [wasmHash, ruleCount, passkeyRule, deviceRule] = await Promise.all([
+  async verify(passkeyPublicKey?: Uint8Array): Promise<WalletCheck> {
+    const [devicePublicKey, wasmHash, ruleCount, passkeyRule, deviceRule] = await Promise.all([
+      deviceSigner.publicKey(this.userId),
       soroban.wasmHash(this.address),
       soroban.read(this.address, 'get_context_rules_count'),
       this.rule(SmartWallet.passkeyRuleId),
       this.rule(SmartWallet.deviceRuleId),
     ]);
-    if (wasmHash !== network.accountWasmHash) {
-      throw new Error('The wallet runs unexpected code');
+    return WalletRules.check(
+      { wasmHash, ruleCount, passkeyRule, deviceRule },
+      passkeyPublicKey,
+      devicePublicKey ? base64.decode(devicePublicKey) : null,
+    );
+  }
+
+  async addThisDevice(): Promise<void> {
+    const pin = new WalletPin(AsyncStorage, this.userId);
+    const pinned = await pin.read();
+    const checked = await this.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
+    const { passkeyPublicKey } = checked;
+    if (checked.thisDevice === 'linked') {
+      await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
+      return;
     }
-    if (ruleCount !== 2) {
-      throw new Error('The wallet has unexpected rules');
+    const newDevicePublicKey = await deviceSigner.create(this.userId);
+    const intent: SmartWalletIntent = { intent: 'rotate_device', newDevicePublicKey };
+    const built = await ctx.buildTransaction(this.id, intent);
+    const call = SponsoredCall.verify(
+      built,
+      this.address,
+      [SmartWallet.passkeyRuleId],
+      await soroban.latestLedger(),
+    );
+    DeviceRotation.require(call, this.address, base64.decode(newDevicePublicKey));
+    const assertion = await passkey.sign(call.digest);
+    assertion.requireSigned(call.digest, passkeyPublicKey);
+    const result = await ctx.sponsorTransaction(this.id, intent, {
+      transaction: built.transaction,
+      passkey: assertion.toJson(passkeyPublicKey),
+    });
+    if (result.error || result.status === 'failed') {
+      throw new Error(result.error || 'Setting up this device failed. Try again.');
     }
-    const passkeyKey = this.requireSigner(passkeyRule, network.webauthnVerifier, passkeyPublicKey);
-    this.requireSigner(deviceRule, network.ed25519Verifier, base64.decode(devicePublicKey));
-    return passkeyKey;
+    await this.waitForDeviceRule(base64.decode(newDevicePublicKey), built.expiryLedger);
+    await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
   }
 
   async balances(): Promise<Balances> {
@@ -237,18 +269,16 @@ export class SmartWallet {
     return (await soroban.read(this.address, 'get_context_rule', [xdr.ScVal.scvU32(id)])) as ContextRule;
   }
 
-  private requireSigner(rule: ContextRule, verifier: string, publicKey?: Uint8Array): Uint8Array {
-    if (rule.signers.length !== 1 || rule.valid_until != null) {
-      throw new Error(`Wallet rule ${rule.id} is not a single permanent signer`);
+  private async waitForDeviceRule(devicePublicKey: Uint8Array, expiryLedger: number): Promise<void> {
+    for (;;) {
+      if (WalletRules.holdsDeviceKey(await this.rule(SmartWallet.deviceRuleId), devicePublicKey)) {
+        return;
+      }
+      if ((await soroban.latestLedger()) > expiryLedger) {
+        throw new Error('Setting up this device timed out. Try again.');
+      }
+      await new Promise((resolve) => setTimeout(resolve, SmartWallet.deviceRulePollMs));
     }
-    const [kind, signerVerifier, keyData] = rule.signers[0];
-    if (kind !== 'External' || signerVerifier !== verifier) {
-      throw new Error(`Wallet rule ${rule.id} uses an unexpected verifier`);
-    }
-    if (publicKey && bytesToHex(keyData) !== bytesToHex(publicKey)) {
-      throw new Error(`Wallet rule ${rule.id} holds a different key`);
-    }
-    return keyData;
   }
 
   private async requireWithdraw(call: SponsoredCall, shares: bigint): Promise<void> {

@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
+import { AddDevice } from '@/components/add-device';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/form';
 import { HomeActions } from '@/components/home-actions';
@@ -33,9 +34,9 @@ import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { network } from '@/stellar/network';
-import { SmartWallet } from '@/wallet/smart-wallet';
+import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
-type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'wallet';
+type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'wallet';
 
 const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
@@ -43,6 +44,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>('loading');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const { view, refresh } = useHoldings(wallet);
   const { busy, message, setMessage, run } = useBusyAction();
@@ -72,6 +74,11 @@ export default function HomeScreen() {
       const loaded = await SmartWallet.load();
       await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
     } catch (error) {
+      if (error instanceof UnlinkedDevice) {
+        setUnlinkedWallet(error.wallet);
+        setScreen('unlinked-device');
+        return;
+      }
       walletLoadStarted.current = false;
       throw error;
     }
@@ -270,6 +277,10 @@ export default function HomeScreen() {
                 disabled={busy}
               />
             </Animated.View>
+          )}
+
+          {screen === 'unlinked-device' && unlinkedWallet && (
+            <AddDevice wallet={unlinkedWallet} onAdded={loadWallet} />
           )}
 
           {screen === 'wallet' && wallet && (
