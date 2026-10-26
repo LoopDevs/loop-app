@@ -2,18 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { SponsoredResult } from '../ctx/client.ts';
+import { landingGraceLedgers, type ChainTransaction } from '../ctx/payment-state.ts';
 import { PriceWindow } from '../ctx/price-window.ts';
 import { Rates } from '../ctx/rates.ts';
 import { units } from '../stellar/units.ts';
 import { Holdings } from './holdings.ts';
-import {
-  SavingsTopUp,
-  type ChainTransaction,
-  type PendingWithdrawal,
-  type SentWithdrawal,
-  type TopUpChain,
-} from './savings-top-up.ts';
+import { SavingsTopUp, type TopUpChain } from './savings-top-up.ts';
 import type { Balances } from './smart-wallet.ts';
+import { VaultCall, type PendingVaultCall, type SentVaultCall } from './vault-call.ts';
 
 const usdc = { currency: 'XLM.USDC' as const, symbol: 'USDC', contract: 'CUSDC' };
 const start = Date.parse('2026-10-26T12:00:00Z');
@@ -49,6 +45,11 @@ class FakeChain implements TopUpChain {
   readonly statuses: Status[];
   readonly statusesOf: Record<string, Status[]>;
   readonly landed: (shares: bigint, value: bigint) => bigint;
+  readonly vaultCall = new VaultCall({
+    transaction: (hash) => this.transaction(hash),
+    sleep: (ms) => this.sleep(ms),
+    now: () => this.now(),
+  });
 
   constructor(vault: FakeVault) {
     this.wallet = units.parse(vault.wallet);
@@ -64,7 +65,7 @@ class FakeChain implements TopUpChain {
     return firstLedger + Math.floor((this.clock - start) / ledgerMs);
   }
 
-  pendingSent(shares: string, hash = 'OLD'): PendingWithdrawal {
+  pendingSent(shares: string, hash = 'OLD'): PendingVaultCall {
     this.sent.set(hash, units.parse(shares));
     return { hash, expiryLedger: this.latestLedger() + signatureLedgers };
   }
@@ -84,7 +85,7 @@ class FakeChain implements TopUpChain {
     return (shares * this.value) / this.shares;
   }
 
-  async withdraw(shares: bigint): Promise<SentWithdrawal> {
+  async withdraw(shares: bigint): Promise<SentVaultCall> {
     this.withdrawn.push(shares);
     const hash = `HASH-${this.withdrawn.length}`;
     this.sent.set(hash, shares);
@@ -228,7 +229,7 @@ test('a withdrawal still pending after 30 seconds stops with its hash and expiry
     kind: 'stillMoving',
     withdrawal: { hash: 'HASH-1', expiryLedger: firstLedger + signatureLedgers },
   });
-  assert.equal(chain.clock - start, SavingsTopUp.confirmTimeoutMs);
+  assert.equal(chain.clock - start, VaultCall.confirmTimeoutMs);
 });
 
 test('a retry with a pending withdrawal that covers the price confirms it and never withdraws again', async () => {
@@ -259,14 +260,6 @@ test('a pending withdrawal still unconfirmed stops before any new withdrawal', a
   assert.deepEqual(chain.withdrawn, []);
 });
 
-test('a withdrawal not found once its signature has expired counts as failed', () => {
-  const pending = { hash: 'OLD', expiryLedger: 1_060 };
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'NOT_FOUND', latestLedger: 1_060 }, pending), 'pending');
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'NOT_FOUND', latestLedger: 1_061 }, pending), 'failed');
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'SUCCESS', latestLedger: 1_061 }, pending), 'success');
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'FAILED', latestLedger: 1_000 }, pending), 'failed');
-});
-
 test('a dropped pending withdrawal is given up after its expiry and a new one is sent', async () => {
   const chain = new FakeChain({
     wallet: '0',
@@ -277,7 +270,7 @@ test('a dropped pending withdrawal is given up after its expiry and a new one is
   const pending = chain.pendingSent('11');
   const topUp = new SavingsTopUp(chain);
   assert.equal((await topUp.run(price, openWindow, pending)).kind, 'stillMoving');
-  chain.clock = start + (signatureLedgers + 1) * ledgerMs;
+  chain.clock = start + (signatureLedgers + landingGraceLedgers + 1) * ledgerMs;
   const window = new PriceWindow(chain.clock + 600_000);
   assert.deepEqual(await topUp.run(price, window, pending), { kind: 'covered' });
   assert.equal(chain.withdrawn.length, 1);

@@ -38,6 +38,46 @@ type Shape = {
   authCount?: number;
   extraOperation?: boolean;
   payment?: boolean;
+  call?: xdr.InvokeContractArgs;
+  nestedCalls?: xdr.InvokeContractArgs[];
+  ids?: number[];
+};
+
+function vaultCallArgs(functionName: string, args: xdr.ScVal[]): xdr.InvokeContractArgs {
+  return new xdr.InvokeContractArgs({
+    contractAddress: new Address(network.usdcVault).toScAddress(),
+    functionName,
+    args,
+  });
+}
+
+const withdrawShape: Shape = {
+  call: vaultCallArgs('withdraw', [
+    nativeToScVal(5n, { type: 'i128' }),
+    nativeToScVal([4n], { type: 'i128' }),
+    new Address(wallet).toScVal(),
+  ]),
+};
+
+const depositShape: Shape = {
+  call: vaultCallArgs('deposit', [
+    nativeToScVal([10n], { type: 'i128' }),
+    nativeToScVal([9n], { type: 'i128' }),
+    new Address(wallet).toScVal(),
+    nativeToScVal(true),
+  ]),
+  nestedCalls: [
+    new xdr.InvokeContractArgs({
+      contractAddress: new Address(network.usdc).toScAddress(),
+      functionName: 'transfer',
+      args: [
+        new Address(wallet).toScVal(),
+        new Address(network.usdcVault).toScVal(),
+        nativeToScVal(10n, { type: 'i128' }),
+      ],
+    }),
+  ],
+  ids: [1, 1],
 };
 
 function transferArgs(amount: bigint): xdr.InvokeContractArgs {
@@ -49,7 +89,7 @@ function transferArgs(amount: bigint): xdr.InvokeContractArgs {
 }
 
 function authEntry(shape: Shape): xdr.SorobanAuthorizationEntry {
-  const call = transferArgs(shape.amount ?? 10n);
+  const call = shape.call ?? transferArgs(shape.amount ?? 10n);
   const fn =
     shape.authFunction === 'create'
       ? xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeCreateContractHostFn(
@@ -78,7 +118,17 @@ function authEntry(shape: Shape): xdr.SorobanAuthorizationEntry {
     credentials,
     rootInvocation: new xdr.SorobanAuthorizedInvocation({
       function: fn,
-      subInvocations: shape.nested ? [nestedInvocation] : [],
+      subInvocations: shape.nestedCalls
+        ? shape.nestedCalls.map(
+            (nestedCall) =>
+              new xdr.SorobanAuthorizedInvocation({
+                function: xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(nestedCall),
+                subInvocations: shape.nested ? [nestedInvocation] : [],
+              }),
+          )
+        : shape.nested
+          ? [nestedInvocation]
+          : [],
     }),
   });
 }
@@ -108,7 +158,9 @@ function build(shape: Shape = {}, overrides: Partial<BuiltTransaction> = {}): Bu
   } else {
     builder.addOperation(
       Operation.invokeHostFunction({
-        func: xdr.HostFunction.hostFunctionTypeInvokeContract(transferArgs(shape.txAmount ?? shape.amount ?? 10n)),
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          shape.call ?? transferArgs(shape.txAmount ?? shape.amount ?? 10n),
+        ),
         auth,
       }),
     );
@@ -119,8 +171,8 @@ function build(shape: Shape = {}, overrides: Partial<BuiltTransaction> = {}): Bu
   const transaction = builder.setTimeout(30).build().toXDR();
   return {
     transaction,
-    digest: shape.credentials === 'source' ? '00'.repeat(32) : independentDigest(entry, ruleIds),
-    contextRuleIds: ruleIds,
+    digest: shape.credentials === 'source' ? '00'.repeat(32) : independentDigest(entry, shape.ids ?? ruleIds),
+    contextRuleIds: shape.ids ?? ruleIds,
     expiryLedger: expiry,
     ...overrides,
   };
@@ -165,8 +217,51 @@ test('an authorization for another wallet is refused', () => {
   rejects(build({ signer: otherWallet }), /different wallet/);
 });
 
-test('an authorization covering nested calls is refused', () => {
+test('a one-rule authorization covering nested calls is refused', () => {
   rejects(build({ nested: true }), /nested calls/);
+});
+
+test('a vault withdraw verifies with one rule and no nested calls', () => {
+  const call = SponsoredCall.verify(build(withdrawShape), wallet, ruleIds, latestLedger);
+  assert.equal(call.contract, network.usdcVault);
+  assert.equal(call.method, 'withdraw');
+  assert.deepEqual(call.nested, []);
+});
+
+test('a vault deposit verifies with two rules and exposes its nested transfer', () => {
+  const built = build(depositShape);
+  const call = SponsoredCall.verify(built, wallet, [1, 1], latestLedger);
+  assert.equal(call.contract, network.usdcVault);
+  assert.equal(call.method, 'deposit');
+  assert.equal(call.args.length, 4);
+  assert.equal(call.nested.length, 1);
+  assert.equal(call.nested[0].contract, network.usdc);
+  assert.equal(call.nested[0].method, 'transfer');
+  assert.equal(bytesToHex(call.digest), built.digest);
+});
+
+test('a vault deposit naming wallet rules other than [1, 1] is refused', () => {
+  for (const contextRuleIds of [[1], [1, 0], [0, 1], [1, 1, 1]]) {
+    assert.throws(
+      () => SponsoredCall.verify(build(depositShape, { contextRuleIds }), wallet, [1, 1], latestLedger),
+      /unexpected wallet rules/,
+    );
+  }
+});
+
+test('a vault deposit verified against one rule is refused', () => {
+  rejects(build(depositShape), /nested calls/);
+});
+
+test('a two-rule authorization without a nested call is refused', () => {
+  assert.throws(() => SponsoredCall.verify(build({ ids: [1, 1] }), wallet, [1, 1], latestLedger), /nested calls/);
+});
+
+test('a nested call with its own nested calls is refused', () => {
+  assert.throws(
+    () => SponsoredCall.verify(build({ ...depositShape, nested: true }), wallet, [1, 1], latestLedger),
+    /nested calls inside nested calls/,
+  );
 });
 
 test('an authorization that is not a contract call is refused', () => {
