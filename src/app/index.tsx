@@ -192,7 +192,7 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
