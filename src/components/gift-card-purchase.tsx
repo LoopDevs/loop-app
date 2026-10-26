@@ -7,13 +7,14 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
-import { ctx, CtxError, type GiftCard, type Merchant } from '@/ctx/client';
+import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import {
   giftCardStatusLabel,
   historyHiddenStatuses,
   pollIntervalMs,
   settledStatuses,
 } from '@/ctx/gift-card-status';
+import type { Merchant } from '@/ctx/merchant';
 import {
   canPay,
   needsNewPrice,
@@ -248,10 +249,15 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
   }
 
   if (merchant) {
+    const estimate = merchant.cashbackEstimate(amount);
     return (
       <View style={styles.section}>
         <ThemedText type="smallBold">{merchant.name}</ThemedText>
+        <ThemedText type="small">{merchant.rateLabel()}</ThemedText>
         <ThemedText type="small">{denominationHint(merchant)}</ThemedText>
+        {estimate && (
+          <ThemedText type="small">You&apos;ll earn about {estimate} in cashback</ThemedText>
+        )}
         {merchant.denominationType === 'fixed' ? (
           <View style={styles.row}>
             {merchant.denominations.map((denomination) => (
@@ -302,7 +308,7 @@ export function GiftCardPurchase({ wallet, busy, run, onPaid }: Props) {
       {merchants.map((candidate) => (
         <Button
           key={candidate.id}
-          label={`${candidate.name} · ${candidate.currency} · ${candidate.userDiscount / 100}% cashback`}
+          label={`${candidate.name} · ${candidate.currency} · ${candidate.rateLabel()}`}
           onPress={() => chooseMerchant(candidate)}
           disabled={busy}
         />

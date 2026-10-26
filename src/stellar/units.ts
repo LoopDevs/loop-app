@@ -3,6 +3,8 @@ const scale = 10n ** BigInt(decimals);
 const decimalPattern = /^(\d+)(?:\.(\d{1,7}))?$/;
 
 export const units = {
+  decimals,
+
   parse(amount: string): bigint {
     const match = decimalPattern.exec(amount.trim());
     if (!match) {
