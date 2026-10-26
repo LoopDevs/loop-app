@@ -57,6 +57,7 @@ export type GiftCardOrderIn = {
 export type GiftCard = {
   id: string;
   status: 'unpaid' | 'paid' | 'fulfilled' | 'rejected' | 'refunded' | 'expired';
+  merchantId: string;
   merchantName: string;
   created: string;
   cardFiatAmount: string;
@@ -64,6 +65,8 @@ export type GiftCard = {
   paymentId: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
+  paymentCryptoTxId?: string;
+  paymentUrlExpiration?: string;
   number?: string;
   pin?: string;
   redeemUrl?: string;
@@ -85,10 +88,15 @@ export class CtxError extends Error {
   }
 
   errorName(): string | undefined {
+    return this.bodyField('error');
+  }
+
+  bodyField(name: string): string | undefined {
     try {
       const parsed: unknown = JSON.parse(this.body);
-      if (parsed && typeof parsed === 'object' && 'error' in parsed && typeof parsed.error === 'string') {
-        return parsed.error;
+      if (parsed && typeof parsed === 'object') {
+        const value = (parsed as Record<string, unknown>)[name];
+        return typeof value === 'string' ? value : undefined;
       }
     } catch {
       return undefined;
@@ -148,6 +156,16 @@ class CtxClient {
       `/gift-cards?${query}`,
     );
     return result ?? [];
+  }
+
+  async activeGiftCard(): Promise<GiftCard | null> {
+    const query = new URLSearchParams({ status: 'unpaid,paid', perPage: '5', order: '-created' });
+    const { result } = await this.sessionRequest<{ result: GiftCard[] | null }>(
+      'GET',
+      `/gift-cards?${query}`,
+    );
+    const newest = result?.[0];
+    return newest ? this.giftCard(newest.id) : null;
   }
 
   async wallets(): Promise<WalletLink[]> {
