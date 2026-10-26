@@ -33,7 +33,7 @@ export class Holdings {
     );
     const payouts = account.payouts
       .filter((payout) => payout.isInFlight() && payout.address === address)
-      .flatMap(({ currency, amount, sentAmount }) => Holdings.holdingOf(currency, sentAmount ?? amount));
+      .flatMap((payout) => Holdings.holdingOf(payout.currency, payout.netAmount()));
     return [...ledger, ...payouts];
   }
 
