@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   canPay,
   chainOutcome,
+  landingClosed,
   landingGraceLedgers,
   needsNewPrice,
   rateLimitedMessage,
@@ -11,6 +12,8 @@ import {
   resumedPaymentState,
   sendFailureState,
   sentTransactionOutcome,
+  transferAmount,
+  transferLanded,
 } from './payment-state.ts';
 
 const unpaid = { status: 'unpaid' };
@@ -38,7 +41,7 @@ test('the transaction CTX recorded wins over the one this phone recorded', () =>
   assert.deepEqual(resumedPaymentState(sent, { expiryLedger: 500, txId: 'other' }), { kind: 'confirming', txId: 'abc' });
 });
 
-test('a resumed order that is no longer unpaid is not confirming', () => {
+test('a resumed order past unpaid is not confirming', () => {
   assert.deepEqual(resumedPaymentState({ status: 'paid' }, { expiryLedger: 500 }), { kind: 'ready' });
 });
 
@@ -130,4 +133,30 @@ test('a new price is offered for failed, closed and expired orders', () => {
   assert.equal(needsNewPrice({ status: 'expired' }, { kind: 'ready' }), true);
   assert.equal(needsNewPrice(unpaid, { kind: 'ready' }), false);
   assert.equal(needsNewPrice({ status: 'paid' }, { kind: 'failed' }), false);
+});
+
+test('a failed payment that needs support is not offered a new price', () => {
+  assert.equal(needsNewPrice(unpaid, { kind: 'failed', contactSupport: true }), false);
+  assert.equal(canPay(unpaid, { kind: 'failed', contactSupport: true }), false);
+});
+
+test('landing closes once the grace ledgers after expiry have passed', () => {
+  assert.equal(landingClosed(500 + landingGraceLedgers, 500), false);
+  assert.equal(landingClosed(501 + landingGraceLedgers, 500), true);
+});
+
+test('a transfer amount is read from a plain amount or a muxed transfer map', () => {
+  assert.equal(transferAmount(25n), 25n);
+  assert.equal(transferAmount({ amount: 25n, to_muxed_id: 7n }), 25n);
+  assert.equal(transferAmount({ amount: '25' }), null);
+  assert.equal(transferAmount('25'), null);
+  assert.equal(transferAmount(null), null);
+});
+
+test('a transfer has landed when one matches the price', () => {
+  assert.equal(transferLanded([10n, { amount: 25n }], 25n), true);
+  assert.equal(transferLanded([10n], 25n), false);
+  assert.equal(transferLanded([], 25n), false);
+  assert.equal(transferLanded(['junk'], null), false);
+  assert.equal(transferLanded([10n], null), true);
 });

@@ -17,6 +17,7 @@ export class SentPayments {
 
   private readonly storage: SentPaymentStorage;
   private readonly now: () => number;
+  private writes: Promise<void> = Promise.resolve();
 
   constructor(storage: SentPaymentStorage, now: () => number = Date.now) {
     this.storage = storage;
@@ -27,27 +28,43 @@ export class SentPayments {
     return (await this.load())[paymentId] ?? null;
   }
 
-  async sending(paymentId: string, expiryLedger: number): Promise<void> {
-    const records = await this.load();
-    records[paymentId] = { expiryLedger, at: this.now() };
-    await this.save(records);
+  sending(paymentId: string, expiryLedger: number): Promise<void> {
+    return this.update((records) => {
+      records[paymentId] = { expiryLedger, at: this.now() };
+      return true;
+    });
   }
 
-  async sent(paymentId: string, txId: string): Promise<void> {
-    const records = await this.load();
-    const record = records[paymentId];
-    if (record) {
+  sent(paymentId: string, txId: string): Promise<void> {
+    return this.update((records) => {
+      const record = records[paymentId];
+      if (!record) {
+        return false;
+      }
       records[paymentId] = { ...record, txId };
-      await this.save(records);
-    }
+      return true;
+    });
   }
 
-  async forget(paymentId: string): Promise<void> {
-    const records = await this.load();
-    if (records[paymentId]) {
+  forget(paymentId: string): Promise<void> {
+    return this.update((records) => {
+      if (!records[paymentId]) {
+        return false;
+      }
       delete records[paymentId];
-      await this.save(records);
-    }
+      return true;
+    });
+  }
+
+  private update(change: (records: Records) => boolean): Promise<void> {
+    const write = this.writes.then(async () => {
+      const records = await this.load();
+      if (change(records)) {
+        await this.save(records);
+      }
+    });
+    this.writes = write.catch(() => undefined);
+    return write;
   }
 
   private async load(): Promise<Records> {

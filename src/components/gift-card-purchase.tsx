@@ -20,13 +20,15 @@ import {
   settledStatuses,
 } from '@/ctx/gift-card-status';
 import type { Merchant } from '@/ctx/merchant';
+import { PaymentSender } from '@/ctx/payment-sender';
 import {
   canPay,
+  landingClosed,
   needsNewPrice,
   resumedPaymentState,
-  sendFailureState,
   sentTransactionOutcome,
   type PaymentState,
+  type PayRejection,
 } from '@/ctx/payment-state';
 import { SentPayments } from '@/ctx/sent-payments';
 import { PriceWindow } from '@/ctx/price-window';
@@ -53,14 +55,40 @@ type SentTransaction = {
   expiryLedger?: number;
 };
 
-async function sentOutcome({ txId, expiryLedger }: SentTransaction) {
-  const transaction = txId
-    ? await soroban.transaction(txId)
-    : { status: 'NOT_FOUND', latestLedger: await soroban.latestLedger() };
-  return sentTransactionOutcome(transaction, expiryLedger);
+async function sentPaymentFailure(
+  giftCard: GiftCard,
+  wallet: SmartWallet,
+  { txId, expiryLedger }: SentTransaction,
+): Promise<PaymentState | null> {
+  if (txId) {
+    return sentTransactionOutcome(await soroban.transaction(txId), expiryLedger) === 'failed'
+      ? { kind: 'failed' }
+      : null;
+  }
+  const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
+  if (expiryLedger === undefined || !token || !landingClosed(await soroban.latestLedger(), expiryLedger)) {
+    return null;
+  }
+  if (await wallet.paymentLanded(token, orderPrice(giftCard), expiryLedger)) {
+    return null;
+  }
+  return { kind: 'failed', contactSupport: true };
+}
+
+function payRejection(error: unknown): PayRejection | undefined {
+  if (!(error instanceof CtxError)) {
+    return undefined;
+  }
+  return {
+    status: error.status,
+    errorName: error.errorName(),
+    message: error.bodyField('message'),
+    txId: error.bodyField('txId'),
+  };
 }
 
 const sentPayments = new SentPayments(AsyncStorage);
+const paymentSender = new PaymentSender(sentPayments, payRejection);
 const pendingTopUps = new Map<string, PendingWithdrawal>();
 const inFlightPayments = new InFlightPayments();
 
@@ -104,29 +132,45 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     following.current += 1;
   };
 
-  const followOrder = useCallback(async (giftCard: GiftCard, sent?: SentTransaction) => {
-    const generation = ++following.current;
-    const isCurrent = () => following.current === generation;
-    let current = giftCard;
-    while (isCurrent() && !settledStatuses.includes(current.status)) {
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      try {
-        if (current.status === 'unpaid' && sent && (await sentOutcome(sent)) === 'failed') {
+  const followOrder = useCallback(
+    async (giftCard: GiftCard, sent?: SentTransaction) => {
+      const generation = ++following.current;
+      const isCurrent = () => following.current === generation;
+      let current = giftCard;
+      while (isCurrent() && !settledStatuses.includes(current.status)) {
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        try {
+          current = await ctx.giftCard(current.id);
+        } catch {
+          continue;
+        }
+        if (!isCurrent()) {
+          return;
+        }
+        const { status, paymentStatus } = current;
+        setOrder((held) => held && { ...held, status, paymentStatus });
+        if (current.status !== 'unpaid' || !sent) {
+          continue;
+        }
+        let failure: PaymentState | null;
+        try {
+          failure = await sentPaymentFailure(current, wallet, {
+            txId: sent.txId ?? current.paymentCryptoTxId,
+            expiryLedger: sent.expiryLedger,
+          });
+        } catch {
+          continue;
+        }
+        if (failure) {
           if (isCurrent()) {
-            setPayment({ kind: 'failed' });
+            setPayment(failure);
           }
           return;
         }
-        current = await ctx.giftCard(current.id);
-      } catch {
-        continue;
       }
-      if (isCurrent()) {
-        const { status, paymentStatus } = current;
-        setOrder((held) => held && { ...held, status, paymentStatus });
-      }
-    }
-  }, []);
+    },
+    [wallet],
+  );
 
   const resumeOrder = useCallback(
     () =>
@@ -233,36 +277,9 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     });
 
   const sendPayment = async (giftCard: GiftCard): Promise<PaymentState> => {
-    let sent = false;
-    let expiryLedger: number | undefined;
     try {
-      const result = await wallet.pay(giftCard, async (signedExpiryLedger) => {
-        await sentPayments.sending(giftCard.paymentId, signedExpiryLedger);
-        expiryLedger = signedExpiryLedger;
-        sent = true;
-      });
-      await sentPayments.sent(giftCard.paymentId, result.hash);
-      return result.error ? { kind: 'failed' } : { kind: 'confirming', txId: result.hash, expiryLedger };
+      return await paymentSender.send(giftCard.paymentId, () => wallet.pay(giftCard));
     } catch (error) {
-      const rejection =
-        error instanceof CtxError
-          ? {
-              status: error.status,
-              errorName: error.errorName(),
-              message: error.bodyField('message'),
-              txId: error.bodyField('txId'),
-            }
-          : undefined;
-      const state = sendFailureState(sent, rejection);
-      if (state?.kind === 'notSent' || state?.kind === 'priceExpired') {
-        await sentPayments.forget(giftCard.paymentId);
-      }
-      if (state?.kind === 'confirming') {
-        return { ...state, expiryLedger };
-      }
-      if (state) {
-        return state;
-      }
       setPayment({ kind: 'ready' });
       throw error;
     }
@@ -314,6 +331,10 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       await run(async () => {
         const task = inFlightPayments.start(order.paymentId, () =>
           holdCriticalReload(async () => {
+            const recorded = await paymentSender.recorded(order.paymentId);
+            if (recorded) {
+              return recorded;
+            }
             if (topUpPrice !== null && !(await topUpFromSavings(order, topUpPrice))) {
               return null;
             }
@@ -497,6 +518,9 @@ function OrderView({ order, coverage, topUpPending, payment, busy, onPay, onNewP
       <ThemedText type="small">{orderStatus(order, shown)}</ThemedText>
       {outcome && <ThemedText type="small">{outcome}</ThemedText>}
       {shown.kind === 'notSent' && shown.detail !== '' && <ThemedText type="small">{shown.detail}</ThemedText>}
+      {shown.kind === 'failed' && shown.contactSupport && (
+        <ThemedText type="small">This payment isn&apos;t on the network. Contact support about this order.</ThemedText>
+      )}
       {short && <ThemedText type="small">{SavingsTopUp.notEnough(symbol)}</ThemedText>}
       {payable && <Button label={payLabel(price, coverage)} onPress={onPay} disabled={busy || short} />}
       {needsNewPrice(order, shown) && <Button label="Get new price" onPress={onNewPrice} disabled={busy} />}

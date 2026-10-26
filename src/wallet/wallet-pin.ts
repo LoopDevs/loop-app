@@ -1,3 +1,5 @@
+import { base64 } from './base64.ts';
+
 export type PinnedWallet = {
   address: string;
   passkeyPublicKey: string;
@@ -20,10 +22,7 @@ export class WalletPin {
   private readonly storage: WalletPinStorage;
 
   constructor(storage: WalletPinStorage, userId: string) {
-    if (!/^[A-Za-z0-9_-]+$/.test(userId)) {
-      throw new Error('Unexpected user id for the wallet pin');
-    }
-    this.key = `wallet.pin.${userId}`;
+    this.key = `wallet.pin.${base64.encodeUrl(new TextEncoder().encode(userId))}`;
     this.storage = storage;
   }
 
@@ -36,7 +35,7 @@ export class WalletPin {
     }
     const match = usable.find((candidate) => candidate.address === pinned.address);
     if (!match) {
-      throw new Error('Your account no longer lists the wallet this phone created. Contact support before paying.');
+      throw new Error("Your account doesn't list the wallet created on this device. Contact support.");
     }
     return match;
   }

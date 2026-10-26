@@ -3,7 +3,7 @@ export type PaymentState =
   | { kind: 'movingSavings' }
   | { kind: 'sending' }
   | { kind: 'confirming'; txId?: string; expiryLedger?: number }
-  | { kind: 'failed' }
+  | { kind: 'failed'; contactSupport?: boolean }
   | { kind: 'priceExpired' }
   | { kind: 'notSent'; detail: string };
 
@@ -12,7 +12,7 @@ type GiftCardPayment = {
   paymentCryptoTxId?: string;
 };
 
-type PayRejection = {
+export type PayRejection = {
   status: number;
   errorName?: string;
   message?: string;
@@ -55,11 +55,33 @@ export function sentTransactionOutcome(
   if (
     transaction.status === 'NOT_FOUND' &&
     expiryLedger !== undefined &&
-    transaction.latestLedger > expiryLedger + landingGraceLedgers
+    landingClosed(transaction.latestLedger, expiryLedger)
   ) {
     return 'failed';
   }
   return chainOutcome(transaction.status);
+}
+
+export function landingClosed(latestLedger: number, expiryLedger: number): boolean {
+  return latestLedger > expiryLedger + landingGraceLedgers;
+}
+
+export function transferAmount(value: unknown): bigint | null {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+  if (value && typeof value === 'object' && 'amount' in value) {
+    const { amount } = value as { amount: unknown };
+    return typeof amount === 'bigint' ? amount : null;
+  }
+  return null;
+}
+
+export function transferLanded(values: readonly unknown[], price: bigint | null): boolean {
+  return values.some((value) => {
+    const amount = transferAmount(value);
+    return amount !== null && (price === null || amount === price);
+  });
 }
 
 export function rejectedPaymentState(rejection: PayRejection): PaymentState | null {
@@ -108,5 +130,11 @@ export function needsNewPrice(giftCard: GiftCardPayment, state: PaymentState): b
   if (giftCard.status === 'expired') {
     return true;
   }
-  return giftCard.status === 'unpaid' && (state.kind === 'failed' || state.kind === 'priceExpired');
+  if (giftCard.status !== 'unpaid') {
+    return false;
+  }
+  if (state.kind === 'failed') {
+    return !state.contactSupport;
+  }
+  return state.kind === 'priceExpired';
 }

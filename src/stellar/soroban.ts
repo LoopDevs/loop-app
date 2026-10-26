@@ -48,6 +48,24 @@ class Soroban {
     return { status, latestLedger };
   }
 
+  async transfers(
+    contractId: string,
+    from: string,
+    to: string,
+    ledgers: { startLedger: number; endLedger: number },
+  ): Promise<unknown[]> {
+    const topics = [
+      nativeToScVal('transfer', { type: 'symbol' }),
+      new Address(from).toScVal(),
+      new Address(to).toScVal(),
+    ].map((topic) => topic.toXDR('base64'));
+    const { events } = await this.server.getEvents({
+      ...ledgers,
+      filters: [{ type: 'contract', contractIds: [contractId], topics: [topics, [...topics, '*']] }],
+    });
+    return events.map((event) => scValToNative(event.value));
+  }
+
   async wasmHash(contractId: string): Promise<string> {
     const { entries } = await this.server.getLedgerEntries(new Contract(contractId).getFootprint());
     if (entries.length === 0) {

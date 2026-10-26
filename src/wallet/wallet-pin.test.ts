@@ -38,9 +38,9 @@ test('with a pin the pinned wallet is chosen even when CTX lists another first',
 });
 
 test('with a pin a list that swaps or hides the pinned wallet is refused', () => {
-  assert.throws(() => WalletPin.choose([link('COTHER')], pinned), /no longer lists the wallet/);
-  assert.throws(() => WalletPin.choose([], pinned), /no longer lists the wallet/);
-  assert.throws(() => WalletPin.choose([link('CMINE', { status: 'inactive' })], pinned), /no longer lists/);
+  assert.throws(() => WalletPin.choose([link('COTHER')], pinned), /doesn't list the wallet/);
+  assert.throws(() => WalletPin.choose([], pinned), /doesn't list the wallet/);
+  assert.throws(() => WalletPin.choose([link('CMINE', { status: 'inactive' })], pinned), /doesn't list/);
 });
 
 test('a pin is kept per user and survives a reload', async () => {
@@ -59,6 +59,7 @@ test('an unreadable pin reads as none', async () => {
   assert.equal(await pin.read(), null);
 });
 
-test('a user id that could escape the storage key is refused', () => {
-  assert.throws(() => new WalletPin(memoryStorage(), '../x'), /Unexpected user id/);
+test('the storage key holds the user id base64url-encoded', () => {
+  assert.equal(new WalletPin(memoryStorage(), 'user-1').key, 'wallet.pin.dXNlci0x');
+  assert.match(new WalletPin(memoryStorage(), '../x?/é').key, /^wallet\.pin\.[A-Za-z0-9_-]+$/);
 });
