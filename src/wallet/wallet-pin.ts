@@ -26,10 +26,14 @@ export class WalletPin {
     this.storage = storage;
   }
 
-  static choose<T extends LinkShape>(links: readonly T[], pinned: PinnedWallet | null): T | null {
-    const usable = links.filter(
+  static usable<T extends LinkShape>(links: readonly T[]): T[] {
+    return links.filter(
       (candidate) => candidate.sponsored && candidate.chain === 'XLM' && candidate.status === 'active',
     );
+  }
+
+  static choose<T extends LinkShape>(links: readonly T[], pinned: PinnedWallet | null): T | null {
+    const usable = WalletPin.usable(links);
     if (!pinned) {
       return usable[0] ?? null;
     }

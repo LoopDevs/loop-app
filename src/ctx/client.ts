@@ -255,6 +255,14 @@ class CtxClient {
     await this.auth.clearSession();
   }
 
+  async eraseAccount(code: string): Promise<void> {
+    await this.userRequest('POST', '/erase', { code });
+  }
+
+  clearSession(): Promise<void> {
+    return this.auth.clearSession();
+  }
+
   async userId(): Promise<string> {
     return this.userIdFrom(await this.auth.requireAccessToken());
   }

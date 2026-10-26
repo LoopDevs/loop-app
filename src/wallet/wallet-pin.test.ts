@@ -33,6 +33,14 @@ test('without a pin the first active sponsored Stellar wallet is chosen', () => 
   assert.equal(WalletPin.choose([], null), null);
 });
 
+test('usable keeps only sponsored active Stellar wallets', () => {
+  const links = [link('CA', { sponsored: false }), link('CB', { chain: 'ETH' }), link('CC'), link('CD')];
+  assert.deepEqual(
+    WalletPin.usable(links).map(({ address }) => address),
+    ['CC', 'CD'],
+  );
+});
+
 test('with a pin the pinned wallet is chosen even when CTX lists another first', () => {
   assert.equal(WalletPin.choose([link('COTHER'), link('CMINE')], pinned)?.address, 'CMINE');
 });

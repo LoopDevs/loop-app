@@ -147,6 +147,7 @@ export default function SettingsScreen() {
                 label="Request my data"
                 onPress={() => Linking.openURL(loopLinks.supportMail('Data request'))}
               />
+              <Button label="Delete account" onPress={() => router.push('/settings/delete-account')} />
             </Section>
 
             <Button label="Sign out" onPress={signOut} disabled={busy} />

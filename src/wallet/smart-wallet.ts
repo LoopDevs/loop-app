@@ -112,13 +112,19 @@ export class SmartWallet {
     return passkeyKey;
   }
 
-  async balances(): Promise<Balances> {
+  static async balancesOf(address: string): Promise<Balances> {
     const [tokens, vaultShares] = await Promise.all([
-      Promise.all(network.tokens.map((token) => this.tokenBalance(token))),
-      soroban.balance(network.usdcVault, this.address),
+      Promise.all(
+        network.tokens.map(async (token) => ({ token, amount: await soroban.balance(token.contract, address) })),
+      ),
+      soroban.balance(network.usdcVault, address),
     ]);
-    const vaultValue = vaultShares === 0n ? 0n : await this.valueOf(vaultShares);
+    const vaultValue = vaultShares === 0n ? 0n : await SmartWallet.valueOf(vaultShares);
     return { tokens, vaultShares, vaultValue };
+  }
+
+  balances(): Promise<Balances> {
+    return SmartWallet.balancesOf(this.address);
   }
 
   async fundWithFriendbot(): Promise<void> {
@@ -168,7 +174,7 @@ export class SmartWallet {
   savingsTopUp(): SavingsTopUp {
     return new SavingsTopUp({
       balances: () => this.balances(),
-      valueOf: (shares) => this.valueOf(shares),
+      valueOf: (shares) => SmartWallet.valueOf(shares),
       withdraw: (shares) => this.withdraw(shares),
       transaction: (hash) => soroban.transaction(hash),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -198,10 +204,6 @@ export class SmartWallet {
     }
     const signature = await deviceSigner.sign(this.userId, call.digest);
     return { signature, devicePublicKey };
-  }
-
-  private async tokenBalance(token: Token): Promise<TokenBalance> {
-    return { token, amount: await soroban.balance(token.contract, this.address) };
   }
 
   private static accountOf(address: string): string {
@@ -263,12 +265,12 @@ export class SmartWallet {
     if (amount !== shares || from !== this.address || minimums.length !== 1) {
       throw new Error('The withdrawal does not match the request');
     }
-    if (minimums[0] < Holdings.floorOf(await this.valueOf(shares))) {
+    if (minimums[0] < Holdings.floorOf(await SmartWallet.valueOf(shares))) {
       throw new Error('The withdrawal minimum is too low');
     }
   }
 
-  private async valueOf(shares: bigint): Promise<bigint> {
+  private static async valueOf(shares: bigint): Promise<bigint> {
     const [value] = (await soroban.read(network.usdcVault, 'get_asset_amounts_per_shares', [
       i128(shares),
     ])) as bigint[];
