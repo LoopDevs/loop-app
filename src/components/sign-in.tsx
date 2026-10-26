@@ -10,9 +10,10 @@ import {
   type ReactNode,
 } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, SlideInDown, SlideInRight, useReducedMotion } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, SlideInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AddDevice } from '@/components/add-device';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/form';
 import { PressScale } from '@/components/press-scale';
@@ -21,7 +22,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
-import { Brand, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -29,6 +30,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
 import type { SocialProvider } from '@/session/social-sign-in';
+import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type SignInListener = () => void;
 
@@ -115,18 +117,20 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
+  const [authenticated, setAuthenticated] = useState(false);
+  const close = authenticated ? onSignedIn : onClose;
   const entering = reduceMotion
     ? undefined
-    : (wide ? SlideInRight : SlideInDown).duration(Motion.transition).easing(Motion.easeOut);
+    : (wide ? FadeInDown : SlideInDown).duration(Motion.transition).easing(Motion.easeOut);
   return (
-    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal transparent visible animationType="none" onRequestClose={close} statusBarTranslucent>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={[styles.layer, wide ? styles.layerWide : styles.layerNarrow]}>
         <Animated.View entering={FadeIn.duration(Motion.state)} style={StyleSheet.absoluteFill}>
           <Pressable
             style={styles.backdrop}
-            onPress={onClose}
+            onPress={close}
             accessibilityRole="button"
             accessibilityLabel="Close sign in"
           />
@@ -136,20 +140,24 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
           accessibilityViewIsModal
           style={[
             wide ? styles.sheetWide : styles.sheetNarrow,
-            { backgroundColor: theme.background, paddingBottom: wide ? 0 : insets.bottom },
+            {
+              backgroundColor: theme.background,
+              borderColor: theme.border,
+              paddingBottom: wide ? 0 : insets.bottom,
+            },
           ]}>
-          <View style={[styles.sheetHeader, { paddingTop: wide ? Spacing.four : Spacing.three }]}>
+          <View style={styles.sheetHeader}>
             <Wordmark height={20} />
             <PressScale
-              onPress={onClose}
+              onPress={close}
               accessibilityRole="button"
               accessibilityLabel="Close"
-              style={styles.close}>
-              <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} size={20} tintColor={Brand.onRoyal} />
+              style={[styles.close, { backgroundColor: theme.backgroundSubtle }]}>
+              <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} size={20} tintColor={theme.text} />
             </PressScale>
           </View>
           <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
-            <SignInForm reason={reason} onSignedIn={onSignedIn} />
+            <SignInForm reason={reason} onAuthenticated={() => setAuthenticated(true)} onSignedIn={onSignedIn} />
           </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
@@ -157,12 +165,60 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
   );
 }
 
-function SignInForm({ reason, onSignedIn }: { reason: string; onSignedIn: () => void }) {
-  const [step, setStep] = useState<'email' | 'code'>('email');
+type SignInStep = 'email' | 'code' | 'secure' | 'add-device';
+
+const stepNumbers: Record<SignInStep, number> = {
+  email: 1,
+  code: 2,
+  secure: 3,
+  'add-device': 3,
+};
+
+const stepCount = 3;
+
+type SignInFormProps = {
+  reason: string;
+  onAuthenticated: () => void;
+  onSignedIn: () => void;
+};
+
+function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
+  const [step, setStep] = useState<SignInStep>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
+
+  const finish = () => {
+    haptics.success();
+    onSignedIn();
+  };
+
+  const continueToWallet = async () => {
+    onAuthenticated();
+    try {
+      if (await SmartWallet.load()) {
+        finish();
+        return;
+      }
+      setStep('secure');
+    } catch (error) {
+      if (error instanceof UnlinkedDevice) {
+        setUnlinkedWallet(error.wallet);
+        setStep('add-device');
+        return;
+      }
+      throw error;
+    }
+  };
+
+  const secureAccount = () =>
+    run(async () => {
+      const profile = await ctx.me();
+      await SmartWallet.create(profile.passkeyLabel());
+      finish();
+    });
 
   const requestCode = () =>
     run(async () => {
@@ -175,8 +231,7 @@ function SignInForm({ reason, onSignedIn }: { reason: string; onSignedIn: () => 
       if (!(await ctx.isSignedIn())) {
         await ctx.verifyCode(email.trim(), code.trim());
       }
-      haptics.success();
-      onSignedIn();
+      await continueToWallet();
     });
 
   const resendCode = () =>
@@ -198,17 +253,17 @@ function SignInForm({ reason, onSignedIn }: { reason: string; onSignedIn: () => 
         return;
       }
       await ctx.signInWithOAuth(provider, idToken);
-      haptics.success();
-      onSignedIn();
+      await continueToWallet();
     });
 
   return (
     <View style={styles.form}>
-      {step === 'email' ? (
+      <StepIndicator current={stepNumbers[step]} />
+      {step === 'email' && (
         <Animated.View key="email" entering={FadeIn.duration(Motion.state)} style={styles.form}>
           <View style={styles.intro}>
             <ThemedText type="subtitle" accessibilityRole="header">
-              Sign in to Loop
+              Enter your email
             </ThemedText>
             <ThemedText themeColor="textSecondary">
               {reason || 'Buy gift cards and earn cashback on every one.'}
@@ -233,11 +288,12 @@ function SignInForm({ reason, onSignedIn }: { reason: string; onSignedIn: () => 
             disabled={busy || !email.trim()}
           />
         </Animated.View>
-      ) : (
+      )}
+      {step === 'code' && (
         <Animated.View key="code" entering={FadeIn.duration(Motion.state)} style={styles.form}>
           <View style={styles.intro}>
             <ThemedText type="subtitle" accessibilityRole="header">
-              Check your email
+              Confirm code
             </ThemedText>
             <ThemedText themeColor="textSecondary">We sent a code to {email.trim()}. Enter it below.</ThemedText>
           </View>
@@ -268,21 +324,67 @@ function SignInForm({ reason, onSignedIn }: { reason: string; onSignedIn: () => 
           </View>
         </Animated.View>
       )}
+      {step === 'secure' && (
+        <Animated.View key="secure" entering={FadeIn.duration(Motion.state)} style={styles.form}>
+          <View style={styles.intro}>
+            <ThemedText type="subtitle" accessibilityRole="header">
+              Secure your account
+            </ThemedText>
+            <ThemedText themeColor="textSecondary">
+              Use Face ID, Touch ID or your device PIN so only you can spend your balance.
+            </ThemedText>
+          </View>
+          <Button
+            label={busy ? 'Setting up…' : 'Continue'}
+            variant="primary"
+            onPress={secureAccount}
+            disabled={busy}
+          />
+        </Animated.View>
+      )}
+      {step === 'add-device' && unlinkedWallet && (
+        <AddDevice wallet={unlinkedWallet} onAdded={async () => finish()} />
+      )}
       {message !== '' && (
         <ThemedText type="small" themeColor="danger" selectable accessibilityLiveRegion="polite">
           {message}
         </ThemedText>
       )}
+      {stepNumbers[step] < stepCount && (
+        <ThemedText type="small" themeColor="textSecondary">
+          By continuing you agree to Loop&apos;s{' '}
+          <ExternalLink href={loopLinks.terms} style={styles.link}>
+            Terms
+          </ExternalLink>{' '}
+          and{' '}
+          <ExternalLink href={loopLinks.privacy} style={styles.link}>
+            Privacy Policy
+          </ExternalLink>
+          .
+        </ThemedText>
+      )}
+    </View>
+  );
+}
+
+function StepIndicator({ current }: { current: number }) {
+  const theme = useTheme();
+  const steps = Array.from({ length: stepCount }, (_, index) => index + 1);
+  return (
+    <View style={styles.stepIndicator}>
+      <View
+        style={styles.stepBars}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants">
+        {steps.map((number) => (
+          <View
+            key={number}
+            style={[styles.stepBar, { backgroundColor: number === current ? theme.accent : theme.border }]}
+          />
+        ))}
+      </View>
       <ThemedText type="small" themeColor="textSecondary">
-        By continuing you agree to Loop&apos;s{' '}
-        <ExternalLink href={loopLinks.terms} style={styles.link}>
-          Terms
-        </ExternalLink>{' '}
-        and{' '}
-        <ExternalLink href={loopLinks.privacy} style={styles.link}>
-          Privacy Policy
-        </ExternalLink>
-        .
+        Step {current} of {stepCount}
       </ThemedText>
     </View>
   );
@@ -290,6 +392,7 @@ function SignInForm({ reason, onSignedIn }: { reason: string; onSignedIn: () => 
 
 export function SignInButton({ label = 'Sign in', reason }: { label?: string; reason?: string }) {
   const { openSignIn } = useSignIn();
+  const theme = useTheme();
   return (
     <PressScale
       onPress={() => {
@@ -297,8 +400,8 @@ export function SignInButton({ label = 'Sign in', reason }: { label?: string; re
         openSignIn(reason);
       }}
       accessibilityRole="button"
-      style={styles.signInButton}>
-      <Text style={styles.signInLabel} maxFontSizeMultiplier={1.3}>
+      style={[styles.signInButton, { backgroundColor: theme.accent }]}>
+      <Text style={[styles.signInLabel, { color: theme.onAccent }]} maxFontSizeMultiplier={1.3}>
         {label}
       </Text>
     </PressScale>
@@ -310,31 +413,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   layerWide: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
   },
   layerNarrow: {
     justifyContent: 'flex-end',
   },
   backdrop: {
     flex: 1,
-    backgroundColor: Brand.scrim,
+    backgroundColor: 'rgba(15, 27, 45, 0.32)',
   },
   sheetWide: {
-    width: Layout.sheetWidth,
-    maxWidth: '100%',
-    height: '100%',
-    boxShadow: '-12px 0 40px rgba(10, 22, 64, 0.28)',
+    width: '100%',
+    maxWidth: Layout.sheetWidth,
+    maxHeight: '90%',
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    ...Elevation.raised,
   },
   sheetNarrow: {
     maxHeight: '92%',
-    borderTopLeftRadius: Radius.control,
-    borderTopRightRadius: Radius.control,
+    borderTopLeftRadius: Radius.card,
+    borderTopRightRadius: Radius.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+    ...Elevation.raised,
   },
   sheetHeader: {
-    backgroundColor: Brand.royal,
     paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.three,
+    paddingTop: Spacing.three,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -342,8 +451,7 @@ const styles = StyleSheet.create({
   close: {
     width: 44,
     height: 44,
-    borderRadius: Radius.control,
-    backgroundColor: Brand.navy,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -352,6 +460,18 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: Spacing.three,
+  },
+  stepIndicator: {
+    gap: Spacing.two,
+  },
+  stepBars: {
+    flexDirection: 'row',
+    gap: Spacing.one,
+  },
+  stepBar: {
+    width: 24,
+    height: 4,
+    borderRadius: Radius.pill,
   },
   intro: {
     gap: Spacing.two,
@@ -371,12 +491,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.control,
-    backgroundColor: Brand.onRoyal,
     alignItems: 'center',
     justifyContent: 'center',
   },
   signInLabel: {
-    color: Brand.navy,
     fontFamily: FontFamily.semibold,
     fontSize: 15,
   },
