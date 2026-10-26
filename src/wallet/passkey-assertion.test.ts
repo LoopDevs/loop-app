@@ -33,6 +33,13 @@ function assertion(challenge: Uint8Array, highS: boolean, type = 'webauthn.get')
   });
 }
 
+test('the challenge is the digest in unpadded base64url', () => {
+  const knownDigest = Uint8Array.from({ length: 32 }, (_, index) => index * 7 + 3);
+  const challenge = PasskeyAssertion.challengeOf(knownDigest);
+  assert.equal(challenge, 'AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw');
+  assert.equal(challenge.length, 43);
+});
+
 test('a DER signature converts to 64 raw bytes', () => {
   const signed = p256.sign(digest, secret, { lowS: true });
   const raw = PasskeyAssertion.rawLowS(signed.toBytes('der'));

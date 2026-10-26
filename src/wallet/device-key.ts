@@ -9,6 +9,12 @@ export type DeviceKeyStorage = {
   remove(name: string): Promise<void>;
 };
 
+export class MissingDeviceSecret extends Error {
+  constructor() {
+    super('No device key on this phone');
+  }
+}
+
 export class DeviceKey {
   readonly secretName: string;
   readonly publicKeyName: string;
@@ -48,9 +54,11 @@ export class DeviceKey {
   async sign(digest: Uint8Array): Promise<string> {
     const ownPublicKey = await this.storage.read(this.publicKeyName, false);
     const secretName = ownPublicKey ? this.secretName : DeviceKey.sharedSecretName;
+    const publicKeyName = ownPublicKey ? this.publicKeyName : DeviceKey.sharedPublicKeyName;
     const secret = await this.storage.read(secretName, true);
     if (!secret) {
-      throw new Error('No device key on this phone');
+      await this.storage.remove(publicKeyName);
+      throw new MissingDeviceSecret();
     }
     return base64.encode(ed25519.sign(digest, base64.decode(secret)));
   }

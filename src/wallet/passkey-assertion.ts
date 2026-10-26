@@ -30,6 +30,10 @@ export class PasskeyAssertion {
     );
   }
 
+  static challengeOf(digest: Uint8Array): string {
+    return base64.encodeUrl(digest);
+  }
+
   static rawLowS(der: Uint8Array): Uint8Array {
     const signature = p256.Signature.fromBytes(der, 'der');
     const order = p256.Point.Fn.ORDER;
@@ -39,7 +43,7 @@ export class PasskeyAssertion {
 
   requireSigned(challenge: Uint8Array, publicKey: Uint8Array): void {
     const clientData = JSON.parse(new TextDecoder().decode(this.clientDataJson)) as Record<string, unknown>;
-    if (clientData.type !== 'webauthn.get' || clientData.challenge !== base64.encodeUrl(challenge)) {
+    if (clientData.type !== 'webauthn.get' || clientData.challenge !== PasskeyAssertion.challengeOf(challenge)) {
       throw new Error('The confirmation was for something else');
     }
     const message = concatBytes(this.authenticatorData, sha256(this.clientDataJson));

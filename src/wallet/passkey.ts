@@ -36,7 +36,7 @@ export const passkey = {
 
   async sign(challenge: Uint8Array): Promise<PasskeyAssertion> {
     const signed = await Passkeys.get({
-      challenge: base64.encodeUrl(challenge),
+      challenge: PasskeyAssertion.challengeOf(challenge),
       rpId: rpId(),
       userVerification: 'required',
     });

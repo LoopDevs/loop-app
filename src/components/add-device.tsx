@@ -1,28 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Button, Notice } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Layout, Motion, Spacing } from '@/constants/theme';
+import { errorMessage } from '@/hooks/use-busy-action';
 import type { SmartWallet } from '@/wallet/smart-wallet';
-
-const setupFailed = "Couldn't set up Loop on this device. Please try again.";
 
 export function AddDevice({ wallet, onAdded }: { wallet: SmartWallet; onAdded: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [message, setMessage] = useState('');
+  const inFlight = useRef(false);
+  const unmounted = useRef(new AbortController());
+
+  useEffect(() => {
+    const controller = new AbortController();
+    unmounted.current = controller;
+    return () => controller.abort();
+  }, []);
 
   const addThisDevice = async () => {
+    if (inFlight.current) {
+      return;
+    }
+    inFlight.current = true;
     setBusy(true);
-    setFailed(false);
+    setMessage('');
     try {
-      await wallet.addThisDevice();
+      await wallet.addThisDevice(unmounted.current.signal);
       await onAdded();
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      if (!unmounted.current.signal.aborted) {
+        setMessage(errorMessage(error));
+      }
     } finally {
-      setBusy(false);
+      inFlight.current = false;
+      if (!unmounted.current.signal.aborted) {
+        setBusy(false);
+      }
     }
   };
 
@@ -38,7 +54,7 @@ export function AddDevice({ wallet, onAdded }: { wallet: SmartWallet; onAdded: (
         onPress={addThisDevice}
         disabled={busy}
       />
-      {failed && <Notice message={setupFailed} />}
+      {message !== '' && <Notice message={message} />}
     </Animated.View>
   );
 }

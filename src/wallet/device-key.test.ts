@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { base64 } from './base64.ts';
-import { DeviceKey, type DeviceKeyStorage } from './device-key.ts';
+import { DeviceKey, MissingDeviceSecret, type DeviceKeyStorage } from './device-key.ts';
 
 class MemoryStorage implements DeviceKeyStorage {
   readonly entries = new Map<string, { value: string; biometric: boolean }>();
@@ -115,4 +115,20 @@ test('a user with no key cannot sign', async () => {
   await new DeviceKey(storage, 'a').create();
   await assert.rejects(new DeviceKey(storage, 'b').sign(digest));
   assert.equal(await new DeviceKey(storage, 'b').publicKey(), null);
+});
+
+test('a secret dropped by the OS removes the public key so the device reads as unlinked', async () => {
+  const storage = new MemoryStorage();
+  const key = new DeviceKey(storage, 'a');
+  await key.create();
+  storage.entries.delete(key.secretName);
+  await assert.rejects(key.sign(digest), MissingDeviceSecret);
+  assert.equal(await key.publicKey(), null);
+});
+
+test('a dropped shared secret removes the shared public key', async () => {
+  const storage = new MemoryStorage();
+  await storage.write(DeviceKey.sharedPublicKeyName, 'shared', false);
+  await assert.rejects(new DeviceKey(storage, 'a').sign(digest), MissingDeviceSecret);
+  assert.equal(await new DeviceKey(storage, 'a').publicKey(), null);
 });

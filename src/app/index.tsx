@@ -188,7 +188,13 @@ export default function HomeScreen() {
       if (!wallet || vaultShares === 0n) {
         return;
       }
-      const result = await wallet.withdraw(vaultShares);
+      const result = await wallet.withdraw(vaultShares).catch((error: unknown) => {
+        if (error instanceof UnlinkedDevice) {
+          setUnlinkedWallet(error.wallet);
+          setScreen('unlinked-device');
+        }
+        throw error;
+      });
       if (result.error) {
         setMessage(result.error);
       } else {

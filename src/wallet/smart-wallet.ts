@@ -15,7 +15,8 @@ import { network, type Token } from '@/stellar/network';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { base64 } from '@/wallet/base64';
-import { DeviceRotation } from '@/wallet/device-rotation';
+import { MissingDeviceSecret } from '@/wallet/device-key';
+import { DeviceLink } from '@/wallet/device-link';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey } from '@/wallet/passkey';
@@ -46,7 +47,6 @@ export class UnlinkedDevice extends Error {
 export class SmartWallet {
   static readonly passkeyRuleId = 0;
   static readonly deviceRuleId = 1;
-  private static readonly deviceRulePollMs = 2_000;
 
   private constructor(
     readonly id: string,
@@ -71,6 +71,13 @@ export class SmartWallet {
       await pin.write({ address: wallet.address, passkeyPublicKey: base64.encode(checked.passkeyPublicKey) });
     }
     return wallet;
+  }
+
+  static unlessUnlinked(error: unknown): null {
+    if (error instanceof UnlinkedDevice) {
+      return null;
+    }
+    throw error;
   }
 
   static async create(label: string): Promise<SmartWallet> {
@@ -112,7 +119,7 @@ export class SmartWallet {
     );
   }
 
-  async addThisDevice(): Promise<void> {
+  async addThisDevice(signal?: AbortSignal): Promise<void> {
     const pin = new WalletPin(AsyncStorage, this.userId);
     const pinned = await pin.read();
     const checked = await this.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
@@ -121,26 +128,7 @@ export class SmartWallet {
       await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
       return;
     }
-    const newDevicePublicKey = await deviceSigner.create(this.userId);
-    const intent: SmartWalletIntent = { intent: 'rotate_device', newDevicePublicKey };
-    const built = await ctx.buildTransaction(this.id, intent);
-    const call = SponsoredCall.verify(
-      built,
-      this.address,
-      [SmartWallet.passkeyRuleId],
-      await soroban.latestLedger(),
-    );
-    DeviceRotation.require(call, this.address, base64.decode(newDevicePublicKey));
-    const assertion = await passkey.sign(call.digest);
-    assertion.requireSigned(call.digest, passkeyPublicKey);
-    const result = await ctx.sponsorTransaction(this.id, intent, {
-      transaction: built.transaction,
-      passkey: assertion.toJson(passkeyPublicKey),
-    });
-    if (result.error || result.status === 'failed') {
-      throw new Error(result.error || 'Setting up this device failed. Try again.');
-    }
-    await this.waitForDeviceRule(base64.decode(newDevicePublicKey), built.expiryLedger);
+    await this.deviceLink().add(this.address, passkeyPublicKey, signal);
     await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
   }
 
@@ -228,7 +216,9 @@ export class SmartWallet {
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
     }
-    const signature = await deviceSigner.sign(this.userId, call.digest);
+    const signature = await deviceSigner.sign(this.userId, call.digest).catch((error: unknown) => {
+      throw error instanceof MissingDeviceSecret ? new UnlinkedDevice(this) : error;
+    });
     return { signature, devicePublicKey };
   }
 
@@ -269,16 +259,16 @@ export class SmartWallet {
     return (await soroban.read(this.address, 'get_context_rule', [xdr.ScVal.scvU32(id)])) as ContextRule;
   }
 
-  private async waitForDeviceRule(devicePublicKey: Uint8Array, expiryLedger: number): Promise<void> {
-    for (;;) {
-      if (WalletRules.holdsDeviceKey(await this.rule(SmartWallet.deviceRuleId), devicePublicKey)) {
-        return;
-      }
-      if ((await soroban.latestLedger()) > expiryLedger) {
-        throw new Error('Setting up this device timed out. Try again.');
-      }
-      await new Promise((resolve) => setTimeout(resolve, SmartWallet.deviceRulePollMs));
-    }
+  private deviceLink(): DeviceLink {
+    return new DeviceLink({
+      createDeviceKey: () => deviceSigner.create(this.userId),
+      buildTransaction: (intent) => ctx.buildTransaction(this.id, intent),
+      sponsorTransaction: (intent, signed) => ctx.sponsorTransaction(this.id, intent, signed),
+      signWithPasskey: (challenge) => passkey.sign(challenge),
+      latestLedger: () => soroban.latestLedger(),
+      deviceRule: () => this.rule(SmartWallet.deviceRuleId),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    });
   }
 
   private async requireWithdraw(call: SponsoredCall, shares: bigint): Promise<void> {
