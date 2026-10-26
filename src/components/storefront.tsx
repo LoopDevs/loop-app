@@ -13,7 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
 import { Brand, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
-import { ctx } from '@/ctx/client';
+import { ctx, type MerchantPage, type MerchantQuery } from '@/ctx/client';
 import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
@@ -34,14 +34,56 @@ export type Catalog = {
 
 const catalogRequests = new Map<string, Promise<Catalog>>();
 const loadedCatalogs = new Map<string, Catalog>();
+const loadedMerchants = new Map<string, Merchant>();
+const loadedPages = new Map<string, MerchantPage>();
 
-function loadCatalog(country: string): Promise<Catalog> {
+function rememberMerchants(merchants: readonly Merchant[]) {
+  for (const merchant of merchants) {
+    loadedMerchants.set(merchant.id, merchant);
+    loadedMerchants.set(merchant.slug, merchant);
+  }
+}
+
+export function cachedMerchant(idOrSlug: string): Merchant | null {
+  return loadedMerchants.get(idOrSlug) ?? null;
+}
+
+export async function loadMerchant(idOrSlug: string): Promise<Merchant> {
+  const merchant = await ctx.merchant(idOrSlug);
+  rememberMerchants([merchant]);
+  loadedMerchants.set(idOrSlug, merchant);
+  return merchant;
+}
+
+function pageKey(query: MerchantQuery): string {
+  return JSON.stringify([
+    query.country,
+    query.name ?? '',
+    query.ids ?? [],
+    query.category ?? '',
+    query.order ?? '',
+    query.page ?? 1,
+    query.perPage,
+  ]);
+}
+
+export function cachedMerchantPage(query: MerchantQuery): MerchantPage | null {
+  return loadedPages.get(pageKey(query)) ?? null;
+}
+
+export async function loadMerchantPage(query: MerchantQuery): Promise<MerchantPage> {
+  const loaded = await ctx.merchants(query);
+  rememberMerchants(loaded.result);
+  loadedPages.set(pageKey(query), loaded);
+  return loaded;
+}
+
+export function loadCatalog(country: string): Promise<Catalog> {
   const pending = catalogRequests.get(country);
   if (pending) {
     return pending;
   }
-  const request = ctx
-    .merchants({ country, perPage: catalogScanSize })
+  const request = loadMerchantPage({ country, perPage: catalogScanSize })
     .then(({ result, pagination }) => {
       const catalog = {
         top: Merchant.byCashback(result).filter((merchant) => merchant.cashbackBasisPoints() > 0),
@@ -331,16 +373,23 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
       run(async () => {
         const request = ++latestRequest.current;
         retryPage.current = next;
-        if (next === 1) {
-          setPage(0);
-        }
-        const { result, pagination } = await ctx.merchants({
+        const merchantQuery = {
           country,
           name: query,
           category: category ?? undefined,
           page: next,
           perPage: catalogPageSize,
-        });
+        };
+        const cached = next === 1 ? cachedMerchantPage(merchantQuery) : null;
+        if (cached) {
+          setMerchants(cached.result);
+          setPage(1);
+          setPages(cached.pagination.pages);
+          setTotal(cached.pagination.total);
+        } else if (next === 1) {
+          setPage(0);
+        }
+        const { result, pagination } = await loadMerchantPage(merchantQuery);
         if (request !== latestRequest.current) {
           return;
         }

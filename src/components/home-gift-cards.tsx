@@ -9,11 +9,11 @@ import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { Motion, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
-import { Merchant } from '@/ctx/merchant';
+import { loadCatalog } from '@/components/storefront';
+import type { Merchant } from '@/ctx/merchant';
 import { errorMessage } from '@/hooks/use-busy-action';
 
 const cardsShown = 6;
-const cashbackScanSize = 200;
 const placeholderHeight = 112;
 
 async function loadTopCashback(): Promise<Merchant[]> {
@@ -21,8 +21,8 @@ async function loadTopCashback(): Promise<Merchant[]> {
   if (profile.needsSetup() || !profile.country) {
     return [];
   }
-  const { result } = await ctx.merchants({ country: profile.country, perPage: cashbackScanSize });
-  return Merchant.byCashback(result).slice(0, cardsShown);
+  const catalog = await loadCatalog(profile.country);
+  return catalog.top.slice(0, cardsShown);
 }
 
 type HomeGiftCardsProps = {

@@ -14,7 +14,15 @@ import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/press-scale';
 import { useOnSignIn } from '@/components/sign-in';
 import { MerchantGridSkeleton } from '@/components/skeleton';
-import { MerchantCatalog, PageWidth, SiteFooter, TopCashback, useCatalog } from '@/components/storefront';
+import {
+  cachedMerchantPage,
+  loadMerchantPage,
+  MerchantCatalog,
+  PageWidth,
+  SiteFooter,
+  TopCashback,
+  useCatalog,
+} from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
@@ -41,14 +49,8 @@ import { useTheme } from '@/hooks/use-theme';
 const merchantsPerPage = 20;
 const searchDelayMs = 300;
 const stripSize = 10;
-const cashbackScanSize = 500;
 const recentOrdersScanned = 50;
 const staggeredTiles = 8;
-
-async function loadTopCashback(country: string): Promise<Merchant[]> {
-  const { result } = await ctx.merchants({ country, perPage: cashbackScanSize });
-  return Merchant.byCashback(result).slice(0, stripSize);
-}
 
 async function loadRecentlyBought(country: string): Promise<Merchant[]> {
   const { result: giftCards } = await ctx.giftCards({
@@ -59,11 +61,19 @@ async function loadRecentlyBought(country: string): Promise<Merchant[]> {
   return loadByIds(country, ids);
 }
 
+function byIdsQuery(country: string, ids: readonly string[]) {
+  return { country, ids: [...ids], perPage: ids.length };
+}
+
+function cachedByIds(country: string, ids: readonly string[]): Merchant[] {
+  return cachedMerchantPage(byIdsQuery(country, ids))?.result ?? [];
+}
+
 async function loadByIds(country: string, ids: readonly string[]): Promise<Merchant[]> {
   if (ids.length === 0) {
     return [];
   }
-  const { result } = await ctx.merchants({ country, ids: [...ids], perPage: ids.length });
+  const { result } = await loadMerchantPage(byIdsQuery(country, ids));
   return Merchant.inOrder(result, ids);
 }
 
@@ -85,7 +95,6 @@ export default function ShopScreen() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
-  const [topCashback, setTopCashback] = useState<Merchant[]>([]);
   const [recentlyBought, setRecentlyBought] = useState<Merchant[]>([]);
   const [favouriteMerchants, setFavouriteMerchants] = useState<Merchant[]>([]);
   const { favourites } = useFavourites();
@@ -132,6 +141,8 @@ export default function ShopScreen() {
   }, [search]);
 
   const country = profile && !profile.needsSetup() ? profile.country : undefined;
+  const catalog = useCatalog(country);
+  const topCashback = catalog?.top.slice(0, stripSize) ?? [];
 
   const loadMerchants = useCallback(
     (next: number) =>
@@ -145,15 +156,16 @@ export default function ShopScreen() {
         }
         const request = ++latestRequest.current;
         retryPage.current = next;
-        if (next === 1) {
+        const merchantQuery = { country, name: query, page: next, perPage: merchantsPerPage };
+        const cached = next === 1 ? cachedMerchantPage(merchantQuery) : null;
+        if (cached) {
+          setMerchants(cached.result);
+          setPage(1);
+          setPages(cached.pagination.pages);
+        } else if (next === 1) {
           setPage(0);
         }
-        const { result, pagination } = await ctx.merchants({
-          country,
-          name: query,
-          page: next,
-          perPage: merchantsPerPage,
-        });
+        const { result, pagination } = await loadMerchantPage(merchantQuery);
         if (request !== latestRequest.current) {
           return;
         }
@@ -173,15 +185,13 @@ export default function ShopScreen() {
       return;
     }
     let current = true;
-    Promise.all([
-      loadTopCashback(country).catch(() => []),
-      loadRecentlyBought(country).catch(() => []),
-    ]).then(([top, recent]) => {
-      if (current) {
-        setTopCashback(top);
-        setRecentlyBought(recent);
-      }
-    });
+    loadRecentlyBought(country)
+      .catch(() => [])
+      .then((recent) => {
+        if (current) {
+          setRecentlyBought(recent);
+        }
+      });
     return () => {
       current = false;
     };
@@ -205,7 +215,9 @@ export default function ShopScreen() {
   }, [country, favourites]);
 
   const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
-  const shownFavourites = Merchant.inOrder(favouriteMerchants, favourites.ids);
+  const knownFavourites =
+    favouriteMerchants.length > 0 || !country ? favouriteMerchants : cachedByIds(country, favourites.ids);
+  const shownFavourites = Merchant.inOrder(knownFavourites, favourites.ids);
 
   const chooseCountry = (choice: CountryChoice) =>
     runAccount(async () => {

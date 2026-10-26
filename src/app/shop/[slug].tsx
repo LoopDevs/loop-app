@@ -10,7 +10,8 @@ import { Button, Notice } from '@/components/form';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
 import { CashbackPill, MerchantCover } from '@/components/merchant-tile';
 import { PressScale } from '@/components/press-scale';
-import { OrderDetailSkeleton } from '@/components/skeleton';
+import { OrderDetailSkeleton, Skeleton } from '@/components/skeleton';
+import { cachedMerchant, loadMerchant } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
@@ -31,9 +32,9 @@ export default function MerchantScreen() {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const { busy, message, run } = useBusyAction();
-  const [merchant, setMerchant] = useState<Merchant | null>(null);
+  const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
-  const [signedIn, setSignedIn] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide, gutter } = usePageLayout();
@@ -45,11 +46,12 @@ export default function MerchantScreen() {
       run(async () => {
         if (loadedSlug.current !== slug) {
           loadedSlug.current = slug;
-          setMerchant(null);
+          setMerchant(cachedMerchant(slug));
+          setSignedIn(null);
         }
         const isSignedIn = await ctx.isSignedIn();
         const [loadedMerchant, loadedWallet] = await Promise.all([
-          ctx.merchant(slug),
+          loadMerchant(slug),
           isSignedIn ? SmartWallet.load() : null,
         ]);
         setMerchant(loadedMerchant);
@@ -94,6 +96,12 @@ export default function MerchantScreen() {
 
   const buyCard = wallet ? (
     <GiftCardPurchase merchant={merchant} wallet={wallet} />
+  ) : signedIn === null ? (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <Skeleton width="60%" height={22} />
+      <Skeleton width="90%" height={16} />
+      <Skeleton width="100%" height={48} />
+    </View>
   ) : signedIn ? (
     <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <ThemedText type="heading">Finish setting up Loop</ThemedText>
@@ -106,7 +114,7 @@ export default function MerchantScreen() {
     <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <ThemedText type="heading">Buy a {merchant.name} gift card</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Sign in to choose an amount{earnLine}. Cashback goes into a wallet only you control.
+        Sign in to choose an amount{earnLine}. Your cashback is yours to spend or save.
       </ThemedText>
       <Button
         label="Sign in to buy"
@@ -153,6 +161,7 @@ export default function MerchantScreen() {
         </View>
 
         <View style={[styles.content, pageWidth, wide && styles.contentWide]}>
+          {message !== '' && <Notice message={message} actionLabel="Try again" onAction={load} disabled={busy} />}
           {wide ? <View style={styles.buyColumn}>{buyCard}</View> : buyCard}
 
           <View style={[styles.details, wide && styles.detailsWide]}>
