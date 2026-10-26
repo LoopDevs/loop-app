@@ -24,7 +24,7 @@ export class Rates {
     return new Rates(parsed);
   }
 
-  static async fetch(currencies: readonly PaymentCurrency[]): Promise<Rates> {
+  static async fetch(currencies: readonly string[]): Promise<Rates> {
     const priced = currencies.filter((currency) => !Rates.isUsdPegged(currency));
     const prices = await Promise.all(priced.map((currency) => Rates.fetchUsdPrice(currency)));
     return Rates.fromPrices(Object.fromEntries(priced.map((currency, index) => [currency, prices[index]])));
@@ -41,8 +41,8 @@ export class Rates {
     return currency === Rates.usd || (Object.hasOwn(stablePeg, currency) && stablePeg[currency as PaymentCurrency] === Rates.usd);
   }
 
-  private static async fetchUsdPrice(currency: PaymentCurrency): Promise<string | null> {
-    const market = stablePeg[currency] ?? currency;
+  private static async fetchUsdPrice(currency: string): Promise<string | null> {
+    const market = (Object.hasOwn(stablePeg, currency) && stablePeg[currency as PaymentCurrency]) || currency;
     try {
       const quotes = await Deadline.run(Deadline.requestMs, async (signal) => {
         const response = await fetch(`${Rates.source}?source=ctx&symbol=${market}${Rates.usd}`, { signal });

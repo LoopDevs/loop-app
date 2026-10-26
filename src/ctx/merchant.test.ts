@@ -11,7 +11,7 @@ const json: MerchantJson = {
   country: 'US',
   currency: 'USD',
   denominationType: 'min-max',
-  denominations: ['5.00', '500.00'],
+  denominationValues: ['5.00', '500.00'],
   userDiscount: 250,
 };
 
@@ -118,4 +118,51 @@ test('categories list the most common first and skip merchants without any', () 
     new Merchant({ ...json, id: 'c' }),
   ];
   assert.deepEqual(Merchant.categoriesOf(merchants), ['food', 'fashion']);
+});
+
+test('denomination values are read from the merchant JSON', () => {
+  assert.deepEqual(new Merchant(json).denominationValues, ['5.00', '500.00']);
+  assert.deepEqual(new Merchant({ ...json, denominationValues: null }).denominationValues, []);
+});
+
+test('a range merchant shows its range in whole units when it can', () => {
+  assert.equal(new Merchant(json).rangeLabel('en-US'), '$5 – $500');
+  assert.equal(new Merchant({ ...json, denominationValues: ['2.50', '50'] }).rangeLabel('en-US'), '$2.50 – $50');
+});
+
+test('a fixed merchant has no range and no quick amounts', () => {
+  const fixed = new Merchant({ ...json, denominationType: 'fixed', denominationValues: ['10', '25'] });
+  assert.equal(fixed.rangeLabel('en-US'), null);
+  assert.deepEqual(fixed.quickAmounts(), []);
+});
+
+test('quick amounts fall inside the range', () => {
+  assert.deepEqual(new Merchant(json).quickAmounts(), ['10', '25', '50', '100']);
+  assert.deepEqual(new Merchant({ ...json, denominationValues: ['30', '150'] }).quickAmounts(), ['50', '100']);
+});
+
+test('an exact amount inside the range is accepted', () => {
+  const merchant = new Merchant(json);
+  assert.equal(merchant.amountProblem('37.50', 'en-US'), null);
+  assert.equal(merchant.amountProblem('5', 'en-US'), null);
+  assert.equal(merchant.amountProblem('500.00', 'en-US'), null);
+  assert.equal(merchant.amountProblem('', 'en-US'), null);
+});
+
+test('an amount outside the range names the range', () => {
+  const merchant = new Merchant(json);
+  assert.equal(merchant.amountProblem('4.99', 'en-US'), 'Enter between $5 and $500');
+  assert.equal(merchant.amountProblem('500.01', 'en-US'), 'Enter between $5 and $500');
+});
+
+test('an amount that is not a number or has too many decimals is rejected', () => {
+  const merchant = new Merchant(json);
+  assert.equal(merchant.amountProblem('abc', 'en-US'), 'Enter an amount like 25 or 25.50');
+  assert.equal(merchant.amountProblem('25.505', 'en-US'), 'Enter an amount like 25 or 25.50');
+});
+
+test('a whole-units merchant rejects cents', () => {
+  const merchant = new Merchant({ ...json, denominationType: 'min-max-major' });
+  assert.equal(merchant.amountProblem('25.50', 'en-US'), 'Enter a whole amount, like 25');
+  assert.equal(merchant.amountProblem('25.00', 'en-US'), null);
 });

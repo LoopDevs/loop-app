@@ -154,7 +154,7 @@ test('an already submitted payment confirms without this attempt expiry', async 
   assert.deepEqual(await records.get('pay-1'), { txId: 'tx-other', at: 1 });
 });
 
-test('a rejected payment is forgotten so it can be paid again', async () => {
+test('a payment CTX calls no longer open is forgotten, as CTX refuses it before submitting the transaction', async () => {
   const records = new SentPayments(memoryStorage(), () => 1);
   const outcome = await sender(records).send('pay-1', async () =>
     signed(async () => {
