@@ -759,28 +759,36 @@ export function HowLoopWorks() {
           </View>
         </PageWidth>
       </View>
-      <PageWidth style={styles.bandInner}>
-        <View style={styles.bandHeading}>
-          <Text style={[styles.bandTitle, { color: theme.text }]} accessibilityRole="header">
-            Why shop with Loop
-          </Text>
-          <Text style={[styles.bandLine, { color: theme.textSecondary }]}>
-            The shops you love, with money back every time.
-          </Text>
-        </View>
-        <View style={[styles.benefits, wide && styles.benefitsWide]}>
-          {benefits.map((benefit) => (
-            <View key={benefit.title} style={[styles.benefit, wide && styles.benefitWide]}>
-              <SymbolView name={benefit.icon} size={28} tintColor={theme.accent} />
-              <View style={styles.benefitText}>
-                <Text style={[styles.stepTitle, { color: theme.text }]}>{benefit.title}</Text>
-                <Text style={[styles.stepBody, { color: theme.textSecondary }]}>{benefit.body}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </PageWidth>
+      <WhyShopWithLoop />
     </>
+  );
+}
+
+export function WhyShopWithLoop() {
+  const { wide } = usePageLayout();
+  const theme = useTheme();
+  return (
+    <PageWidth style={styles.bandInner}>
+      <View style={styles.bandHeading}>
+        <Text style={[styles.bandTitle, { color: theme.text }]} accessibilityRole="header">
+          Why shop with Loop
+        </Text>
+        <Text style={[styles.bandLine, { color: theme.textSecondary }]}>
+          The shops you love, with money back every time.
+        </Text>
+      </View>
+      <View style={[styles.benefits, wide && styles.benefitsWide]}>
+        {benefits.map((benefit) => (
+          <View key={benefit.title} style={[styles.benefit, wide && styles.benefitWide]}>
+            <SymbolView name={benefit.icon} size={28} tintColor={theme.accent} />
+            <View style={styles.benefitText}>
+              <Text style={[styles.stepTitle, { color: theme.text }]}>{benefit.title}</Text>
+              <Text style={[styles.stepBody, { color: theme.textSecondary }]}>{benefit.body}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </PageWidth>
   );
 }
 

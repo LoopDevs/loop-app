@@ -16,6 +16,7 @@ export default function ShopLayout() {
         name="[slug]"
         options={{
           title: '',
+          headerTitle: '',
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.text,
           headerTitleStyle: { fontFamily: FontFamily.semibold },

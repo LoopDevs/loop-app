@@ -13,7 +13,8 @@ import { coverClearance, MerchantCover } from '@/components/merchant-card';
 import { PressScale } from '@/components/press-scale';
 import { Skeleton } from '@/components/skeleton';
 import { SplitLayout } from '@/components/split-layout';
-import { cachedMerchant, loadMerchant, PageWidth } from '@/components/storefront';
+import { SiteFooter } from '@/components/site-footer';
+import { cachedMerchant, loadMerchant, PageWidth, WhyShopWithLoop } from '@/components/storefront';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
@@ -156,6 +157,8 @@ export default function MerchantScreen() {
             details={<MerchantDetails key={merchant.id} merchant={merchant} signedOut={signedIn === false} />}
           />
         </Animated.View>
+        <WhyShopWithLoop />
+        <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
   );
