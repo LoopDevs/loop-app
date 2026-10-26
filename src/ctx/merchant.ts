@@ -1,6 +1,6 @@
 import { money } from '../money.ts';
 import { units } from '../stellar/units.ts';
-import type { GiftCardInfo, MerchantJson, MerchantLinkJson } from './client.ts';
+import type { GiftCard, GiftCardInfo, MerchantJson, MerchantLinkJson } from './client.ts';
 
 const basisPointsPerWhole = 10_000n;
 const hueCount = 360;
@@ -38,6 +38,19 @@ export class Merchant {
 
   static searchPattern(name: string): string {
     return name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  static idsByRecentPurchase(giftCards: Pick<GiftCard, 'merchantId'>[], limit: number): string[] {
+    return [...new Set(giftCards.map((giftCard) => giftCard.merchantId))].slice(0, limit);
+  }
+
+  static inOrder(merchants: Merchant[], ids: readonly string[]): Merchant[] {
+    const byId = new Map(merchants.map((merchant) => [merchant.id, merchant]));
+    return ids.flatMap((id) => byId.get(id) ?? []);
+  }
+
+  static byCashback(merchants: Merchant[]): Merchant[] {
+    return [...merchants].sort((a, b) => b.cashbackBasisPoints() - a.cashbackBasisPoints());
   }
 
   websiteUrl(): `${string}:${string}` | undefined {

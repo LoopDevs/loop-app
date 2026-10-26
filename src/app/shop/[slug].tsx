@@ -15,6 +15,7 @@ import { BottomTabInset, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
+import { useFavourites } from '@/hooks/use-favourites';
 import { SmartWallet } from '@/wallet/smart-wallet';
 
 const cardAspectRatio = 1.586;
@@ -25,6 +26,7 @@ export default function MerchantScreen() {
   const { busy, message, run } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const { favourites, toggle: toggleFavourite } = useFavourites();
 
   const load = useCallback(
     () =>
@@ -69,6 +71,10 @@ export default function MerchantScreen() {
         )}
         <ThemedText type="subtitle">{merchant.name}</ThemedText>
         <ThemedText type="smallBold">{merchant.rateLabel()}</ThemedText>
+        <Button
+          label={favourites.has(merchant.id) ? '♥ Favourite' : '♡ Add to favourites'}
+          onPress={() => toggleFavourite(merchant.id)}
+        />
         {websiteUrl && (
           <ExternalLink href={websiteUrl}>
             <ThemedText type="link">{merchant.website}</ThemedText>

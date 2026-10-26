@@ -81,3 +81,32 @@ test('a website without a scheme opens over https', () => {
   assert.equal(new Merchant({ ...json, website: 'http://aerie.com' }).websiteUrl(), 'http://aerie.com');
   assert.equal(new Merchant(json).websiteUrl(), undefined);
 });
+
+test('recent merchants keep purchase order without repeats', () => {
+  const giftCards = [{ merchantId: 'b' }, { merchantId: 'a' }, { merchantId: 'b' }, { merchantId: 'c' }];
+  assert.deepEqual(Merchant.idsByRecentPurchase(giftCards, 2), ['b', 'a']);
+});
+
+test('merchants follow the given id order and missing ids are skipped', () => {
+  const a = new Merchant({ ...json, id: 'a', name: 'A' });
+  const b = new Merchant({ ...json, id: 'b', name: 'B' });
+  assert.deepEqual(
+    Merchant.inOrder([a, b], ['b', 'gone', 'a']).map((merchant) => merchant.id),
+    ['b', 'a'],
+  );
+});
+
+test('merchants sort by the cashback rate shown, overrides included', () => {
+  const low = new Merchant({ ...json, id: 'low', userDiscount: 900 });
+  const overridden = new Merchant({
+    ...json,
+    id: 'overridden',
+    userDiscount: 100,
+    link: { userDiscountOverride: true, userDiscountBasisPoints: 1200 },
+  });
+  const high = new Merchant({ ...json, id: 'high', userDiscount: 1000 });
+  assert.deepEqual(
+    Merchant.byCashback([low, overridden, high]).map((merchant) => merchant.id),
+    ['overridden', 'high', 'low'],
+  );
+});
