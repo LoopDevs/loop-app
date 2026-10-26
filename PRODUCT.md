@@ -27,6 +27,7 @@ The cashback, the wallet and the savings live in one place the user owns: a pass
 - Gift card purchase: search merchant, pick amount, pick pay-with token, see price, pay, wait for fulfilment.
 - Orders: list of purchased gift cards; detail with barcode, number, PIN, redeem link.
 - Savings: savings (vault) value, yield earned, withdraw.
+- Releases: `eas build --profile production` builds the store binary (`preview` builds go to testers, both on EAS-managed signing). A JS-only fix ships with `eas update --channel production`; it downloads in the background and applies on the next cold start. A critical update (must apply at once) is the same command after raising `extra.criticalIndex` in `app.json`, which only ever increases and does not change the runtime fingerprint; running binaries reload as soon as they fetch it, waiting for any payment being sent. To stop an old binary from paying, check out its release tag, replace `GiftCardPurchase` with a blocking "Update Loop" view that links to the store listing, raise `criticalIndex`, and publish with `eas update --channel production`; Orders stays usable so bought codes remain reachable.
 - Testnet builds expose a "fund with testnet XLM" action.
 
 ## Capabilities and Constraints

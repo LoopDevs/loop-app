@@ -83,6 +83,7 @@
     },
     "plugins": [
       "expo-router",
+      "@sentry/react-native",
       [
         "expo-splash-screen",
         {
@@ -98,6 +99,15 @@
         }
       ]
     ],
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "checkAutomatically": "NEVER"
+    },
+    "extra": {
+      "criticalIndex": 0
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
