@@ -103,6 +103,7 @@ export const Motion = {
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+export const ScrollEndInset = Platform.OS === 'web' ? 0 : BottomTabInset + Spacing.five;
 export const MaxContentWidth = 800;
 
 export const Layout = {

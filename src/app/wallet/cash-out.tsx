@@ -8,10 +8,11 @@ import { Button, Field } from '@/components/form';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
 import { PreviewBadge } from '@/components/preview-badge';
+import { SiteFooter } from '@/components/site-footer';
 import { StatusTracker } from '@/components/status-tracker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Layout, Motion, Spacing } from '@/constants/theme';
+import { Layout, Motion, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { money } from '@/money';
 
@@ -142,6 +143,7 @@ export default function CashOutScreen() {
             </Animated.View>
           )}
         </View>
+        <SiteFooter />
       </ScrollView>
     </ThemedView>
   );
@@ -152,7 +154,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   body: {
     width: '100%',

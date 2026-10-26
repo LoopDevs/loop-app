@@ -18,7 +18,7 @@ import { cachedMerchant, loadMerchant, PageWidth, WhyShopWithLoop } from '@/comp
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { BottomTabInset, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingTop: Spacing.two,
-    paddingBottom: BottomTabInset + Spacing.five,
+    paddingBottom: ScrollEndInset,
   },
   narrowPage: {
     width: '100%',
