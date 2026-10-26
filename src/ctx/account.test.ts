@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { Account } from './account.ts';
-import type { AccountJson, CashbackDestination, PayoutJson } from './client.ts';
+import type { AccountJson, CashbackDestination } from './client.ts';
+import type { PayoutJson } from './payout.ts';
 import { Profile } from './profile.ts';
 
 function profile(stableCurrency: string, cashbackDestination: CashbackDestination): Profile {

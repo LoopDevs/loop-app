@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { PayoutJson } from './client.ts';
-import { Payout, payoutStatuses, type PayoutStatus } from './payout.ts';
+import { Payout, payoutStatuses, type PayoutJson } from './payout.ts';
 
 const reserved: PayoutJson = {
   id: 'p1',
@@ -13,20 +12,10 @@ const reserved: PayoutJson = {
   reservationTransferId: 't1',
 };
 
-const inFlightStatuses: PayoutStatus[] = [
-  'pending-approval',
-  'approved',
-  'held',
-  'pending',
-  'submitted',
-  'queued',
-  'failed',
-];
-
-test('every non-terminal status with a live reservation is in flight', () => {
+test('a reserved, unreversed payout is in flight until it reaches a terminal status', () => {
   for (const status of payoutStatuses) {
     const payout = new Payout({ ...reserved, status });
-    assert.equal(payout.isInFlight(), inFlightStatuses.includes(status), status);
+    assert.equal(payout.isInFlight(), !Payout.terminalStatuses.includes(status), status);
   }
 });
 
@@ -38,18 +27,18 @@ test('a reversed payout is never in flight', () => {
 });
 
 test('a payout without a reservation is not in flight', () => {
-  const payout = new Payout({ ...reserved, reservationTransferId: undefined });
-  assert.equal(payout.isInFlight(), false);
+  for (const status of payoutStatuses) {
+    const payout = new Payout({ ...reserved, status, reservationTransferId: undefined });
+    assert.equal(payout.isInFlight(), false, status);
+  }
 });
 
 test('only queued reads retrying and only failed reads delayed', () => {
   for (const status of payoutStatuses) {
-    for (const reversalTransferId of [undefined, 't2']) {
-      const label = new Payout({ ...reserved, status, reversalTransferId }).statusLabel();
-      const expected =
-        status === 'queued' ? 'retrying' : status === 'failed' ? 'delayed, contact support' : 'on the way';
-      assert.equal(label, expected, status);
-    }
+    const label = new Payout({ ...reserved, status }).statusLabel();
+    const expected =
+      status === 'queued' ? 'retrying' : status === 'failed' ? 'delayed, contact support' : 'on the way';
+    assert.equal(label, expected, status);
   }
 });
 

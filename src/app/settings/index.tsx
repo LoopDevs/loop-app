@@ -2,9 +2,10 @@ import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { AppLockToggle } from '@/components/app-lock';
 import { CountryPicker } from '@/components/country-picker';
 import { Button } from '@/components/form';
 import { OrderRowsSkeleton } from '@/components/skeleton';
@@ -24,13 +25,21 @@ export default function SettingsScreen() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
+  const profileUserId = useRef<string | null>(null);
 
   const loadAccount = useCallback(
     () =>
       run(async () => {
         const isSignedIn = await ctx.isSignedIn();
         setSignedIn(isSignedIn);
-        setProfile(isSignedIn ? await ctx.me() : null);
+        const userId = isSignedIn ? await ctx.userId() : null;
+        if (userId !== profileUserId.current) {
+          profileUserId.current = userId;
+          setProfile(null);
+        }
+        if (userId) {
+          setProfile(await ctx.me());
+        }
       }),
     [run, setProfile],
   );
@@ -122,6 +131,8 @@ export default function SettingsScreen() {
             </Section>
           </>
         )}
+
+        <AppLockToggle />
 
         <Section title="Help and legal">
           <Button label="Contact support" onPress={() => Linking.openURL(loopLinks.supportMail())} />

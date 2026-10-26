@@ -8,9 +8,10 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { ctx, CtxError } from '@/ctx/client';
 import {
   blockingServiceState,
-  recoveryProbe,
+  hasRecovered,
   serviceStateMessages,
   type BlockingServiceState,
+  type RecoveryChecks,
 } from '@/ctx/service-state';
 import { useBusyAction } from '@/hooks/use-busy-action';
 
@@ -26,7 +27,7 @@ export function ServiceUnavailable({ state, onRecovered }: Props) {
 
   const tryAgain = () =>
     run(async () => {
-      if (await hasRecovered(state)) {
+      if (await hasRecovered(state, recoveryChecks)) {
         onRecovered();
         return;
       }
@@ -50,24 +51,12 @@ export function ServiceUnavailable({ state, onRecovered }: Props) {
   );
 }
 
-async function hasRecovered(state: BlockingServiceState): Promise<boolean> {
-  switch (recoveryProbe(state, await ctx.hasSession())) {
-    case 'GET /status':
-      return !(await ctx.status()).maintenance;
-    case 'GET /me':
-      try {
-        await ctx.me();
-        return true;
-      } catch (error) {
-        if (error instanceof CtxError && blockingServiceState(error.errorName())) {
-          return false;
-        }
-        throw error;
-      }
-    case 'sign-in':
-      return true;
-  }
-}
+const recoveryChecks: RecoveryChecks = {
+  hasSession: () => ctx.hasSession(),
+  maintenance: async () => (await ctx.status()).maintenance,
+  readProfile: () => ctx.me(),
+  isBlocking: (error) => error instanceof CtxError && blockingServiceState(error.errorName()) !== null,
+};
 
 const styles = StyleSheet.create({
   container: {

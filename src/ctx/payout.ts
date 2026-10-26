@@ -1,5 +1,3 @@
-import type { PayoutJson } from './client.ts';
-
 export const payoutStatuses = [
   'pending-approval',
   'approved',
@@ -15,14 +13,31 @@ export const payoutStatuses = [
 
 export type PayoutStatus = (typeof payoutStatuses)[number];
 
-export const terminalPayoutStatuses: readonly PayoutStatus[] = ['complete', 'rejected', 'cancelled'];
+export type PayoutKind = 'wallet' | 'savings';
+
+export type PayoutJson = {
+  id: string;
+  kind?: PayoutKind;
+  status: PayoutStatus;
+  currency: string;
+  amount: string;
+  address?: string;
+  sentAmount?: string;
+  retryAt?: string;
+  reservationTransferId?: string;
+  reversalTransferId?: string;
+};
 
 export class Payout {
+  static readonly terminalStatuses: readonly PayoutStatus[] = ['complete', 'rejected', 'cancelled'];
+
   readonly id: string;
-  readonly kind: 'wallet' | 'savings';
+  readonly kind: PayoutKind;
   readonly status: PayoutStatus;
   readonly currency: string;
   readonly amount: string;
+  readonly address?: string;
+  readonly sentAmount?: string;
   readonly retryAt?: string;
   readonly reservationTransferId?: string;
   readonly reversalTransferId?: string;
@@ -33,13 +48,15 @@ export class Payout {
     this.status = json.status;
     this.currency = json.currency;
     this.amount = json.amount;
+    this.address = json.address;
+    this.sentAmount = json.sentAmount;
     this.retryAt = json.retryAt;
     this.reservationTransferId = json.reservationTransferId;
     this.reversalTransferId = json.reversalTransferId;
   }
 
   isTerminal(): boolean {
-    return terminalPayoutStatuses.includes(this.status);
+    return Payout.terminalStatuses.includes(this.status);
   }
 
   isInFlight(): boolean {
