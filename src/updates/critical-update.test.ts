@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  criticalIndexFromEnv,
   criticalIndexOf,
   fetchedCriticalIndex,
   isCriticalUpdate,
@@ -22,6 +23,20 @@ test('a missing or invalid critical index counts as 0', () => {
   assert.equal(criticalIndexOf({ criticalIndex: 1.5 }), 0);
   assert.equal(criticalIndexOf({ criticalIndex: -2 }), 0);
   assert.equal(criticalIndexOf({ criticalIndex: 4 }), 4);
+});
+
+test('the publish-time critical index comes from LOOP_CRITICAL_INDEX', () => {
+  assert.equal(criticalIndexFromEnv(undefined), undefined);
+  assert.equal(criticalIndexFromEnv(''), undefined);
+  assert.equal(criticalIndexFromEnv('0'), 0);
+  assert.equal(criticalIndexFromEnv('7'), 7);
+});
+
+test('a publish-time critical index that is not a whole number stops the publish', () => {
+  assert.throws(() => criticalIndexFromEnv('-1'), /whole number/);
+  assert.throws(() => criticalIndexFromEnv('1.5'), /whole number/);
+  assert.throws(() => criticalIndexFromEnv('two'), /whole number/);
+  assert.throws(() => criticalIndexFromEnv(' 3'), /whole number/);
 });
 
 test('the fetched index is read from the manifest client extra', () => {
