@@ -95,6 +95,7 @@ export default function ShopScreen() {
   const cardColumns = columns > 4 ? 4 : columns > 2 ? columns - 1 : columns;
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
+  const pendingLoadMore = useRef(false);
   const listedSearch = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
   const { scrollRef, onScroll, scrim } = useScrimScroll<FlatList<Merchant>>();
@@ -234,11 +235,19 @@ export default function ShopScreen() {
   const shownFavourites = Merchant.inOrder(knownFavourites, favourites.ids);
 
   const loadMore = () => {
+    pendingLoadMore.current = busy;
     const next = MerchantPaging.nextPage(page, pages, busy || listing.message !== '');
     if (next) {
       loadMerchants(next);
     }
   };
+
+  useEffect(() => {
+    if (!busy && pendingLoadMore.current) {
+      pendingLoadMore.current = false;
+      loadMore();
+    }
+  });
 
   const accountError = account.message !== '' && (
     <Notice message={account.message} actionLabel="Try again" onAction={loadAccount} disabled={busy} />
