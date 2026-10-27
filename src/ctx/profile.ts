@@ -15,7 +15,10 @@ export type CountryChoice = {
 };
 
 export class Profile {
+  static readonly legalNameMessage = 'Enter your first and last name as they appear on your bank account.';
+
   readonly email?: string;
+  readonly legalName?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
   readonly cashbackDestination: CashbackDestination;
@@ -25,6 +28,7 @@ export class Profile {
 
   constructor(user: UserJson, company: MeJson['company']) {
     this.email = user.email;
+    this.legalName = user.legalName;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
     this.cashbackDestination = user.cashbackDestination ?? 'account';
@@ -65,6 +69,26 @@ export class Profile {
 
   passkeyLabel(): string {
     return this.email?.trim() || 'Loop wallet';
+  }
+
+  hasBankIdentity(): boolean {
+    return Profile.legalNameProblem(this.legalName ?? '') === null;
+  }
+
+  legalNameUpdate(legalName: string): UserUpdate | null {
+    const trimmed = Profile.trimmedName(legalName);
+    if (Profile.legalNameProblem(trimmed) !== null || trimmed === this.legalName) {
+      return null;
+    }
+    return { legalName: trimmed };
+  }
+
+  static legalNameProblem(legalName: string): string | null {
+    return Profile.trimmedName(legalName).split(' ').length >= 2 ? null : Profile.legalNameMessage;
+  }
+
+  private static trimmedName(legalName: string): string {
+    return legalName.trim().split(/\s+/).filter(Boolean).join(' ');
   }
 
   savesCashback(): boolean {

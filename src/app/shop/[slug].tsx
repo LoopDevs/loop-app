@@ -19,8 +19,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { BottomTabInset, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
+import type { Profile } from '@/ctx/profile';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -42,6 +44,7 @@ export default function MerchantScreen() {
   const { busy, message, run } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
@@ -58,12 +61,14 @@ export default function MerchantScreen() {
           setSignedIn(null);
         }
         const isSignedIn = await ctx.isSignedIn();
-        const [loadedMerchant, loadedWallet] = await Promise.all([
+        const [loadedMerchant, loadedWallet, loadedProfile] = await Promise.all([
           loadMerchant(slug),
           isSignedIn ? SmartWallet.load().catch(SmartWallet.unlessUnlinked) : null,
+          isSignedIn ? ctx.me() : null,
         ]);
         setMerchant(loadedMerchant);
         setWallet(loadedWallet);
+        setProfile(loadedProfile);
         setSignedIn(isSignedIn);
       }),
     [run, slug],
@@ -98,31 +103,35 @@ export default function MerchantScreen() {
   const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and earn ${merchant.rateLabel()}` : '';
   const cardStyle = [styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
-  const buyCard = wallet ? (
-    <GiftCardPurchase merchant={merchant} wallet={wallet} />
-  ) : signedIn === null ? (
-    <BuySkeleton />
-  ) : signedIn ? (
-    <View style={cardStyle}>
-      <ThemedText type="heading">Finish setting up Loop</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        Turn on Face ID or your fingerprint to pay for gift cards and collect your cashback.
-      </ThemedText>
-      <Button label="Finish setup" variant="primary" onPress={() => router.navigate('/')} />
-    </View>
-  ) : (
-    <View style={cardStyle}>
-      <ThemedText type="heading">Buy a {merchant.name} gift card</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        Sign in to choose an amount{earnLine}. Pay with XLM, USDC or EURC.
-      </ThemedText>
-      <Button
-        label="Sign in to buy"
-        variant="primary"
-        onPress={() => openSignIn(`Sign in to buy a ${merchant.name} gift card${earnLine}.`)}
-      />
-    </View>
-  );
+  const payCopy = BankPayment.accepts(merchant.currency)
+    ? 'Pay from your UK bank account or your Loop wallet.'
+    : 'Pay with XLM, USDC or EURC.';
+  const buyCard =
+    wallet && profile ? (
+      <GiftCardPurchase merchant={merchant} wallet={wallet} profile={profile} onProfile={setProfile} />
+    ) : signedIn === null ? (
+      <BuySkeleton />
+    ) : signedIn ? (
+      <View style={cardStyle}>
+        <ThemedText type="heading">Finish setting up Loop</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Turn on Face ID or your fingerprint to pay for gift cards and collect your cashback.
+        </ThemedText>
+        <Button label="Finish setup" variant="primary" onPress={() => router.navigate('/')} />
+      </View>
+    ) : (
+      <View style={cardStyle}>
+        <ThemedText type="heading">Buy a {merchant.name} gift card</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Sign in to choose an amount{earnLine}. {payCopy}
+        </ThemedText>
+        <Button
+          label="Sign in to buy"
+          variant="primary"
+          onPress={() => openSignIn(`Sign in to buy a ${merchant.name} gift card${earnLine}.`)}
+        />
+      </View>
+    );
 
   return (
     <ThemedView style={styles.container}>
