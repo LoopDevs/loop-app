@@ -7,6 +7,17 @@ export const biometrics = {
     return (await LocalAuthentication.getEnrolledLevelAsync()) !== LocalAuthentication.SecurityLevel.NONE;
   },
 
+  async confirmUser(promptMessage: string): Promise<AuthenticationResult> {
+    try {
+      if (!(await biometrics.hasScreenLock())) {
+        return { success: true };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'unknown' };
+    }
+    return biometrics.authenticate(promptMessage);
+  },
+
   async authenticate(promptMessage: string): Promise<AuthenticationResult> {
     try {
       const result = await LocalAuthentication.authenticateAsync({ promptMessage });

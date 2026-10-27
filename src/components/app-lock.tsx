@@ -11,7 +11,6 @@ import { useBusyAction } from '@/hooks/use-busy-action';
 import { useTheme } from '@/hooks/use-theme';
 import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
-import { useRecentsProtection } from '@/native/screen-privacy';
 import { AppLock, type AuthenticationResult } from '@/session/app-lock';
 import { appLockStore } from '@/session/app-lock-store';
 
@@ -157,14 +156,13 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     [authenticate, applyUnlockResult],
   );
 
-  useRecentsProtection(lock.isOn());
-
   const covered = lock.covers();
+  const closesBrowser = lock.closesBrowser();
   useEffect(() => {
-    if (covered) {
+    if (closesBrowser) {
       Promise.resolve(WebBrowser.dismissBrowser()).catch(() => undefined);
     }
-  }, [covered]);
+  }, [closesBrowser]);
 
   useEffect(() => {
     if (lock.status !== 'locked') {

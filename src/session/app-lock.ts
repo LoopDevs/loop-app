@@ -72,6 +72,10 @@ export class AppLock {
     return this.status === 'locked' || this.status === 'unlocked';
   }
 
+  closesBrowser(): boolean {
+    return this.status === 'locked';
+  }
+
   covers(): boolean {
     return this.status === 'loading' || this.status === 'locked' || this.backgroundedAt !== null;
   }
