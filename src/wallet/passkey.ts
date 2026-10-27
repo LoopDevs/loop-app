@@ -7,7 +7,7 @@ import { base64 } from '@/wallet/base64';
 import { PasskeyAssertion } from '@/wallet/passkey-assertion';
 import { PasskeyPublicKey } from '@/wallet/passkey-public-key';
 
-const nativeRpId = 'loopfinance.io';
+const rpId = 'loopfinance.io';
 
 export type Passkey = {
   credentialId: string;
@@ -19,7 +19,7 @@ export const passkey = {
     const passkeyLabel = loopEnvironment.passkeyLabel(label);
     const created = await Passkeys.create({
       challenge: base64.encodeUrl(randomBytes(32)),
-      rp: { id: rpId(), name: 'Loop' },
+      rp: { id: rpId, name: 'Loop' },
       user: { id: base64.encodeUrl(randomBytes(16)), name: passkeyLabel, displayName: passkeyLabel },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
@@ -37,7 +37,7 @@ export const passkey = {
   async sign(challenge: Uint8Array): Promise<PasskeyAssertion> {
     const signed = await Passkeys.get({
       challenge: PasskeyAssertion.challengeOf(challenge),
-      rpId: rpId(),
+      rpId,
       userVerification: 'required',
     });
     if (!signed) {
@@ -69,8 +69,4 @@ function isUserCancel(error: unknown): boolean {
   }
   const code = 'code' in error ? String(error.code) : '';
   return code === 'ERR_USER_CANCELLED' || error.message === 'UserCancelled';
-}
-
-function rpId(): string {
-  return Platform.OS === 'web' ? window.location.hostname : nativeRpId;
 }
