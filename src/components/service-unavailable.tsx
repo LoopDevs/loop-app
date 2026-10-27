@@ -48,5 +48,6 @@ const recoveryChecks: RecoveryChecks = {
   hasSession: () => ctx.hasSession(),
   maintenance: async () => (await ctx.status()).maintenance,
   readProfile: () => ctx.me(),
+  readCatalog: () => ctx.readCatalogUncached(),
   isBlocking: (error) => error instanceof CtxError && blockingServiceState(error.errorName()) !== null,
 };
