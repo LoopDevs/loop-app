@@ -160,6 +160,7 @@ export default function HomeScreen() {
     }
     try {
       await refresh();
+      setMessage('');
     } catch (error) {
       setMessage(errorMessage(error));
     }

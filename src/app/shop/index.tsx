@@ -107,9 +107,9 @@ export default function ShopScreen() {
         if (!isSignedIn) {
           return;
         }
-        const [loadedProfile, loadedOrder] = await Promise.all([ctx.me(), ctx.activeGiftCard()]);
-        setProfile(loadedProfile);
-        setActiveOrder(loadedOrder);
+        const loadedOrder = ctx.activeGiftCard().catch(() => null);
+        setProfile(await ctx.me());
+        setActiveOrder(await loadedOrder);
       }),
     [runAccount, setProfile],
   );

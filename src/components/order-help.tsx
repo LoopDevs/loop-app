@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
@@ -25,7 +25,7 @@ export function OrderHelp({ giftCard }: { giftCard: GiftCard }) {
   return (
     <View style={styles.section}>
       <Button label="Get help with this order" variant="quiet" onPress={openMail} />
-      {mailUnavailable && (
+      {(mailUnavailable || Platform.OS === 'web') && (
         <ThemedText type="small" themeColor="textSecondary" selectable accessibilityLiveRegion="polite">
           Email {loopLinks.supportEmail} and quote order {giftCard.id}.
         </ThemedText>

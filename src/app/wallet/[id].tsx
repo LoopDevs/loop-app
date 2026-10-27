@@ -31,6 +31,7 @@ import {
   giftCardStatusLabel,
   outcomeText,
   pollIntervalMs,
+  wasCharged,
 } from '@/ctx/gift-card-status';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useSentPayment } from '@/hooks/use-sent-payment';
@@ -166,7 +167,9 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const sent = useSentPayment(giftCard.paymentId);
   const outcome = sent === undefined ? null : outcomeText(giftCard, sent !== null);
   const processing = giftCard.status === 'paid';
-  const paid = amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency);
+  const paid = wasCharged(giftCard)
+    ? amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency)
+    : null;
   const cashbackAmount = amountInMoney(giftCard.cashbackAmount, giftCard.cashbackCurrency);
   const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
 
