@@ -10,7 +10,7 @@ export class PendingWithdrawals {
   static readonly keyPrefix = 'savings.withdrawal.';
 
   private readonly storage: PendingWithdrawalStorage;
-  private readonly known = new Map<string, PendingWithdrawal>();
+  private readonly unsaved = new Map<string, PendingWithdrawal>();
 
   constructor(storage: PendingWithdrawalStorage) {
     this.storage = storage;
@@ -21,24 +21,22 @@ export class PendingWithdrawals {
   }
 
   async get(address: string): Promise<PendingWithdrawal | undefined> {
-    const known = this.known.get(address);
-    if (known) {
-      return known;
-    }
     const stored = PendingWithdrawals.parse(await this.storage.getItem(PendingWithdrawals.keyOf(address)));
-    if (stored) {
-      this.known.set(address, stored);
-    }
-    return stored;
+    return stored ?? this.unsaved.get(address);
   }
 
   async set(address: string, withdrawal: PendingWithdrawal): Promise<void> {
-    this.known.set(address, withdrawal);
-    await this.storage.setItem(PendingWithdrawals.keyOf(address), JSON.stringify(withdrawal));
+    try {
+      await this.storage.setItem(PendingWithdrawals.keyOf(address), JSON.stringify(withdrawal));
+      this.unsaved.delete(address);
+    } catch (error) {
+      this.unsaved.set(address, withdrawal);
+      throw error;
+    }
   }
 
   async delete(address: string): Promise<void> {
-    this.known.delete(address);
+    this.unsaved.delete(address);
     await this.storage.removeItem(PendingWithdrawals.keyOf(address));
   }
 

@@ -366,9 +366,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       return paymentSender.send(giftCard.paymentId, () => wallet.pay(giftCard, buyTimer.current));
     };
     const task = inFlightPayments.start(giftCard.paymentId, () =>
-      holdCriticalReload(() =>
-        topUpPrice === null ? send() : paymentLock.exclusive(`topUp:${wallet.address}`, send),
-      ),
+      holdCriticalReload(() => paymentLock.exclusive(`spend:${wallet.address}`, send)),
     );
     if (!task) {
       throw new Error('This payment is already on its way');

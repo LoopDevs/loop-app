@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { paymentLock } from './payment-lock.ts';
+import { memoryLock as paymentLock } from './memory-lock.ts';
 
 function gate() {
   let open = () => {};

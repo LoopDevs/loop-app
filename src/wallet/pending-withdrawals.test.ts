@@ -36,6 +36,25 @@ test('a deleted withdrawal is gone after a restart', async () => {
   assert.equal(await new PendingWithdrawals(storage).get('GW'), undefined);
 });
 
+test('a withdrawal saved by another tab replaces the one this tab read', async () => {
+  const storage = memoryStorage();
+  const thisTab = new PendingWithdrawals(storage);
+  await thisTab.set('GW', withdrawal);
+  const newer = { hash: 'def', expiryLedger: 900 };
+  await new PendingWithdrawals(storage).set('GW', newer);
+  assert.deepEqual(await thisTab.get('GW'), newer);
+});
+
+test('a withdrawal whose save failed is still known to this tab', async () => {
+  const storage = memoryStorage();
+  storage.setItem = async () => {
+    throw new Error('storage full');
+  };
+  const pending = new PendingWithdrawals(storage);
+  await assert.rejects(pending.set('GW', withdrawal), /storage full/);
+  assert.deepEqual(await pending.get('GW'), withdrawal);
+});
+
 test('withdrawals are kept per wallet address', async () => {
   const pending = new PendingWithdrawals(memoryStorage());
   await pending.set('GW', withdrawal);
