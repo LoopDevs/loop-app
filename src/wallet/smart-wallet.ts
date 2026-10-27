@@ -7,7 +7,6 @@ import {
   type BuiltTransaction,
   type GiftCard,
   type SmartWalletIntent,
-  type SponsoredResult,
 } from '@/ctx/client';
 import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
@@ -24,7 +23,7 @@ import { Holdings } from '@/wallet/holdings';
 import { passkey, type Passkey } from '@/wallet/passkey';
 import { PaymentSearch } from '@/wallet/payment-search';
 import { Savings } from '@/wallet/savings';
-import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
+import { SavingsTopUp, UnansweredWithdrawal, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 import { WalletCreation } from '@/wallet/wallet-creation';
 import { WalletPin } from '@/wallet/wallet-pin';
@@ -219,7 +218,10 @@ export class SmartWallet {
       const built = await ctx.buildTransaction(this.id, intent);
       const call = await this.verifiedCall(built);
       await this.requireWithdraw(call, shares);
-      const result = await this.signAndSponsor(intent, built.transaction, call);
+      const signed = await this.sign(call);
+      const result = await ctx
+        .sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed })
+        .catch((error: unknown) => UnansweredWithdrawal.rethrow(error, built.expiryLedger));
       return { ...result, expiryLedger: built.expiryLedger };
     });
   }
@@ -230,6 +232,7 @@ export class SmartWallet {
       valueOf: (shares) => this.valueOf(shares),
       withdraw: (shares) => this.withdraw(shares),
       transaction: (hash) => soroban.transaction(hash),
+      latestLedger: () => soroban.latestLedger(),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       now: () => Date.now(),
     });
@@ -237,17 +240,6 @@ export class SmartWallet {
 
   private async verifiedCall(built: BuiltTransaction): Promise<SponsoredCall> {
     return SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId], await soroban.latestLedger());
-  }
-
-  private async signAndSponsor(
-    intent: SmartWalletIntent,
-    transaction: string,
-    call: SponsoredCall,
-  ): Promise<SponsoredResult> {
-    return ctx.sponsorTransaction(this.id, intent, {
-      transaction,
-      ...(await this.sign(call)),
-    });
   }
 
   private async sign(call: SponsoredCall): Promise<{ signature: string; devicePublicKey: string }> {

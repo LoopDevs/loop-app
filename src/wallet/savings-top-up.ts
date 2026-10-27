@@ -24,6 +24,7 @@ export type TopUpChain = {
   valueOf(shares: bigint): Promise<bigint>;
   withdraw(shares: bigint): Promise<SentWithdrawal>;
   transaction(hash: string): Promise<ChainTransaction>;
+  latestLedger(): Promise<number>;
   sleep(ms: number): Promise<void>;
   now(): number;
 };
@@ -38,6 +39,23 @@ export type TopUpOutcome =
   | { kind: 'stillShort'; moved: bigint };
 
 type ChainOutcome = 'pending' | 'success' | 'failed';
+
+export class UnansweredWithdrawal extends Error {
+  readonly expiryLedger: number;
+
+  constructor(expiryLedger: number, cause: unknown) {
+    super("We couldn't confirm the move from savings. Check your balance in a few minutes.", { cause });
+    this.name = 'UnansweredWithdrawal';
+    this.expiryLedger = expiryLedger;
+  }
+
+  static rethrow(error: unknown, expiryLedger: number): never {
+    if (error instanceof CtxError && error.status >= 400 && error.status < 500) {
+      throw error;
+    }
+    throw new UnansweredWithdrawal(expiryLedger, error);
+  }
+}
 
 export class SavingsTopUp {
   static readonly currency = Savings.currency;
@@ -171,7 +189,15 @@ export class SavingsTopUp {
       if (shares === null) {
         return { kind: 'notEnough' };
       }
-      const result = await this.chain.withdraw(shares).catch(SavingsTopUp.refusedWithdrawal);
+      let result: SentWithdrawal;
+      try {
+        result = await this.chain.withdraw(shares);
+      } catch (error) {
+        if (error instanceof UnansweredWithdrawal) {
+          return { kind: 'stillMoving', withdrawal: { hash: '', expiryLedger: error.expiryLedger } };
+        }
+        result = SavingsTopUp.refusedWithdrawal(error);
+      }
       if (result.hash && !result.error && result.status !== 'failed') {
         return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
       }
@@ -194,9 +220,20 @@ export class SavingsTopUp {
   }
 
   private status(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
+    if (!withdrawal.hash) {
+      return this.unansweredStatus(withdrawal);
+    }
     return this.chain.transaction(withdrawal.hash).then(
       (transaction) => SavingsTopUp.outcomeOf(transaction, withdrawal),
       () => 'pending' as const,
     );
+  }
+
+  private async unansweredStatus(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
+    try {
+      return (await this.chain.latestLedger()) > withdrawal.expiryLedger ? 'failed' : 'pending';
+    } catch {
+      return 'pending';
+    }
   }
 }

@@ -53,11 +53,12 @@ export class SessionAuth {
     path: string,
     body?: unknown,
     reportServiceState = true,
+    headers: Record<string, string> = {},
   ): Promise<T> {
     const generation = this.session.current();
     const accessToken = await this.requireAccessToken();
     try {
-      return await this.authorized<T>(accessToken, method, path, body, reportServiceState);
+      return await this.authorized<T>(accessToken, method, path, body, reportServiceState, headers);
     } catch (error) {
       if (!(error instanceof CtxError) || error.status !== 401) {
         throw error;
@@ -69,7 +70,7 @@ export class SessionAuth {
       if (!refreshed || !this.session.isCurrent(generation)) {
         throw error;
       }
-      return this.authorized<T>(refreshed, method, path, body, reportServiceState);
+      return this.authorized<T>(refreshed, method, path, body, reportServiceState, headers);
     }
   }
 
@@ -91,9 +92,10 @@ export class SessionAuth {
     path: string,
     body: unknown,
     reportServiceState: boolean,
+    headers: Record<string, string>,
   ): Promise<T> {
     return this.send<T>(method, path, body, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { ...headers, Authorization: `Bearer ${accessToken}` },
       reportServiceState,
     });
   }
