@@ -72,14 +72,32 @@ jobs:
           SAME_LOOP_ENV: test "$EXPO_PUBLIC_LOOP_ENV" = "$EXPECTED_LOOP_ENV"
         run: npx --yes "$EAS_CLI" env:exec "$CHANNEL" "$SAME_LOOP_ENV" --non-interactive
 
-      - name: Publish the OTA update
+      - name: Publish the signed OTA update
         if: inputs.kind == 'update'
+        env:
+          LOOP_CRITICAL_INDEX: ${{ vars.LOOP_CRITICAL_INDEX }}
+          EXPO_UPDATES_PRIVATE_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
         run: |
+          if [ -z "$LOOP_CRITICAL_INDEX" ] || [ -z "$EXPO_UPDATES_PRIVATE_KEY" ]; then
+            echo "::error::The $CHANNEL environment needs the LOOP_CRITICAL_INDEX variable and the EXPO_UPDATES_PRIVATE_KEY secret."
+            exit 1
+          fi
+          key_path="$RUNNER_TEMP/expo-updates-private-key.pem"
+          (umask 077 && printf '%s\n' "$EXPO_UPDATES_PRIVATE_KEY" > "$key_path")
           npx --yes "$EAS_CLI" update \
             --channel "$CHANNEL" \
             --environment "$CHANNEL" \
             --message "${MESSAGE:-$(git log -1 --format=%s)}" \
+            --private-key-path "$key_path" \
             --non-interactive
+
+      - name: Upload the update source maps to Sentry
+        if: inputs.kind == 'update' && inputs.channel == 'production'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: npx sentry-expo-upload-sourcemaps dist
 
       - name: Start the store build
         if: inputs.kind == 'build'
