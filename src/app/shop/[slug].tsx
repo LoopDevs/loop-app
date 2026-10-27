@@ -21,6 +21,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
@@ -44,6 +45,7 @@ export default function MerchantScreen() {
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [userCountry, setUserCountry] = useState<string | undefined>(undefined);
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
@@ -60,8 +62,17 @@ export default function MerchantScreen() {
         }
         const merchantLoad = loadMerchant(slug).then(setMerchant);
         const walletLoad = ctx.isSignedIn().then(async (isSignedIn) => {
-          const loadedWallet = isSignedIn ? await SmartWallet.load().catch(SmartWallet.unlessUnlinked) : null;
+          const [loadedWallet, country] = isSignedIn
+            ? await Promise.all([
+                SmartWallet.load().catch(SmartWallet.unlessUnlinked),
+                ctx
+                  .me()
+                  .then((profile) => profile.country)
+                  .catch(() => undefined),
+              ])
+            : [null, undefined];
           setWallet(loadedWallet);
+          setUserCountry(country);
           setSignedIn(isSignedIn);
         });
         await Promise.all([merchantLoad, walletLoad]);
@@ -98,7 +109,16 @@ export default function MerchantScreen() {
   const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and earn ${merchant.rateLabel()}` : '';
   const cardStyle = [styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
-  const buyCard = wallet ? (
+  const buyCard = wallet && !merchant.isSoldIn(userCountry) ? (
+    <View style={cardStyle}>
+      <ThemedText type="heading">Not sold in your country</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {merchant.name} gift cards are sold in {Market.countryName(merchant.country)}. Change your country in Settings to
+        buy one.
+      </ThemedText>
+      <Button label="Open Settings" variant="secondary" onPress={() => router.navigate('/profile/settings')} />
+    </View>
+  ) : wallet ? (
     <GiftCardPurchase merchant={merchant} wallet={wallet} />
   ) : signedIn === null ? (
     retry ? null : <BuySkeleton />
