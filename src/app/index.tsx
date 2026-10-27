@@ -63,7 +63,8 @@ export default function HomeScreen() {
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const [sessionRead, setSessionRead] = useState(false);
   const { view, refresh } = useHoldings(wallet);
-  const { busy, message, setMessage, run } = useBusyAction();
+  const { busy, message, run, load } = useBusyAction();
+  const [loadError, setLoadError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [giftCardsRefreshKey, setGiftCardsRefreshKey] = useState(0);
   const [search, setSearch] = useState('');
@@ -125,6 +126,7 @@ export default function HomeScreen() {
           setScreen('loading');
           loadProfileCountry();
           await loadWallet();
+          setLoadError('');
         }
         return;
       }
@@ -132,12 +134,13 @@ export default function HomeScreen() {
       walletLoadFailed.current = false;
       setWallet(null);
       setScreen('signed-out');
+      setLoadError('');
       check();
     } catch (error) {
       walletLoadStarted.current = false;
-      setMessage(errorMessage(error));
+      setLoadError(errorMessage(error));
     }
-  }, [screen, loadWallet, loadProfileCountry, setMessage, check]);
+  }, [screen, loadWallet, loadProfileCountry, check]);
 
   useFocusEffect(
     useCallback(() => {
@@ -164,11 +167,11 @@ export default function HomeScreen() {
     }
     try {
       await refresh();
-      setMessage('');
+      setLoadError('');
     } catch (error) {
-      setMessage(errorMessage(error));
+      setLoadError(errorMessage(error));
     }
-  }, [wallet, refresh, setMessage]);
+  }, [wallet, refresh]);
 
   const retryWalletLoad = useCallback(async () => {
     if (!walletLoadFailed.current || walletLoadStarted.current) {
@@ -181,11 +184,11 @@ export default function HomeScreen() {
       }
       setScreen('loading');
       await loadWallet();
-      setMessage('');
+      setLoadError('');
     } catch (error) {
-      setMessage(errorMessage(error));
+      setLoadError(errorMessage(error));
     }
-  }, [loadWallet, setMessage]);
+  }, [loadWallet]);
 
   const refreshLoaded = useCallback(() => {
     retryWalletLoad();
@@ -196,6 +199,13 @@ export default function HomeScreen() {
     readSession();
     refreshLoaded();
   }, [readSession, refreshLoaded]);
+
+  const retryLoads = () =>
+    load(async () => {
+      await readSession();
+      await retryWalletLoad();
+      await refreshBalances();
+    });
 
   useFocusEffect(refreshLoaded);
   useAppRefresh(refreshHome);
@@ -279,13 +289,10 @@ export default function HomeScreen() {
             <AddDevice wallet={unlinkedWallet} onAdded={loadWallet} />
           )}
 
-          {message !== '' && (
-            <Notice
-              message={message}
-              actionLabel={sessionRead ? undefined : 'Try again'}
-              onAction={() => run(readSession)}
-              disabled={busy}
-            />
+          {message !== '' && <Notice message={message} />}
+
+          {loadError !== '' && (
+            <Notice message={loadError} actionLabel="Try again" onAction={retryLoads} disabled={busy} />
           )}
 
           {showsListings && <FeaturedOffers catalog={catalog} onOpen={openMerchant} onSeeAll={openShop} />}
