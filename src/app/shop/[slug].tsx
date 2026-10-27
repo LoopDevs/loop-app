@@ -26,6 +26,7 @@ import { Merchant } from '@/ctx/merchant';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { SmartWallet } from '@/wallet/smart-wallet';
@@ -51,6 +52,7 @@ export default function MerchantScreen() {
   const { wide } = usePageLayout();
 
   const loadedSlug = useRef<string | undefined>(undefined);
+  const readSession = useSessionOwner();
 
   const load = useCallback(
     () =>
@@ -61,7 +63,13 @@ export default function MerchantScreen() {
           setSignedIn(null);
         }
         const merchantLoad = loadMerchant(slug).then(setMerchant);
-        const walletLoad = ctx.isSignedIn().then(async (isSignedIn) => {
+        const walletLoad = readSession().then(async ({ userId, changed }) => {
+          if (changed) {
+            setWallet(null);
+            setUserCountry(undefined);
+            setSignedIn(null);
+          }
+          const isSignedIn = userId !== null;
           const [loadedWallet, country] = isSignedIn
             ? await Promise.all([
                 SmartWallet.load().catch(SmartWallet.unlessUnlinked),
@@ -77,7 +85,7 @@ export default function MerchantScreen() {
         });
         await Promise.all([merchantLoad, walletLoad]);
       }),
-    [track, slug],
+    [track, slug, readSession],
   );
 
   useFocusEffect(

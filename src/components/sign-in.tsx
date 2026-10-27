@@ -338,7 +338,12 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
               {reason || 'Buy gift cards and earn cashback on every one.'}
             </ThemedText>
           </View>
-          <SocialSignInButtons providers={socialSignIn.providers()} disabled={busy} onPress={signInWith} />
+          <SocialSignInButtons
+            providers={socialSignIn.providers()}
+            appleAccountHint={socialSignIn.appleAccountHint()}
+            disabled={busy}
+            onPress={signInWith}
+          />
           <Field
             value={email}
             onChangeText={setEmail}

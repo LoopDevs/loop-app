@@ -6,6 +6,7 @@ import {
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Platform } from 'react-native';
 
+import { loopEnvironment } from '@/environment';
 import {
   hasErrorCode,
   SocialSignInConfig,
@@ -16,7 +17,7 @@ import {
 const config = new SocialSignInConfig({
   appleSignIn: process.env.EXPO_PUBLIC_APPLE_SIGN_IN,
   googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  googleIosClientId: loopEnvironment.googleIosClientId,
 });
 
 function requireIdToken(provider: SocialProvider, idToken: string | null): string {
@@ -64,6 +65,10 @@ async function googleIdToken(): Promise<string | null> {
 export const socialSignIn = {
   providers(): SocialProvider[] {
     return config.providers(Platform.OS);
+  },
+
+  appleAccountHint(): string | null {
+    return config.appleAccountHint(Platform.OS);
   },
 
   idToken(provider: SocialProvider): Promise<string | null> {

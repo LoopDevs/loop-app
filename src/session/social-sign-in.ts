@@ -52,6 +52,15 @@ export class SocialSignInConfig {
     const prefix = this.googleIosClientId.slice(0, -googleClientIdSuffix.length);
     return prefix ? `com.googleusercontent.apps.${prefix}` : null;
   }
+
+  appleAccountHint(platform: string): string | null {
+    if (platform !== 'ios') {
+      return 'Signed up with Apple on an iPhone? Sign in with Apple on that iPhone, or enter the email you shared with Apple. If you hid your email, use the relay address shown in Settings on your iPhone.';
+    }
+    return this.appleSignIn
+      ? 'Signed up with Apple and hid your email? Use the relay address shown in Settings on your iPhone.'
+      : null;
+  }
 }
 
 export function oauthLoginBody(provider: SocialProvider, idToken: string): OAuthLoginBody {

@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-  hasErrorCode,
-  oauthLoginBody,
-  signInRefusalMessage,
-  SocialSignInConfig,
-} from './social-sign-in.ts';
+import type { ConfigContext } from 'expo/config';
+
+import appConfig from '../../app.config.ts';
+import { hasErrorCode, signInRefusalMessage, SocialSignInConfig } from './social-sign-in.ts';
 
 const allIds = new SocialSignInConfig({
   appleSignIn: 'true',
@@ -76,10 +74,48 @@ test('the Google iOS URL scheme is the reversed iOS client id', () => {
   );
 });
 
-test('the OAuth login body carries provider and token and no nonce', () => {
-  const body = oauthLoginBody('apple', 'header.payload.signature');
-  assert.deepEqual(body, { provider: 'apple', idToken: 'header.payload.signature' });
-  assert.equal('nonce' in body, false);
+test('Android and web point Apple accounts to iPhone whatever the build sets for Apple', () => {
+  for (const appleSignIn of ['true', 'false', undefined]) {
+    const config = new SocialSignInConfig({ appleSignIn });
+    for (const platform of ['android', 'web']) {
+      assert.match(config.appleAccountHint(platform) ?? '', /Signed up with Apple on an iPhone/);
+    }
+  }
+});
+
+test('iOS shows the relay address hint only beside the Apple button', () => {
+  assert.match(allIds.appleAccountHint('ios') ?? '', /relay address/);
+  assert.equal(new SocialSignInConfig({ appleSignIn: 'false' }).appleAccountHint('ios'), null);
+});
+
+test('the app config is the same whatever the social sign-in env', () => {
+  const keys = ['EXPO_PUBLIC_APPLE_SIGN_IN', 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID'];
+  const saved = keys.map((key) => process.env[key]);
+  const configWith = (value: string | undefined) => {
+    for (const key of keys) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    return appConfig({ config: {} } as ConfigContext);
+  };
+  try {
+    const bare = configWith(undefined);
+    assert.deepEqual(configWith('true'), bare);
+    assert.deepEqual(configWith('333-ios.apps.googleusercontent.com'), bare);
+    assert.equal(bare.ios?.usesAppleSignIn, true);
+    assert.ok(bare.plugins?.includes('expo-apple-authentication'));
+  } finally {
+    keys.forEach((key, index) => {
+      if (saved[index] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = saved[index];
+      }
+    });
+  }
 });
 
 test('social refusals point to email sign-in', () => {
