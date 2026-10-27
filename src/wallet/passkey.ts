@@ -7,7 +7,7 @@ import { base64 } from '@/wallet/base64';
 import { PasskeyAssertion } from '@/wallet/passkey-assertion';
 import { PasskeyPublicKey } from '@/wallet/passkey-public-key';
 import { PasskeySite } from '@/wallet/passkey-site';
-import { isUserCancel } from '@/wallet/user-cancel';
+import { isUserCancel, UserCancelled } from '@/wallet/user-cancel';
 
 function rpId(): string {
   return PasskeySite.forHost(Platform.OS === 'web' ? window.location.hostname : null);
@@ -45,7 +45,7 @@ export const passkey = {
       userVerification: 'required',
     });
     if (!signed) {
-      throw new Error('The confirmation was cancelled');
+      throw new UserCancelled('The confirmation was cancelled');
     }
     return PasskeyAssertion.fromResponse(signed.response);
   },

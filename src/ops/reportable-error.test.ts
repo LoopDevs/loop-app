@@ -3,7 +3,9 @@ import { test } from 'node:test';
 
 import { CtxError } from '../ctx/ctx-error.ts';
 import { RequestTimeoutError } from '../ctx/deadline.ts';
+import { UpdateInProgress } from '../updates/critical-update.ts';
 import { IdentityNotConfirmed } from '../wallet/device-key.ts';
+import { UserCancelled } from '../wallet/user-cancel.ts';
 import { ReportableError } from './reportable-error.ts';
 
 test('CTX refusals and server errors are not reported a second time', () => {
@@ -16,6 +18,25 @@ test('a declined biometric or passkey prompt is not reported', () => {
   assert.equal(ReportableError.isAnomaly(new IdentityNotConfirmed()), false);
   assert.equal(ReportableError.isAnomaly(Object.assign(new Error('cancelled'), { code: 'ERR_USER_CANCELLED' })), false);
   assert.equal(ReportableError.isAnomaly(new Error('UserCancelled')), false);
+});
+
+test('a refusal wrapped in another error is not reported', () => {
+  const refusal = new Error('That code is wrong', { cause: new CtxError(400, '{"error":"ErrInvalidCode"}') });
+  assert.equal(ReportableError.isAnomaly(refusal), false);
+  assert.equal(ReportableError.isAnomaly(new Error('outer', { cause: new Error('inner') })), true);
+});
+
+test('a dismissed signing prompt and a reload in progress are not reported', () => {
+  assert.equal(ReportableError.isAnomaly(new UserCancelled('The confirmation was cancelled')), false);
+  assert.equal(ReportableError.isAnomaly(new UpdateInProgress()), false);
+});
+
+test('offline update failures from the native updater are not reported', () => {
+  assert.equal(
+    ReportableError.isAnomaly(new Error('Failed to download new update: The Internet connection appears to be offline.')),
+    false,
+  );
+  assert.equal(ReportableError.isAnomaly(new Error('NetworkError when attempting to fetch resource.')), false);
 });
 
 test('offline and timeout failures are not reported', () => {

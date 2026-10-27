@@ -6,6 +6,7 @@ import { Button } from '@/components/form';
 import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
 import { errorReporting } from '@/ops/error-reporting';
 import { StaleBuild } from '@/ops/stale-build';
+import { markLaunchFailed } from '@/updates/update-checker';
 
 export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   const staleBuild = Platform.OS === 'web' && StaleBuild.caused(error);
@@ -27,7 +28,9 @@ export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () 
 
 export function ScreenCrash({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => {
-    errorReporting.reportCrash(error, 'Screen render');
+    if (!markLaunchFailed(error)) {
+      errorReporting.reportCrash(error, 'Screen render');
+    }
   }, [error]);
   return <CrashFallback error={error} onRetry={() => void retry()} />;
 }

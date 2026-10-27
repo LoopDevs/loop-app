@@ -17,7 +17,9 @@ export function runningUpdateId(): string | null {
   return null;
 }
 
-export function markLaunchFailed(): void {}
+export function markLaunchFailed(_error: unknown): boolean {
+  return false;
+}
 
 function alreadyReloadedFor(criticalIndex: string): boolean {
   try {

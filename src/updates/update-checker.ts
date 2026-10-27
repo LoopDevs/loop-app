@@ -1,12 +1,18 @@
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 
+import { loopEnvironment } from '@/environment';
 import { errorReporting } from '@/ops/error-reporting';
 
-import { inLaunchRecoveryWindow, ReloadGate, reloadsNow } from './critical-update';
+import { LaunchRecovery, ReloadGate, reloadsNow } from './critical-update';
 
 const gate = new ReloadGate();
-const launchedAt = Date.now();
+const launchRecovery = new LaunchRecovery({
+  launchedAt: Date.now(),
+  now: Date.now,
+  runsUpdate: () => runningUpdateId() !== null,
+  fatal: (error) => ErrorUtils.getGlobalHandler()(error, true),
+});
 let checking = false;
 let reportedDisabled = false;
 
@@ -21,11 +27,8 @@ export function runningUpdateId(): string | null {
   return Updates.updateId.slice(0, 8);
 }
 
-export function markLaunchFailed(error: unknown): void {
-  if (runningUpdateId() === null || !inLaunchRecoveryWindow(Date.now() - launchedAt)) {
-    return;
-  }
-  ErrorUtils.getGlobalHandler()(error instanceof Error ? error : new Error(String(error)), true);
+export function markLaunchFailed(error: unknown): boolean {
+  return launchRecovery.markFailed(error);
 }
 
 export async function checkForUpdate(): Promise<void> {
@@ -33,7 +36,7 @@ export async function checkForUpdate(): Promise<void> {
     return;
   }
   if (!Updates.isEnabled) {
-    if (!reportedDisabled) {
+    if (!reportedDisabled && loopEnvironment.name === 'production') {
       reportedDisabled = true;
       errorReporting.reportMessage('Updates are disabled in this build');
     }
