@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PressScale } from '@/components/press-scale';
@@ -7,20 +7,37 @@ import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
-type FieldProps = React.ComponentProps<typeof TextInput>;
+type FieldProps = React.ComponentProps<typeof TextInput> & {
+  label?: string;
+  disabled?: boolean;
+};
 
-export function Field({ style, onFocus, onBlur, ...props }: FieldProps) {
+export function Field({
+  label,
+  disabled = false,
+  editable = true,
+  style,
+  onFocus,
+  onBlur,
+  ...props
+}: FieldProps) {
   const theme = useTheme();
+  const labelId = useId();
   const [focused, setFocused] = useState(false);
   const focusBorder = { borderColor: theme.text, borderWidth: 2 };
-  return (
+  const labelled = label ? ({ 'aria-labelledby': labelId } as object) : {};
+  const input = (
     <TextInput
-      accessibilityLabel={props.placeholder}
+      accessibilityLabel={label ?? props.placeholder}
       autoCapitalize="none"
       autoCorrect={false}
       placeholderTextColor={theme.textSecondary}
       selectionColor={theme.accent}
+      {...labelled}
       {...props}
+      editable={editable && !disabled}
+      accessibilityState={{ ...props.accessibilityState, disabled }}
+      aria-disabled={disabled}
       onFocus={(event) => {
         setFocused(true);
         onFocus?.(event);
@@ -38,12 +55,28 @@ export function Field({ style, onFocus, onBlur, ...props }: FieldProps) {
         },
         style,
         focused && focusBorder,
+        disabled && styles.disabled,
       ]}
     />
   );
+  if (!label) {
+    return input;
+  }
+  return (
+    <View style={styles.labelled}>
+      <Text
+        nativeID={labelId}
+        accessible={false}
+        importantForAccessibility="no"
+        maxFontSizeMultiplier={1.6} style={[styles.fieldLabel, { color: theme.text }]}>
+        {label}
+      </Text>
+      {input}
+    </View>
+  );
 }
 
-export type ButtonVariant = 'primary' | 'secondary' | 'quiet';
+type ButtonVariant = 'primary' | 'secondary' | 'quiet';
 
 type ButtonProps = {
   label: string;
@@ -162,6 +195,17 @@ const styles = StyleSheet.create({
     minHeight: 50,
     fontSize: 17,
     fontFamily: FontFamily.regular,
+  },
+  labelled: {
+    gap: Spacing.one,
+  },
+  fieldLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  disabled: {
+    opacity: 0.45,
   },
   button: {
     alignItems: 'center',

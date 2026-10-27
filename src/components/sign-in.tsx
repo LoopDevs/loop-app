@@ -30,6 +30,7 @@ import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
+import { strings } from '@/strings';
 import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
 import type { CountryChoice } from '@/ctx/profile';
@@ -347,7 +348,8 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
           <Field
             value={email}
             onChangeText={setEmail}
-            placeholder="Email"
+            label={strings.field.email}
+            disabled={busy}
             keyboardType="email-address"
             autoComplete="email"
             textContentType="emailAddress"
@@ -374,7 +376,8 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
           <Field
             value={code}
             onChangeText={setCode}
-            placeholder="Code"
+            label={strings.field.code}
+            disabled={busy}
             keyboardType="number-pad"
             autoComplete="one-time-code"
             textContentType="oneTimeCode"
