@@ -22,7 +22,7 @@ export function QrCode({ value, size = 184, accessibilityLabel }: QrCodeProps) {
   }, [value]);
   return (
     <View
-      style={[styles.frame, { borderColor: theme.border }]}
+      style={[styles.frame, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}
       accessible
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel}>
@@ -35,8 +35,7 @@ const styles = StyleSheet.create({
   frame: {
     alignSelf: 'center',
     padding: Spacing.three,
-    borderRadius: Radius.media,
+    borderRadius: Radius.medium,
     borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: '#FFFFFF',
   },
 });

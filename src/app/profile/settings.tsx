@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     borderLeftWidth: 3,
     borderColor: "transparent",
   },

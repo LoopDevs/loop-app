@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   },
   coverPlaceholder: {
     aspectRatio: coverAspect,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
   },
   heroText: {
     gap: Spacing.two,
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     padding: Spacing.three,
     gap: Spacing.three,
   },
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
   factIcon: {
     width: 44,
     height: 44,
-    borderRadius: Radius.tile,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },

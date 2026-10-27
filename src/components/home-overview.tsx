@@ -562,10 +562,11 @@ function cashbackLine({ cashbackAmount, cashbackCurrency }: GiftCard): string | 
 }
 
 function MerchantDisc({ merchantId, name }: { merchantId: string; name: string }) {
+  const theme = useTheme();
   const merchant = cachedMerchant(merchantId);
   if (merchant?.logoUrl) {
     return (
-      <Disc ground="#FFFFFF">
+      <Disc ground={theme.backgroundElement}>
         <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.discImage} accessible={false} />
       </Disc>
     );
@@ -573,7 +574,7 @@ function MerchantDisc({ merchantId, name }: { merchantId: string; name: string }
   const hue = merchant?.tileHue() ?? 225;
   return (
     <Disc ground={`hsl(${hue}, 42%, 34%)`}>
-      <Text style={styles.discInitial}>{name.trim().charAt(0).toUpperCase()}</Text>
+      <Text style={[styles.discInitial, { color: theme.onInverse }]}>{name.trim().charAt(0).toUpperCase()}</Text>
     </Disc>
   );
 }
@@ -607,7 +608,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   card: {
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
@@ -655,7 +656,6 @@ const styles = StyleSheet.create({
     height: '72%',
   },
   discInitial: {
-    color: '#FFFFFF',
     fontFamily: FontFamily.bold,
     fontSize: 16,
   },
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.three,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     minHeight: 80,
   },
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.four,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
   },
   promoText: {

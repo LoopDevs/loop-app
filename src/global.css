@@ -10,19 +10,19 @@
 }
 
 body {
-  background-color: #ffffff;
-  color: #0f1b2d;
+  background-color: var(--color-background);
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
-  caret-color: #1a56db;
+  caret-color: var(--color-accent);
 }
 
 ::selection {
-  background-color: #d6e2fb;
-  color: #0f1b2d;
+  background-color: var(--color-accent-soft);
+  color: var(--color-text);
 }
 
 :focus-visible {
-  outline: 2px solid #1a56db;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 

@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   card: {
     padding: Spacing.four,
     gap: Spacing.two,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
   },
   balance: {

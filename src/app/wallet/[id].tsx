@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
   },
   summary: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },

@@ -136,7 +136,7 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
       <KeyboardAvoid style={[styles.layer, wide ? styles.layerWide : styles.layerNarrow]}>
         <Animated.View entering={FadeIn.duration(Motion.state)} style={StyleSheet.absoluteFill}>
           <Pressable
-            style={styles.backdrop}
+            style={[styles.backdrop, { backgroundColor: theme.scrim }]}
             onPress={close}
             accessibilityRole="button"
             accessibilityLabel="Close sign in"
@@ -514,21 +514,20 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 27, 45, 0.32)',
   },
   sheetWide: {
     width: '100%',
     maxWidth: Layout.sheetWidth,
     maxHeight: '90%',
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     ...Elevation.raised,
   },
   sheetNarrow: {
     maxHeight: '92%',
-    borderTopLeftRadius: Radius.card,
-    borderTopRightRadius: Radius.card,
+    borderTopLeftRadius: Radius.large,
+    borderTopRightRadius: Radius.large,
     borderTopWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     ...Elevation.raised,
@@ -593,7 +592,7 @@ const styles = StyleSheet.create({
   signInButton: {
     minHeight: 44,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: Spacing.three,
     padding: Spacing.three,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     maxWidth: 680,
   },
   noteText: {

@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   panel: {
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.four,
     gap: Spacing.four,
   },

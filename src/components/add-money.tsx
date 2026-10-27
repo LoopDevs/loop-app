@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   card: {
     padding: Spacing.three,
     gap: Spacing.three,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     width: '100%',
     maxWidth: Layout.sheetWidth,
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   tracker: {
     paddingTop: Spacing.three,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
   },
 });

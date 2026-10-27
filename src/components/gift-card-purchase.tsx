@@ -1140,7 +1140,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     padding: Spacing.three,
     gap: Spacing.four,
   },
@@ -1165,7 +1165,7 @@ const styles = StyleSheet.create({
   },
   amountEntry: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     minHeight: 72,
@@ -1219,7 +1219,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 4,
-    borderRadius: Radius.tile,
+    borderRadius: Radius.medium,
   },
   statusRow: {
     flexDirection: 'row',

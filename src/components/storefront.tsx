@@ -218,7 +218,13 @@ function HeroPhoto({ best, onOpen }: { best: Merchant | null; onOpen: (merchant:
           : FadeIn.duration(Motion.transition).delay(Motion.stagger * 2)
       }
       style={[styles.heroPhotoWrap, wide && styles.heroPhotoWrapWide]}>
-      <View style={[styles.heroPhoto, wide && styles.heroPhotoWide, Elevation.raised]}>
+      <View
+        style={[
+          styles.heroPhoto,
+          wide && styles.heroPhotoWide,
+          { borderColor: theme.backgroundElement },
+          Elevation.raised,
+        ]}>
         <Image
           source={heroPhoto}
           contentFit="cover"
@@ -237,7 +243,8 @@ function HeroPhoto({ best, onOpen }: { best: Merchant | null; onOpen: (merchant:
             Elevation.raised,
             { backgroundColor: theme.backgroundElement, borderColor: theme.border },
           ]}>
-          <View style={[styles.heroOfferLogo, { borderColor: theme.border }]}>
+          <View
+            style={[styles.heroOfferLogo, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
             {best.logoUrl ? (
               <Image source={{ uri: best.logoUrl }} contentFit="contain" style={styles.heroOfferLogoImage} />
             ) : (
@@ -384,12 +391,13 @@ function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: Sugges
           accessibilityRole="button"
           accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
           style={[styles.suggestion, index === highlight && { backgroundColor: theme.backgroundSelected }]}>
-          <View style={[styles.suggestionLogo, { borderColor: theme.border }]}>
+          <View
+            style={[styles.suggestionLogo, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
             {merchant.logoUrl ? (
               <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.suggestionLogoImage} />
             ) : (
               <View style={[styles.suggestionInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
-                <Text style={styles.suggestionInitialText}>{merchant.initial()}</Text>
+                <Text style={[styles.suggestionInitialText, { color: theme.onInverse }]}>{merchant.initial()}</Text>
               </View>
             )}
           </View>
@@ -936,7 +944,7 @@ const styles = StyleSheet.create({
     right: 0,
     marginTop: Spacing.two,
     borderWidth: 1,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.one,
     overflow: 'hidden',
   },
@@ -946,14 +954,13 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     minHeight: 52,
     paddingHorizontal: Spacing.two,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
   },
   suggestionLogo: {
     width: 36,
     height: 36,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -969,7 +976,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   suggestionInitialText: {
-    color: '#FFFFFF',
     fontFamily: FontFamily.semibold,
     fontSize: 15,
   },
@@ -1001,7 +1007,6 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 32,
     borderWidth: 6,
-    borderColor: '#FFFFFF',
     overflow: 'hidden',
     transform: [{ rotate: '4deg' }],
   },
@@ -1037,7 +1042,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
     padding: Spacing.one,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1145,7 +1149,7 @@ const styles = StyleSheet.create({
   step: {
     gap: Spacing.two,
     padding: Spacing.four,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: 1,
   },
   stepWide: {

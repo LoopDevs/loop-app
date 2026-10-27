@@ -173,7 +173,7 @@ export function Notice({ message, actionLabel, onAction, disabled = false, tone 
 const styles = StyleSheet.create({
   notice: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     padding: Spacing.three,
     gap: Spacing.three,
   },
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
   },
   field: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     paddingHorizontal: Spacing.three,
     minHeight: 50,
     fontSize: 17,
