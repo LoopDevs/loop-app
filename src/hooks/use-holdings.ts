@@ -36,7 +36,7 @@ export function useHoldings(wallet: SmartWallet | null) {
       fetchedAccount instanceof Error
         ? fetchedAccount
         : await fetchedAccount
-            .withoutLandedPayouts((txHash) => wallet.transactionLanded(txHash))
+            .withoutLandedPayouts(wallet.address, (txHash) => wallet.transactionLanded(txHash))
             .catch((error: unknown) => new Error(errorMessage(error)));
     if (request !== latestRequest.current) {
       return;

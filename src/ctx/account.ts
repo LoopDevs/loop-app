@@ -29,9 +29,15 @@ export class Account {
     this.payouts = (json.payouts ?? []).map((payout) => new Payout(payout));
   }
 
-  async withoutLandedPayouts(isLanded: (txHash: string) => Promise<boolean>): Promise<Account> {
+  async withoutLandedPayouts(address: string, isLanded: (txHash: string) => Promise<boolean>): Promise<Account> {
     const landed = await Promise.all(
-      this.payouts.map((payout) => payout.isInFlight() && !!payout.txHash && isLanded(payout.txHash)),
+      this.payouts.map(
+        (payout) =>
+          payout.isInFlight() &&
+          payout.address === address &&
+          !!payout.txHash &&
+          isLanded(payout.txHash).catch(() => false),
+      ),
     );
     const landedIds = new Set(this.payouts.filter((_, index) => landed[index]).map((payout) => payout.id));
     if (landedIds.size === 0) {

@@ -82,7 +82,6 @@ async function sentPaymentFailure(
   if (await wallet.paymentLanded(token, await signedTransfer(giftCard), expiryLedger)) {
     return null;
   }
-  await sentPayments.forget(giftCard.paymentId);
   return { kind: 'failed' };
 }
 

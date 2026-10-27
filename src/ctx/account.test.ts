@@ -153,13 +153,13 @@ test('a payout whose transaction already landed leaves the account', async () =>
   const account = new Account({
     wallet: [],
     payouts: [
-      payout({ id: 'landed', status: 'submitted', txHash: 'h1' }),
-      payout({ id: 'pending', status: 'submitted', txHash: 'h2' }),
-      payout({ id: 'unsent' }),
+      payout({ id: 'landed', status: 'submitted', txHash: 'h1', address: 'GW' }),
+      payout({ id: 'pending', status: 'submitted', txHash: 'h2', address: 'GW' }),
+      payout({ id: 'unsent', address: 'GW' }),
     ],
   });
   const checked: string[] = [];
-  const remaining = await account.withoutLandedPayouts(async (txHash) => {
+  const remaining = await account.withoutLandedPayouts('GW', async (txHash) => {
     checked.push(txHash);
     return txHash === 'h1';
   });
@@ -172,6 +172,32 @@ test('a payout whose transaction already landed leaves the account', async () =>
 
 test('finished payouts are not looked up on the ledger', async () => {
   const account = new Account({ wallet: [], payouts: [payout({ status: 'complete', txHash: 'h1' })] });
-  const remaining = await account.withoutLandedPayouts(async () => assert.fail('looked up a finished payout'));
+  const remaining = await account.withoutLandedPayouts('GW', async () => assert.fail('looked up a finished payout'));
   assert.equal(remaining, account);
+});
+
+test('payouts to another address are not looked up on the ledger', async () => {
+  const account = new Account({ wallet: [], payouts: [payout({ status: 'submitted', txHash: 'h1', address: 'GX' })] });
+  const remaining = await account.withoutLandedPayouts('GW', async () => assert.fail('looked up another address'));
+  assert.equal(remaining, account);
+});
+
+test('a failed ledger lookup keeps the payout and the rest of the account', async () => {
+  const account = new Account({
+    wallet: [],
+    payouts: [
+      payout({ id: 'unknown', status: 'submitted', txHash: 'bad', address: 'GW' }),
+      payout({ id: 'landed', status: 'submitted', txHash: 'h1', address: 'GW' }),
+    ],
+  });
+  const remaining = await account.withoutLandedPayouts('GW', async (txHash) => {
+    if (txHash === 'bad') {
+      throw new Error('rpc unavailable');
+    }
+    return true;
+  });
+  assert.deepEqual(
+    remaining.payouts.map((kept) => kept.id),
+    ['unknown'],
+  );
 });
