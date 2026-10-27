@@ -61,6 +61,9 @@ export class SmartWallet {
   static async load(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
     await SmartWallet.creation.settled(userId);
+    if ((await ctx.userId()) !== userId) {
+      return SmartWallet.load();
+    }
     const pin = new WalletPin(AsyncStorage, userId);
     const [links, pinned] = await Promise.all([ctx.wallets(), pin.read()]);
     const link = WalletPin.choose(links, pinned);

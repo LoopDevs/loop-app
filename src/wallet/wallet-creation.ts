@@ -10,7 +10,9 @@ export class WalletCreation<T> {
     const pending = { userId, result };
     this.pending = pending;
     result
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        console.warn('Wallet setup failed', error);
+      })
       .finally(() => {
         if (this.pending === pending) {
           this.pending = null;

@@ -34,6 +34,7 @@ import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
 import type { CountryChoice } from '@/ctx/profile';
 import type { SocialProvider } from '@/session/social-sign-in';
+import { passkey } from '@/wallet/passkey';
 import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type SignInListener = () => void;
@@ -250,7 +251,11 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
     }
     setStep('secure');
     if (Platform.OS !== 'web') {
-      await createWallet();
+      await createWallet().catch((error: unknown) => {
+        if (!passkey.isUserCancel(error)) {
+          throw error;
+        }
+      });
     }
   };
 

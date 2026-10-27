@@ -103,6 +103,7 @@ export default function HomeScreen() {
         return;
       }
       walletLoadStarted.current = false;
+      setScreen('no-wallet');
       throw error;
     }
   }, [showWallet, openActiveOrder]);
