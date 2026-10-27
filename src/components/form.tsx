@@ -36,7 +36,7 @@ export function Field({
       {...labelled}
       {...props}
       editable={editable && !disabled}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ ...props.accessibilityState, disabled }}
       aria-disabled={disabled}
       onFocus={(event) => {
         setFocused(true);
@@ -64,7 +64,11 @@ export function Field({
   }
   return (
     <View style={styles.labelled}>
-      <Text nativeID={labelId} maxFontSizeMultiplier={1.6} style={[styles.fieldLabel, { color: theme.text }]}>
+      <Text
+        nativeID={labelId}
+        accessible={false}
+        importantForAccessibility="no"
+        maxFontSizeMultiplier={1.6} style={[styles.fieldLabel, { color: theme.text }]}>
         {label}
       </Text>
       {input}

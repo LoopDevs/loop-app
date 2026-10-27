@@ -344,6 +344,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
             value={email}
             onChangeText={setEmail}
             label={strings.field.email}
+            disabled={busy}
             keyboardType="email-address"
             autoComplete="email"
             textContentType="emailAddress"
@@ -371,6 +372,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
             value={code}
             onChangeText={setCode}
             label={strings.field.code}
+            disabled={busy}
             keyboardType="number-pad"
             autoComplete="one-time-code"
             textContentType="oneTimeCode"

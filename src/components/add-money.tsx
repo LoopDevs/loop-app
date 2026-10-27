@@ -19,6 +19,7 @@ import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
+import { strings } from '@/strings';
 import { network } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { PayRequest } from '@/wallet/pay-request';
@@ -111,13 +112,12 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
   const amountPicker = (onSubmit: () => void) => (
     <>
       <Field
-        placeholder="Amount in dollars"
+        label={strings.field.amountInDollars}
         value={input}
         onChangeText={setInput}
         keyboardType="decimal-pad"
         returnKeyType="next"
         onSubmitEditing={onSubmit}
-        accessibilityLabel="Amount in dollars"
       />
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (

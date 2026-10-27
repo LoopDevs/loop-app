@@ -16,6 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Layout, Motion, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { money } from '@/money';
+import { strings } from '@/strings';
 
 type Step = 'bank' | 'amount' | 'review' | 'status';
 
@@ -67,25 +68,22 @@ export default function CashOutScreen() {
                 A UK bank account in your name.
               </ThemedText>
               <Field
-                placeholder="Name on the account"
+                label={strings.field.accountName}
                 value={name}
                 onChangeText={setName}
                 autoComplete="name"
-                accessibilityLabel="Name on the account"
               />
               <Field
-                placeholder="Sort code, 6 digits"
+                label={strings.field.sortCode}
                 value={shownSortCode(sortCode)}
                 onChangeText={(text) => setSortCode(digits(text, 6))}
                 keyboardType="number-pad"
-                accessibilityLabel="Sort code, 6 digits"
               />
               <Field
-                placeholder="Account number, 8 digits"
+                label={strings.field.accountNumber}
                 value={accountNumber}
                 onChangeText={(text) => setAccountNumber(digits(text, 8))}
                 keyboardType="number-pad"
-                accessibilityLabel="Account number, 8 digits"
               />
               <Button label="Continue" variant="primary" onPress={() => setStep('amount')} disabled={!bankReady} />
             </Animated.View>
@@ -100,11 +98,10 @@ export default function CashOutScreen() {
                 {`You can cash out ${range} at a time.`}
               </ThemedText>
               <Field
-                placeholder="Amount in dollars"
+                label={strings.field.amountInDollars}
                 value={input}
                 onChangeText={setInput}
                 keyboardType="decimal-pad"
-                accessibilityLabel="Amount in dollars"
               />
               {input !== '' && !amountReady && (
                 <ThemedText type="small" themeColor="danger">

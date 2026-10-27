@@ -24,6 +24,7 @@ import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
+import { strings } from '@/strings';
 import { Savings } from '@/wallet/savings';
 import { UnlinkedDevice } from '@/wallet/smart-wallet';
 
@@ -213,11 +214,10 @@ function AddToSavings({ onClose }: { onClose: () => void }) {
         How much do you want to save?
       </ThemedText>
       <Field
-        placeholder="Amount in dollars"
+        label={strings.field.amountInDollars}
         value={input}
         onChangeText={setInput}
         keyboardType="decimal-pad"
-        accessibilityLabel="Amount in dollars"
       />
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (

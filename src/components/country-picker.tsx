@@ -18,6 +18,7 @@ import { type CountryChoice, Profile } from "@/ctx/profile";
 import { useMarket } from "@/hooks/use-market";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useTheme } from "@/hooks/use-theme";
+import { strings } from "@/strings";
 
 type Props = {
   profile: Profile;
@@ -176,7 +177,7 @@ function CountryList({ options, selected, onPick, onClose }: CountryListProps) {
             <Field
               value={query}
               onChangeText={setQuery}
-              placeholder="Search countries or currencies"
+              label={strings.field.searchCountries}
               autoFocus
               returnKeyType="search"
             />
