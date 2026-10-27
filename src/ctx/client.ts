@@ -18,6 +18,7 @@ import {
 } from '@/session/social-sign-in';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
+import { holdCriticalReload } from '@/updates/update-checker';
 
 export { CtxError };
 
@@ -258,14 +259,18 @@ class CtxClient {
     await this.signInRequest('email', '/login', { email });
   }
 
-  async verifyCode(email: string, code: string): Promise<void> {
-    await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+  verifyCode(email: string, code: string): Promise<void> {
+    return holdCriticalReload(async () => {
+      await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+    });
   }
 
-  async signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
-    await this.auth.startSession(
-      await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
-    );
+  signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
+    return holdCriticalReload(async () => {
+      await this.auth.startSession(
+        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
+      );
+    });
   }
 
   async isSignedIn(): Promise<boolean> {

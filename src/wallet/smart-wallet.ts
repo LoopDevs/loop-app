@@ -13,6 +13,7 @@ import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
 import { network, type Token } from '@/stellar/network';
+import { holdCriticalReload } from '@/updates/update-checker';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { base64 } from '@/wallet/base64';
@@ -98,8 +99,13 @@ export class SmartWallet {
     }
     const userId = await ctx.userId();
     const devicePublicKey = await deviceSigner.create(userId);
-    const created = await passkey.create(label);
-    SmartWallet.creation.start(userId, SmartWallet.deploy(userId, devicePublicKey, created));
+    await holdCriticalReload(async () => {
+      const created = await passkey.create(label);
+      SmartWallet.creation.start(
+        userId,
+        holdCriticalReload(() => SmartWallet.deploy(userId, devicePublicKey, created)),
+      );
+    });
   }
 
   private static async deploy(userId: string, devicePublicKey: string, created: Passkey): Promise<SmartWallet> {
@@ -143,7 +149,7 @@ export class SmartWallet {
       await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
       return;
     }
-    await this.deviceLink().add(this.address, passkeyPublicKey, signal);
+    await holdCriticalReload(() => this.deviceLink().add(this.address, passkeyPublicKey, signal));
     await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
   }
 
@@ -203,17 +209,19 @@ export class SmartWallet {
     return (await soroban.transaction(hash)).status === 'SUCCESS';
   }
 
-  async withdraw(shares: bigint): Promise<SentWithdrawal> {
-    const intent: SmartWalletIntent = {
-      intent: 'vault_withdraw',
-      currency: Savings.currency,
-      shares: shares.toString(),
-    };
-    const built = await ctx.buildTransaction(this.id, intent);
-    const call = await this.verifiedCall(built);
-    await this.requireWithdraw(call, shares);
-    const result = await this.signAndSponsor(intent, built.transaction, call);
-    return { ...result, expiryLedger: built.expiryLedger };
+  withdraw(shares: bigint): Promise<SentWithdrawal> {
+    return holdCriticalReload(async () => {
+      const intent: SmartWalletIntent = {
+        intent: 'vault_withdraw',
+        currency: Savings.currency,
+        shares: shares.toString(),
+      };
+      const built = await ctx.buildTransaction(this.id, intent);
+      const call = await this.verifiedCall(built);
+      await this.requireWithdraw(call, shares);
+      const result = await this.signAndSponsor(intent, built.transaction, call);
+      return { ...result, expiryLedger: built.expiryLedger };
+    });
   }
 
   savingsTopUp(): SavingsTopUp {
