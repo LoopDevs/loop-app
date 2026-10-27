@@ -7,11 +7,7 @@ const storeName = 'keys';
 export const deviceSigner = {
   async publicKey(userId: string): Promise<string | null> {
     const keyPair = await read(userId);
-    if (!keyPair) {
-      return null;
-    }
-    keepStorage();
-    return exportPublicKey(keyPair);
+    return keyPair ? exportPublicKey(keyPair) : null;
   },
 
   async create(userId: string): Promise<string> {

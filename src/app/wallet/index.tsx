@@ -101,7 +101,9 @@ export default function WalletScreen() {
           page: next,
         });
         const sent = await Promise.all(
-          result.map((giftCard) => sentPayments.get(giftCard.paymentId)),
+          result.map((giftCard) =>
+            sentPayments.get(giftCard.paymentId).catch(() => null),
+          ),
         );
         const shownResult = result.filter(
           (giftCard, index) =>

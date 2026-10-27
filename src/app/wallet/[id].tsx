@@ -164,7 +164,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const reduceMotion = useReducedMotion();
   const cashback = cashbackState(giftCard);
   const sent = useSentPayment(giftCard.paymentId);
-  const outcome = outcomeText(giftCard, sent !== null);
+  const outcome = sent === undefined ? null : outcomeText(giftCard, sent !== null);
   const processing = giftCard.status === 'paid';
   const paid = amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency);
   const cashbackAmount = amountInMoney(giftCard.cashbackAmount, giftCard.cashbackCurrency);
