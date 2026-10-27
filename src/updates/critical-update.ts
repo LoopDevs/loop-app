@@ -12,6 +12,16 @@ export function isCriticalUpdate(manifest: unknown, runningExtra: unknown): bool
   return fetchedCriticalIndex(manifest) > criticalIndexOf(runningExtra);
 }
 
+export type FetchedUpdate = {
+  isNew: boolean;
+  isRollBackToEmbedded: boolean;
+  manifest?: unknown;
+};
+
+export function reloadsNow(fetched: FetchedUpdate, runningExtra: unknown): boolean {
+  return fetched.isRollBackToEmbedded || (fetched.isNew && isCriticalUpdate(fetched.manifest, runningExtra));
+}
+
 export class ReloadGate {
   private running = 0;
   private pending: (() => void | Promise<void>) | null = null;
