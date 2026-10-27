@@ -41,13 +41,11 @@ jobs:
       - name: Check the release ref
         run: |
           case "$CHANNEL:$KIND:$GITHUB_REF" in
-            production:build:refs/tags/v*) ;;
-            production:update:refs/heads/main) ;;
-            production:update:refs/tags/v*) ;;
+            production:*:refs/tags/v*) ;;
             preview:*:refs/heads/post-hackathon) ;;
             preview:*:refs/tags/v*) ;;
             *)
-              echo "::error::$CHANNEL $KIND cannot run from $GITHUB_REF. Production builds run from a v* tag, production updates from main or a v* tag, preview from post-hackathon or a v* tag."
+              echo "::error::$CHANNEL $KIND cannot run from $GITHUB_REF. Production runs from a v* tag, preview from post-hackathon or a v* tag."
               exit 1
               ;;
           esac
@@ -67,10 +65,26 @@ jobs:
           echo "EXPO_PUBLIC_LOOP_ENV=$loop_env" >> "$GITHUB_ENV"
           echo "EXPECTED_LOOP_ENV=$loop_env" >> "$GITHUB_ENV"
 
-      - name: Check the EAS environment keeps the pinned Loop environment
+      - name: Check the EAS environment values
         env:
-          SAME_LOOP_ENV: test "$EXPO_PUBLIC_LOOP_ENV" = "$EXPECTED_LOOP_ENV"
-        run: npx --yes "$EAS_CLI" env:exec "$CHANNEL" "$SAME_LOOP_ENV" --non-interactive
+          CHECK_EAS_ENV: |
+            status=0
+            if [ "$EXPO_PUBLIC_LOOP_ENV" != "$EXPECTED_LOOP_ENV" ]; then
+              echo "::error::EXPO_PUBLIC_LOOP_ENV in the EAS $CHANNEL environment is '$EXPO_PUBLIC_LOOP_ENV', eas.json pins '$EXPECTED_LOOP_ENV'"
+              status=1
+            fi
+            case "$CHANNEL" in
+              production) required="EXPO_PUBLIC_SENTRY_DSN EXPO_PUBLIC_APPLE_SIGN_IN EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID" ;;
+              *) required="" ;;
+            esac
+            for key in $required; do
+              if [ -z "$(printenv "$key")" ]; then
+                echo "::error::$key is empty in the EAS $CHANNEL environment"
+                status=1
+              fi
+            done
+            exit $status
+        run: npx --yes "$EAS_CLI" env:exec "$CHANNEL" "$CHECK_EAS_ENV" --non-interactive
 
       - name: Publish the OTA update
         if: inputs.kind == 'update'
