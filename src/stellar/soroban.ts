@@ -11,17 +11,44 @@ import {
   xdr,
 } from '@stellar/stellar-sdk';
 
-import { Deadline } from '@/ctx/deadline';
-import { network } from '@/stellar/network';
-import { TransferEvents, type LedgerRange } from '@/stellar/transfer-events';
+import { Deadline } from '../ctx/deadline.ts';
+import { network } from './network.ts';
+import { TransferEvents, type LedgerRange } from './transfer-events.ts';
 
 const simulationSource = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
-class Soroban {
-  private readonly server = new rpc.Server(network.rpcUrl, { timeout: Deadline.requestMs });
+export class Soroban {
+  private readonly servers: rpc.Server[];
+  private preferred = 0;
+
+  constructor(servers: rpc.Server[]) {
+    this.servers = servers;
+  }
+
+  static forUrls(urls: string[]): Soroban {
+    return new Soroban(urls.map((url) => new rpc.Server(url, { timeout: Deadline.requestMs })));
+  }
+
+  private async call<T>(request: (server: rpc.Server) => Promise<T>): Promise<T> {
+    let transportError: unknown;
+    for (let attempt = 0; attempt < this.servers.length; attempt++) {
+      const index = (this.preferred + attempt) % this.servers.length;
+      try {
+        const result = await request(this.servers[index]);
+        this.preferred = index;
+        return result;
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          throw error;
+        }
+        transportError = error;
+      }
+    }
+    throw transportError;
+  }
 
   async latestLedger(): Promise<number> {
-    const { sequence } = await this.server.getLatestLedger();
+    const { sequence } = await this.call((server) => server.getLatestLedger());
     return sequence;
   }
 
@@ -33,7 +60,7 @@ class Soroban {
       .addOperation(new Contract(contractId).call(method, ...args))
       .setTimeout(30)
       .build();
-    const simulated = await this.server.simulateTransaction(transaction);
+    const simulated = await this.call((server) => server.simulateTransaction(transaction));
     if (rpc.Api.isSimulationError(simulated)) {
       throw new Error(`${method} failed: ${simulated.error}`);
     }
@@ -45,7 +72,7 @@ class Soroban {
   }
 
   async transaction(hash: string): Promise<{ status: string; latestLedger: number }> {
-    const { status, latestLedger } = await this.server.getTransaction(hash);
+    const { status, latestLedger } = await this.call((server) => server.getTransaction(hash));
     return { status, latestLedger };
   }
 
@@ -55,12 +82,16 @@ class Soroban {
     to: string,
     ledgers: LedgerRange,
   ): Promise<unknown[]> {
-    const { events } = await this.server.getEvents(TransferEvents.request(contractId, from, to, ledgers));
+    const { events } = await this.call((server) =>
+      server.getEvents(TransferEvents.request(contractId, from, to, ledgers)),
+    );
     return events.map((event) => scValToNative(event.value));
   }
 
   async wasmHash(contractId: string): Promise<string> {
-    const { entries } = await this.server.getLedgerEntries(new Contract(contractId).getFootprint());
+    const { entries } = await this.call((server) =>
+      server.getLedgerEntries(new Contract(contractId).getFootprint()),
+    );
     if (entries.length === 0) {
       throw new Error(`Contract ${contractId} does not exist`);
     }
@@ -80,4 +111,4 @@ export function i128(value: bigint): xdr.ScVal {
   return nativeToScVal(value, { type: 'i128' });
 }
 
-export const soroban = new Soroban();
+export const soroban = Soroban.forUrls(network.rpcUrls);
