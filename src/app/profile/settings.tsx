@@ -52,6 +52,13 @@ export default function SettingsScreen() {
   const [changingCountry, setChangingCountry] = useState(false);
   const [chosenSection, setChosenSection] =
     useState<SettingsSection>("account");
+  const [mailUnavailable, setMailUnavailable] = useState(false);
+  const openMail = (url: string) => {
+    Linking.openURL(url).catch(() => setMailUnavailable(true));
+  };
+  const mailFooter = mailUnavailable
+    ? `Couldn't open your email app. Email ${loopLinks.supportEmail}.`
+    : undefined;
   const profileUserId = useRef<string | null>(null);
   const { scrollRef, onScroll, scrim } = useScrimScroll();
 
@@ -228,12 +235,12 @@ export default function SettingsScreen() {
   );
 
   const helpGroup = (
-    <ListGroup title="Help and legal">
+    <ListGroup title="Help and legal" footer={mailFooter}>
       <ListRow
         label="Contact support"
         trailing="external"
         accessibilityRole="link"
-        onPress={() => Linking.openURL(loopLinks.supportMail())}
+        onPress={() => openMail(loopLinks.supportMail())}
       />
       <ListRow
         label="Terms"
@@ -251,18 +258,21 @@ export default function SettingsScreen() {
   );
 
   const dataGroup = profile && (
-    <ListGroup title="Your data" footer="Both open an email to Loop support.">
+    <ListGroup
+      title="Your data"
+      footer={`Both open an email to ${loopLinks.supportEmail}.`}
+    >
       <ListRow
         label="Request my data"
         trailing="external"
-        onPress={() => Linking.openURL(loopLinks.supportMail("Data request"))}
+        onPress={() => openMail(loopLinks.supportMail("Data request"))}
       />
       <ListRow
         label="Delete my account"
         tone="danger"
         trailing="external"
         onPress={() =>
-          Linking.openURL(
+          openMail(
             loopLinks.supportMail(
               "Delete my account",
               `Please delete my Loop account.\n\nAccount email: ${profile.email ?? ""}`,

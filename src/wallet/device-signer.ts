@@ -5,7 +5,7 @@ import { DeviceKey, type DeviceKeyStorage } from '@/wallet/device-key';
 
 const biometricOptions: SecureStore.SecureStoreOptions = {
   requireAuthentication: true,
-  authenticationPrompt: 'Approve with Face ID',
+  authenticationPrompt: 'Confirm it’s you',
 };
 const biometricsHelp: Partial<Record<typeof Platform.OS, string>> = {
   ios: 'Set up Face ID or Touch ID in Settings, or unlock it with your passcode, then try again.',
