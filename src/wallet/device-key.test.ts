@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { base64 } from './base64.ts';
-import { DeviceKey, MissingDeviceSecret, type DeviceKeyStorage } from './device-key.ts';
+import { DeviceKey, IdentityNotConfirmed, MissingDeviceSecret, type DeviceKeyStorage } from './device-key.ts';
 
 class MemoryStorage implements DeviceKeyStorage {
   readonly entries = new Map<string, { value: string; biometric: boolean }>();
@@ -155,4 +155,21 @@ test('creating after the OS dropped the secret makes a new key', async () => {
   const second = await key.create();
   assert.notEqual(second, first);
   assert.ok(ed25519.verify(base64.decode(await key.sign(digest)), digest, base64.decode(second)));
+});
+
+test('a cancelled Face ID or fingerprint prompt reads as not confirmed and other errors pass through', () => {
+  const iosCanceled = IdentityNotConfirmed.from(
+    new Error("Calling the 'getValueWithKeyAsync' function has failed\n→ Caused by: User canceled the operation."),
+  );
+  const androidCanceled = IdentityNotConfirmed.from(
+    new Error(
+      "Call to function 'ExpoSecureStore.getValueWithKeyAsync' has been rejected.\n→ Caused by: Could not authenticate the user: User canceled the authentication",
+    ),
+  );
+  const lockedOut = new Error(
+    "Call to function 'ExpoSecureStore.getValueWithKeyAsync' has been rejected.\n→ Caused by: Could not authenticate the user: Lockout permanent",
+  );
+  assert.ok(iosCanceled instanceof IdentityNotConfirmed);
+  assert.ok(androidCanceled instanceof IdentityNotConfirmed);
+  assert.equal(IdentityNotConfirmed.from(lockedOut), lockedOut);
 });

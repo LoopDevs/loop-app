@@ -252,7 +252,14 @@ export default function HomeScreen() {
             <AddDevice wallet={unlinkedWallet} onAdded={loadWallet} />
           )}
 
-          {message !== '' && <Notice message={message} />}
+          {message !== '' && (
+            <Notice
+              message={message}
+              actionLabel={sessionRead ? undefined : 'Try again'}
+              onAction={() => run(readSession)}
+              disabled={busy}
+            />
+          )}
 
           {showsListings && <FeaturedOffers catalog={catalog} onOpen={openMerchant} onSeeAll={openShop} />}
 
