@@ -1,36 +1,29 @@
-import { bytesToHex, randomBytes } from "@noble/hashes/utils";
-import Constants from "expo-constants";
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import Constants from 'expo-constants';
 
-import { Account } from "@/ctx/account";
-import { CtxError } from "@/ctx/ctx-error";
-import { ctxReportMessage } from "@/ctx/ctx-report";
-import { CtxResponse, UnexpectedResponse } from "@/ctx/ctx-response";
-import { OrderKeys, OrderRequest } from "@/ctx/order-request";
-import { OrderWake } from "@/ctx/order-wake";
-import { Deadline } from "@/ctx/deadline";
-import { Merchant } from "@/ctx/merchant";
-import type { PayoutJson } from "@/ctx/payout";
-import { Profile } from "@/ctx/profile";
-import {
-  blockingServiceState,
-  type BlockingServiceState,
-} from "@/ctx/service-state";
-import { loopEnvironment } from "@/environment";
-import { errorReporting } from "@/ops/error-reporting";
-import {
-  SessionAuth,
-  type SendOptions,
-  type TokenPair,
-} from "@/session/session-auth";
+import { Account } from '@/ctx/account';
+import { CtxError } from '@/ctx/ctx-error';
+import { ctxReportMessage } from '@/ctx/ctx-report';
+import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
+import { OrderKeys, OrderRequest } from '@/ctx/order-request';
+import { OrderWake } from '@/ctx/order-wake';
+import { Deadline } from '@/ctx/deadline';
+import { Merchant } from '@/ctx/merchant';
+import type { PayoutJson } from '@/ctx/payout';
+import { Profile } from '@/ctx/profile';
+import { blockingServiceState, type BlockingServiceState } from '@/ctx/service-state';
+import { loopEnvironment } from '@/environment';
+import { errorReporting } from '@/ops/error-reporting';
+import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
 import {
   oauthLoginBody,
   signInRefusalMessage,
   type SignInMethod,
   type SocialProvider,
-} from "@/session/social-sign-in";
-import { tokenStore } from "@/session/token-store";
-import type { PaymentCurrency } from "@/stellar/network";
-import { holdCriticalReload, runningUpdateId } from "@/updates/update-checker";
+} from '@/session/social-sign-in';
+import { tokenStore } from '@/session/token-store';
+import type { PaymentCurrency } from '@/stellar/network';
+import { holdCriticalReload, runningUpdateId } from '@/updates/update-checker';
 
 export { CtxError };
 
@@ -49,9 +42,9 @@ export type DeployWalletIn = {
 };
 
 export type SmartWalletIntent =
-  | { intent: "vault_withdraw"; currency: string; shares: string }
-  | { intent: "pay"; paymentId: string }
-  | { intent: "rotate_device"; newDevicePublicKey: string };
+  | { intent: 'vault_withdraw'; currency: string; shares: string }
+  | { intent: 'pay'; paymentId: string }
+  | { intent: 'rotate_device'; newDevicePublicKey: string };
 
 export type BuiltTransaction = {
   transaction: string;
@@ -68,7 +61,8 @@ export type PasskeySignature = {
 };
 
 export type SignedTransaction = { transaction: string } & (
-  { signature: string; devicePublicKey: string } | { passkey: PasskeySignature }
+  | { signature: string; devicePublicKey: string }
+  | { passkey: PasskeySignature }
 );
 
 export type MerchantLinkJson = {
@@ -76,9 +70,9 @@ export type MerchantLinkJson = {
   userDiscountBasisPoints?: number;
 };
 
-export type MerchantRedeemLocation = "any" | "physical" | "online";
+export type MerchantRedeemLocation = 'any' | 'physical' | 'online';
 
-export type MerchantRedeemType = "barcode" | "url";
+export type MerchantRedeemType = 'barcode' | 'url';
 
 export type MerchantJson = {
   id: string;
@@ -86,14 +80,14 @@ export type MerchantJson = {
   name: string;
   country: string;
   currency: string;
-  denominationType: "min-max" | "min-max-major" | "fixed";
+  denominationType: 'min-max' | 'min-max-major' | 'fixed';
   denominationValues: string[] | null;
   logoUrl?: string;
   cardImageUrl?: string;
   website?: string;
   categories?: string[];
-  redeemLocation?: MerchantRedeemLocation | "";
-  redeemType?: MerchantRedeemType | "";
+  redeemLocation?: MerchantRedeemLocation | '';
+  redeemType?: MerchantRedeemType | '';
   info?: GiftCardInfo;
   userDiscount: number;
   link?: MerchantLinkJson;
@@ -104,7 +98,7 @@ export type MerchantQuery = {
   name?: string;
   ids?: string[];
   category?: string;
-  order?: "name" | "-discount,name";
+  order?: 'name' | '-discount,name';
   page?: number;
   perPage?: number;
 };
@@ -122,20 +116,19 @@ export type GiftCardOrderIn = {
 };
 
 type GiftCardOrderBody = GiftCardOrderIn & {
-  rewardType: "cashback";
+  rewardType: 'cashback';
 };
 
 export type GiftCard = {
   id: string;
-  status: "unpaid" | "paid" | "fulfilled" | "rejected" | "refunded" | "expired";
+  status: 'unpaid' | 'paid' | 'fulfilled' | 'rejected' | 'refunded' | 'expired';
   merchantId: string;
   merchantName: string;
   created: string;
   cardFiatAmount: string;
   cardFiatCurrency: string;
   paymentId: string;
-  paymentStatus:
-    "unpaid" | "paid" | "error" | "refunded" | "cancelled" | "expired";
+  paymentStatus: 'unpaid' | 'paid' | 'error' | 'refunded' | 'cancelled' | 'expired';
   paymentMethod: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
@@ -178,14 +171,14 @@ export type GiftCardPage = {
 
 export type GiftCardQuery = {
   merchantId?: string;
-  status?: GiftCard["status"][];
-  notStatus?: GiftCard["status"][];
+  status?: GiftCard['status'][];
+  notStatus?: GiftCard['status'][];
   order?: string;
   page?: number;
   perPage?: number;
 };
 
-export type CashbackDestination = "account" | "savings";
+export type CashbackDestination = 'account' | 'savings';
 
 export type OAuthIdentityJson = {
   provider: string;
@@ -249,7 +242,7 @@ class CtxClient {
   ) {}
 
   static runningAppVersion(): string {
-    const version = Constants.expoConfig?.version ?? "unknown";
+    const version = Constants.expoConfig?.version ?? 'unknown';
     const updateId = runningUpdateId();
     return updateId ? `${version}+${updateId}` : version;
   }
@@ -264,15 +257,12 @@ class CtxClient {
   }
 
   async status(): Promise<ServiceStatus> {
-    const { maintenance } = await this.send<{ maintenance?: boolean }>(
-      "GET",
-      "/status",
-    );
+    const { maintenance } = await this.send<{ maintenance?: boolean }>('GET', '/status');
     return { maintenance: maintenance === true };
   }
 
   async readCatalogUncached(): Promise<void> {
-    await this.send("GET", "/merchants?enabled=1&perPage=1");
+    await this.send('GET', '/merchants?enabled=1&perPage=1');
   }
 
   hasSession(): Promise<boolean> {
@@ -280,25 +270,19 @@ class CtxClient {
   }
 
   async requestCode(email: string): Promise<void> {
-    await this.signInRequest("email", "/login", { email });
+    await this.signInRequest('email', '/login', { email });
   }
 
   verifyCode(email: string, code: string): Promise<void> {
     return holdCriticalReload(async () => {
-      await this.auth.startSession(
-        await this.send<TokenPair>("POST", "/verify-email", { email, code }),
-      );
+      await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
     });
   }
 
   signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
     return holdCriticalReload(async () => {
       await this.auth.startSession(
-        await this.signInRequest<TokenPair>(
-          provider,
-          "/login/oauth",
-          oauthLoginBody(provider, idToken),
-        ),
+        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
       );
     });
   }
@@ -315,9 +299,7 @@ class CtxClient {
   }
 
   async signOut(): Promise<void> {
-    await this.auth
-      .sessionRequest("POST", "/logout", undefined, false)
-      .catch(() => undefined);
+    await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
     await this.auth.clearSession();
   }
 
@@ -326,93 +308,69 @@ class CtxClient {
   }
 
   async me(): Promise<Profile> {
-    return Profile.fromMe(await this.auth.sessionRequest<MeJson>("GET", "/me"));
+    return Profile.fromMe(await this.auth.sessionRequest<MeJson>('GET', '/me'));
   }
 
   updateUser(update: UserUpdate): Promise<UserJson> {
-    return this.userRequest("PUT", "", update);
+    return this.userRequest('PUT', '', update);
   }
 
   async account(): Promise<Account> {
-    const json = await this.userRequest("GET", "/account");
+    const json = await this.userRequest('GET', '/account');
     return new Account(
-      this.checked(
-        (value) =>
-          CtxResponse.account(value, (detail) =>
-            errorReporting.reportMessage(detail),
-          ),
-        json,
-      ),
+      this.checked((value) => CtxResponse.account(value, (detail) => errorReporting.reportMessage(detail)), json),
     );
   }
 
-  async merchants({
-    country,
-    name,
-    ids,
-    category,
-    order = "name",
-    page,
-    perPage,
-  }: MerchantQuery): Promise<MerchantPage> {
-    const query = new URLSearchParams({ enabled: "1", order, country });
-    const pattern = Merchant.searchPattern(name ?? "");
+  async merchants({ country, name, ids, category, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
+    const query = new URLSearchParams({ enabled: '1', order, country });
+    const pattern = Merchant.searchPattern(name ?? '');
     if (pattern) {
-      query.set("name", pattern);
+      query.set('name', pattern);
     }
     if (ids) {
-      query.set("ids", ids.map((id) => Merchant.searchPattern(id)).join(","));
+      query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
     }
     if (category) {
-      query.set("category", category);
+      query.set('category', category);
     }
     if (page) {
-      query.set("page", String(page));
+      query.set('page', String(page));
     }
     if (perPage) {
-      query.set("perPage", String(perPage));
+      query.set('perPage', String(perPage));
     }
     const { result, pagination } = await this.merchantRequest<{
       result: MerchantJson[] | null;
       pagination: Pagination;
     }>(`/merchants?${query}`);
-    return {
-      result: (result ?? []).map((json) => new Merchant(json)),
-      pagination,
-    };
+    return { result: (result ?? []).map((json) => new Merchant(json)), pagination };
   }
 
   async merchant(idOrSlug: string): Promise<Merchant> {
     if (await this.isSignedIn()) {
-      const json = await this.auth.sessionRequest<MerchantJson>(
-        "GET",
-        `/merchants/${encodeURIComponent(idOrSlug)}`,
-      );
+      const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
       return new Merchant(json);
     }
     const query = new URLSearchParams({ slug: idOrSlug });
-    const { result } = await this.catalogRequest<{
-      result: MerchantJson[] | null;
-    }>(`/merchants?${query}`);
+    const { result } = await this.catalogRequest<{ result: MerchantJson[] | null }>(`/merchants?${query}`);
     const json = result?.[0];
     if (!json) {
-      throw new Error("We couldn’t find that gift card.");
+      throw new Error('We couldn’t find that gift card.');
     }
     return new Merchant(json);
   }
 
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
-    const body: GiftCardOrderBody = { ...order, rewardType: "cashback" };
+    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
     const idempotencyKey = this.orderKeys.keyFor(order);
     const card = this.checked(
       CtxResponse.giftCard,
-      await this.auth.sessionRequest("POST", "/gift-cards", body, true, {
-        "Idempotency-Key": idempotencyKey,
-      }),
+      await this.auth.sessionRequest('POST', '/gift-cards', body, true, { 'Idempotency-Key': idempotencyKey }),
     );
     if (!new OrderRequest(order).matches(card)) {
-      errorReporting.reportMessage("CTX order does not match the request");
-      throw new Error("CTX order does not match the request");
+      errorReporting.reportMessage('CTX order does not match the request');
+      throw new Error('CTX order does not match the request');
     }
     this.orderKeys.settle(idempotencyKey);
     return card;
@@ -421,10 +379,7 @@ class CtxClient {
   async giftCard(id: string): Promise<GiftCard> {
     return this.checked(
       CtxResponse.giftCard,
-      await this.auth.sessionRequest(
-        "GET",
-        `/gift-cards/${encodeURIComponent(id)}`,
-      ),
+      await this.auth.sessionRequest('GET', `/gift-cards/${encodeURIComponent(id)}`),
     );
   }
 
@@ -435,19 +390,14 @@ class CtxClient {
       protocols: undefined,
       options: { headers: Record<string, string> },
     ) => WebSocket;
-    const socket = new HeaderSocket(
-      `${this.baseUrl.replace(/^http/, "ws")}/ws`,
-      undefined,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "X-Client-Id": this.clientId,
-          "X-App-Version": this.appVersion,
-        },
+    const socket = new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Client-Id': this.clientId,
+        'X-App-Version': this.appVersion,
       },
-    );
-    socket.onopen = () =>
-      socket.send(JSON.stringify({ action: "subscribe", topic: "giftcard" }));
+    });
+    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic: 'giftcard' }));
     socket.onmessage = (message) => {
       if (OrderWake.concerns(message.data, orderId)) {
         wake.signal();
@@ -456,46 +406,34 @@ class CtxClient {
     return () => socket.close();
   }
 
-  async giftCards({
-    merchantId,
-    status,
-    notStatus,
-    order,
-    page,
-    perPage,
-  }: GiftCardQuery): Promise<GiftCardPage> {
+  async giftCards({ merchantId, status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
     const query = new URLSearchParams();
     if (merchantId) {
-      query.set("merchantId", Merchant.searchPattern(merchantId));
+      query.set('merchantId', Merchant.searchPattern(merchantId));
     }
     if (status) {
-      query.set("status", status.join(","));
+      query.set('status', status.join(','));
     }
     if (notStatus) {
-      query.set("status!", notStatus.join(","));
+      query.set('status!', notStatus.join(','));
     }
     if (order) {
-      query.set("order", order);
+      query.set('order', order);
     }
     if (page) {
-      query.set("page", String(page));
+      query.set('page', String(page));
     }
     if (perPage) {
-      query.set("perPage", String(perPage));
+      query.set('perPage', String(perPage));
     }
     const { result, pagination } = await this.auth.sessionRequest<{
       result: unknown;
       pagination: Pagination;
-    }>("GET", `/gift-cards?${query}`);
+    }>('GET', `/gift-cards?${query}`);
     return {
       result: this.checked(
         (cards) =>
-          CtxResponse.listOf(
-            "gift cards",
-            cards,
-            CtxResponse.giftCard,
-            (detail) => errorReporting.reportMessage(detail),
-          ),
+          CtxResponse.listOf('gift cards', cards, CtxResponse.giftCard, (detail) => errorReporting.reportMessage(detail)),
         result,
       ),
       pagination,
@@ -503,50 +441,28 @@ class CtxClient {
   }
 
   async activeGiftCard(merchantId?: string): Promise<GiftCard | null> {
-    const { result } = await this.giftCards({
-      merchantId,
-      status: ["unpaid", "paid"],
-      perPage: 5,
-    });
+    const { result } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], perPage: 5 });
     const newest = result[0];
     return newest ? this.giftCard(newest.id) : null;
   }
 
   async wallets(): Promise<WalletLink[]> {
-    const { result } = await this.userRequest<{ result: unknown }>(
-      "GET",
-      "/wallets",
-    );
+    const { result } = await this.userRequest<{ result: unknown }>('GET', '/wallets');
     return this.checked(
       (links) =>
-        CtxResponse.listOf("wallets", links, CtxResponse.walletLink, (detail) =>
-          errorReporting.reportMessage(detail),
-        ),
+        CtxResponse.listOf('wallets', links, CtxResponse.walletLink, (detail) => errorReporting.reportMessage(detail)),
       result,
     );
   }
 
-  async deployWallet(
-    userId: string,
-    body: DeployWalletIn,
-  ): Promise<WalletLink> {
-    return this.checked(
-      CtxResponse.walletLink,
-      await this.requestAs(userId, "POST", "/wallets/deploy", body),
-    );
+  async deployWallet(userId: string, body: DeployWalletIn): Promise<WalletLink> {
+    return this.checked(CtxResponse.walletLink, await this.requestAs(userId, 'POST', '/wallets/deploy', body));
   }
 
-  async buildTransaction(
-    walletId: string,
-    intent: SmartWalletIntent,
-  ): Promise<BuiltTransaction> {
+  async buildTransaction(walletId: string, intent: SmartWalletIntent): Promise<BuiltTransaction> {
     return this.checked(
       CtxResponse.builtTransaction,
-      await this.userRequest(
-        "POST",
-        `/wallets/${walletId}/stellar/transaction`,
-        intent,
-      ),
+      await this.userRequest('POST', `/wallets/${walletId}/stellar/transaction`, intent),
     );
   }
 
@@ -557,10 +473,7 @@ class CtxClient {
   ): Promise<SponsoredResult> {
     return this.checked(
       CtxResponse.sponsored,
-      await this.userRequest("POST", `/wallets/${walletId}/stellar/sponsor`, {
-        ...intent,
-        ...signed,
-      }),
+      await this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed }),
     );
   }
 
@@ -577,53 +490,34 @@ class CtxClient {
 
   private async merchantRequest<T>(path: string): Promise<T> {
     if (await this.isSignedIn()) {
-      return this.auth.sessionRequest<T>("GET", path);
+      return this.auth.sessionRequest<T>('GET', path);
     }
     return this.catalogRequest<T>(path);
   }
 
   private catalogRequest<T>(path: string): Promise<T> {
-    return this.send<T>("GET", path, undefined, { baseUrl: this.catalogUrl });
+    return this.send<T>('GET', path, undefined, { baseUrl: this.catalogUrl });
   }
 
-  private async userRequest<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private async userRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
     return this.requestAs<T>(await this.userId(), method, path, body);
   }
 
-  private requestAs<T>(
-    userId: string,
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private requestAs<T>(userId: string, method: string, path: string, body?: unknown): Promise<T> {
     return this.auth.sessionRequest<T>(method, `/users/${userId}${path}`, body);
   }
 
-  private async signInRequest<T>(
-    method: SignInMethod,
-    path: string,
-    body: unknown,
-  ): Promise<T> {
+  private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {
     try {
-      return await this.send<T>("POST", path, body);
+      return await this.send<T>('POST', path, body);
     } catch (error) {
-      const refusal =
-        error instanceof CtxError
-          ? signInRefusalMessage(method, error.errorName())
-          : null;
+      const refusal = error instanceof CtxError ? signInRefusalMessage(method, error.errorName()) : null;
       throw refusal ? new Error(refusal, { cause: error }) : error;
     }
   }
 
   private userIdFrom(accessToken: string): string {
-    const payload = accessToken
-      .split(".")[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
+    const payload = accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     return (JSON.parse(atob(payload)) as { tid: string }).tid;
   }
 
@@ -642,19 +536,15 @@ class CtxClient {
       const answer = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
-          "Content-Type": "application/json",
-          "X-Client-Id": this.clientId,
-          "X-App-Version": this.appVersion,
+          'Content-Type': 'application/json',
+          'X-Client-Id': this.clientId,
+          'X-App-Version': this.appVersion,
           ...headers,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal,
       });
-      return {
-        ok: answer.ok,
-        status: answer.status,
-        text: await answer.text(),
-      };
+      return { ok: answer.ok, status: answer.status, text: await answer.text() };
     });
     const { text } = response;
     if (!response.ok) {

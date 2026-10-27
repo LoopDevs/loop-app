@@ -1,9 +1,9 @@
-import { CtxError } from "../ctx/ctx-error.ts";
-import { UnexpectedResponse } from "../ctx/ctx-response.ts";
-import { RequestTimeoutError } from "../ctx/deadline.ts";
-import { UpdateInProgress } from "../updates/critical-update.ts";
-import { IdentityNotConfirmed } from "../wallet/device-key.ts";
-import { isUserCancel } from "../wallet/user-cancel.ts";
+import { CtxError } from '../ctx/ctx-error.ts';
+import { UnexpectedResponse } from '../ctx/ctx-response.ts';
+import { RequestTimeoutError } from '../ctx/deadline.ts';
+import { UpdateInProgress } from '../updates/critical-update.ts';
+import { IdentityNotConfirmed } from '../wallet/device-key.ts';
+import { isUserCancel } from '../wallet/user-cancel.ts';
 
 const NETWORK_FAILURE =
   /network request failed|failed to fetch|load failed|network connection|internet connection|appears to be offline|networkerror when attempting|unable to resolve host|failed to connect|software caused connection abort/i;
@@ -23,7 +23,7 @@ export class ReportableError {
   }
 
   static summary(error: unknown, context: string): Error {
-    const name = error instanceof Error ? error.name : "NonError";
+    const name = error instanceof Error ? error.name : 'NonError';
     const summary = new Error(`${context} failed: ${name}`);
     summary.name = name;
     if (error instanceof Error && error.stack) {
