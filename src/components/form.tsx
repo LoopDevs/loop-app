@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PressScale } from '@/components/press-scale';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
@@ -51,11 +51,13 @@ export function Button({
   label,
   onPress,
   disabled = false,
-  selected = false,
+  selected,
   accessibilityLabel,
   variant = 'secondary',
 }: ButtonProps) {
   const theme = useTheme();
+  const webChoiceState =
+    Platform.OS === 'web' && selected !== undefined ? ({ 'aria-pressed': selected } as object) : {};
   const press = () => {
     haptics.tap();
     onPress();
@@ -75,11 +77,13 @@ export function Button({
   }[variant];
   return (
     <PressScale
+      {...webChoiceState}
       onPress={press}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled, selected }}
+      aria-disabled={disabled}
       style={{ opacity: disabled ? 0.45 : 1 }}>
       <View style={[styles.button, surface, selected && styles.selected]}>
         <Text maxFontSizeMultiplier={1.6} style={[styles.label, { color: labelColor }]}>

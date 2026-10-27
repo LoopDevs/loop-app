@@ -64,9 +64,11 @@ export default function AppTabs() {
 export function TabButton({ children, isFocused, ...props }: Omit<TabTriggerSlotProps, 'ref'>) {
   const { wide } = usePageLayout();
   const theme = useTheme();
+  const currentPage = isFocused ? ({ 'aria-current': 'page' } as object) : {};
   return (
     <Pressable
       {...props}
+      {...currentPage}
       style={({ pressed }) => [
         styles.tabButton,
         !wide && styles.tabButtonNarrow,
