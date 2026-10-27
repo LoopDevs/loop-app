@@ -8,6 +8,11 @@ import { network, offeredCurrencies } from '@/stellar/network';
 import { Holdings } from '@/wallet/holdings';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
+const pricedCurrencies = new Set<string>([
+  ...network.tokens.map((token) => token.currency),
+  ...offeredCurrencies,
+]);
+
 export type HoldingsView = {
   holdings: Holdings;
   account: Account | null;
@@ -30,7 +35,7 @@ export function useHoldings(wallet: SmartWallet | null) {
       wallet.balances(),
       ctx.account().catch((error: unknown) => new Error(errorMessage(error))),
       ctx.me().catch((error: unknown) => new Error(errorMessage(error))),
-      Rates.fetch(network.tokens.map((token) => token.currency)),
+      Rates.fetch([...pricedCurrencies]),
     ]);
     const account =
       fetchedAccount instanceof Error
