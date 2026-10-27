@@ -193,6 +193,8 @@ test('the deletion request carries the account id and email to support', () => {
   const body = mail.searchParams.get('body') ?? '';
   assert.match(body, /^Account id: u1$/m);
   assert.match(body, /^Account email: ash@example\.com$/m);
+});
+
 test('a legal name needs a first and last name', () => {
   assert.equal(Profile.legalNameProblem('Jane Doe'), null);
   assert.equal(Profile.legalNameProblem('  Jane   Mary Doe '), null);
@@ -201,13 +203,13 @@ test('a legal name needs a first and last name', () => {
 });
 
 test('a user has a bank identity once a full legal name is saved', () => {
-  assert.equal(Profile.fromMe({ user: { id: 'u1' } }).hasBankIdentity(), false);
-  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane' } }).hasBankIdentity(), false);
-  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' } }).hasBankIdentity(), true);
+  assert.equal(Profile.fromMe({ user: { id: 'u1' }, company }).hasBankIdentity(), false);
+  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane' }, company }).hasBankIdentity(), false);
+  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' }, company }).hasBankIdentity(), true);
 });
 
 test('a legal name update sends the tidied name and nothing when unchanged or incomplete', () => {
-  const profile = Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' } });
+  const profile = Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' }, company });
   assert.deepEqual(profile.legalNameUpdate('  Jane   Doe-Smith '), { legalName: 'Jane Doe-Smith' });
   assert.equal(profile.legalNameUpdate(' Jane  Doe '), null);
   assert.equal(profile.legalNameUpdate('Jane'), null);
