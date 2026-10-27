@@ -203,6 +203,7 @@ const stepNumbers: Record<SignInStep, number> = {
 };
 
 const stepCount = 4;
+const resendCooldownMs = 30_000;
 
 type SignInFormProps = {
   reason: string;
@@ -215,9 +216,18 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
+  const [resendBlocked, setResendBlocked] = useState(false);
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
+
+  useEffect(() => {
+    if (!resendBlocked) {
+      return;
+    }
+    const timer = setTimeout(() => setResendBlocked(false), resendCooldownMs);
+    return () => clearTimeout(timer);
+  }, [resendBlocked]);
 
   const finish = () => {
     haptics.success();
@@ -276,12 +286,16 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const requestCode = () =>
     run(async () => {
       await ctx.requestCode(email.trim());
+      setResendBlocked(true);
       setStep('code');
     });
 
   const verifyCode = () =>
     run(async () => {
-      if (!(await ctx.isSignedIn())) {
+      if (!(await ctx.isSignedInAs(email))) {
+        if (await ctx.isSignedIn()) {
+          await ctx.signOut();
+        }
         await ctx.verifyCode(email.trim(), code.trim());
       }
       await continueToWallet();
@@ -290,6 +304,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const resendCode = () =>
     run(async () => {
       await ctx.requestCode(email.trim());
+      setResendBlocked(true);
       toast('Code sent');
     });
 
@@ -369,7 +384,12 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
           />
           <View style={styles.row}>
             <View style={styles.rowItem}>
-              <Button label="Resend code" variant="quiet" onPress={resendCode} disabled={busy} />
+              <Button
+                label="Resend code"
+                variant="quiet"
+                onPress={resendCode}
+                disabled={busy || resendBlocked}
+              />
             </View>
             <View style={styles.rowItem}>
               <Button label="Change email" variant="quiet" onPress={changeEmail} disabled={busy} />
