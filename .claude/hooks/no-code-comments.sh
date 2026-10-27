@@ -2,6 +2,7 @@
 set -euo pipefail
 
 input=$(cat)
+jq -e 'type == "object"' >/dev/null 2>&1 <<<"$input" || { echo "Blocked: no-code-comments hook needs jq and a JSON object on stdin." >&2; exit 2; }
 path=$(jq -r '.tool_input.file_path // ""' <<<"$input")
 
 case $path in

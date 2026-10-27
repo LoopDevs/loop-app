@@ -2,6 +2,7 @@
 set -euo pipefail
 
 input=$(cat)
+jq -e 'type == "object"' >/dev/null 2>&1 <<<"$input" || { echo "Blocked: no-ai-attribution hook needs jq and a JSON object on stdin." >&2; exit 2; }
 tool=$(jq -r '.tool_name // ""' <<<"$input")
 pattern='co-authored-by|claude-session|claude\.ai/code|generated (with|by) .{0,40}(claude|ai\b)|with the help of claude|assisted-by|written by (an )?ai|🤖'
 

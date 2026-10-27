@@ -2,6 +2,7 @@
 set -euo pipefail
 
 input=$(cat)
+jq -e 'type == "object"' >/dev/null 2>&1 <<<"$input" || { echo "Blocked: git-safety hook needs jq and a JSON object on stdin." >&2; exit 2; }
 cmd=$(jq -r '.tool_input.command // ""' <<<"$input")
 cwd=$(jq -r '.cwd // "."' <<<"$input")
 approval='LOOP_GIT_APPROVED=1'
