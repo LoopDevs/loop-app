@@ -227,7 +227,10 @@ test('a payment to another order of the same payee is refused', () => {
 
 test('a payment to an account other than the payee is refused', () => {
   const call = verified(transferArgs(25n, source));
-  assert.throws(() => call.requirePayment({ from: wallet, token: payToken, amount: 25n }), /unexpected address/);
+  assert.throws(
+    () => call.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /unexpected address/,
+  );
 });
 
 test('a payment for a different amount is refused', () => {
@@ -290,4 +293,52 @@ test('a withdrawal from another contract, of other shares or for another owner i
     () => verified(withdrawArgs(network.usdcVault, 40n, [39n, 1n], wallet)).requireWithdrawal(expectedWithdrawal),
     /does not match/,
   );
+});
+
+test('a payment is refused when the order has no address or names another one', () => {
+  const muxed = verified(transferArgs(25n, orderAddress));
+  assert.throws(
+    () => muxed.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress: undefined }),
+    /different order/,
+  );
+  assert.throws(
+    () => muxed.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress: network.payee }),
+    /different order/,
+  );
+  const plain = verified(transferArgs(25n));
+  assert.throws(
+    () => plain.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /different order/,
+  );
+});
+
+test('a transfer amount that is not an i128 is refused', () => {
+  const call = verified(
+    new xdr.InvokeContractArgs({
+      contractAddress: new Address(token).toScAddress(),
+      functionName: 'transfer',
+      args: [new Address(wallet).toScVal(), new Address(orderAddress).toScVal(), nativeToScVal(25n, { type: 'u64' })],
+    }),
+  );
+  assert.throws(
+    () => call.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /is not a/,
+  );
+});
+
+test('withdrawal minimums that are not i128 values are refused', () => {
+  const call = verified(withdrawArgs(network.usdcVault, 40n, [], wallet));
+  const stringMinimum = verified(
+    new xdr.InvokeContractArgs({
+      contractAddress: new Address(network.usdcVault).toScAddress(),
+      functionName: 'withdraw',
+      args: [
+        nativeToScVal(40n, { type: 'i128' }),
+        xdr.ScVal.scvVec([xdr.ScVal.scvString('z')]),
+        new Address(wallet).toScVal(),
+      ],
+    }),
+  );
+  assert.throws(() => call.requireWithdrawal(expectedWithdrawal), /does not match/);
+  assert.throws(() => stringMinimum.requireWithdrawal(expectedWithdrawal), /not a withdrawal/);
 });

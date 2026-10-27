@@ -19,7 +19,7 @@ export type ExpectedPayment = {
   from: string;
   token: Token;
   amount: bigint;
-  orderAddress?: string;
+  orderAddress: string | undefined;
 };
 
 export type ExpectedWithdrawal = {
@@ -107,14 +107,18 @@ export class SponsoredCall {
   }
 
   requirePayment({ from, token, amount, orderAddress }: ExpectedPayment): SignedTransfer {
-    if (this.contract !== token.contract || this.method !== 'transfer' || this.args.length !== 3) {
+    if (
+      this.contract !== token.contract ||
+      this.method !== 'transfer' ||
+      !this.argsAre(['scvAddress', 'scvAddress', 'scvI128'])
+    ) {
       throw new Error(`The transaction is not a ${token.symbol} transfer`);
     }
     const [payer, to, transferred] = this.nativeArgs() as [string, string, bigint];
     if (payer !== from || SponsoredCall.accountOf(to) !== network.payee) {
       throw new Error('The payment goes to an unexpected address');
     }
-    if (orderAddress && StrKey.isValidMed25519PublicKey(orderAddress) && to !== orderAddress) {
+    if (to !== orderAddress) {
       throw new Error('The payment is for a different order');
     }
     if (transferred !== amount) {
@@ -125,7 +129,12 @@ export class SponsoredCall {
   }
 
   requireWithdrawal({ from, vault, shares }: ExpectedWithdrawal): bigint {
-    if (this.contract !== vault || this.method !== 'withdraw' || this.args.length !== 3) {
+    if (
+      this.contract !== vault ||
+      this.method !== 'withdraw' ||
+      !this.argsAre(['scvI128', 'scvVec', 'scvAddress']) ||
+      !this.vecOf(this.args[1]).every((minimum) => minimum.type === 'scvI128')
+    ) {
       throw new Error('The transaction is not a withdrawal from the savings vault');
     }
     const [withdrawn, minimums, owner] = this.nativeArgs() as [bigint, bigint[], string];
@@ -133,6 +142,14 @@ export class SponsoredCall {
       throw new Error('The withdrawal does not match the request');
     }
     return minimums[0];
+  }
+
+  private argsAre(types: xdr.ScVal['type'][]): boolean {
+    return this.args.length === types.length && this.args.every((arg, index) => arg.type === types[index]);
+  }
+
+  private vecOf(value: xdr.ScVal): xdr.ScVal[] {
+    return value.type === 'scvVec' ? (value.vec ?? []) : [];
   }
 
   private nativeArgs(): unknown[] {
