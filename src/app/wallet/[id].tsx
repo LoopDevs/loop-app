@@ -30,7 +30,7 @@ import {
   cashbackStateLabel,
   giftCardStatusLabel,
   outcomeText,
-  pollIntervalMs,
+  pollDelayMs,
   wasCharged,
 } from '@/ctx/gift-card-status';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -78,6 +78,7 @@ export default function GiftCardScreen() {
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let polls = 0;
     const load = async () => {
       try {
         const { userId, changed } = await readSession();
@@ -97,7 +98,8 @@ export default function GiftCardScreen() {
         }
         setGiftCard(loaded);
         if (loaded.status === 'paid') {
-          timer = setTimeout(load, pollIntervalMs);
+          timer = setTimeout(load, pollDelayMs(polls));
+          polls += 1;
         }
       } catch (error) {
         if (active) {
