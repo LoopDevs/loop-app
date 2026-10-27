@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { criticalIndexOf, fetchedCriticalIndex, isCriticalUpdate, ReloadGate, reloadsNow } from './critical-update.ts';
+import {
+  criticalIndexOf,
+  fetchedCriticalIndex,
+  isCriticalUpdate,
+  LaunchRecovery,
+  ReloadGate,
+  reloadsNow,
+} from './critical-update.ts';
 
 const manifestWith = (criticalIndex?: number) => ({
   extra: { expoClient: { extra: criticalIndex === undefined ? {} : { criticalIndex } } },
@@ -125,4 +132,40 @@ test('the reload waits for every overlapping task', async () => {
   releaseSecond();
   await second;
   assert.equal(reloads, 1);
+});
+
+function recoveryAt(elapsedMs: number, runsUpdate: boolean) {
+  const raised: Error[] = [];
+  const recovery = new LaunchRecovery({
+    launchedAt: 1_000,
+    now: () => 1_000 + elapsedMs,
+    runsUpdate: () => runsUpdate,
+    fatal: (error) => raised.push(error),
+  });
+  return { recovery, raised };
+}
+
+test('a crash shortly after launching an update raises a fatal error', () => {
+  const { recovery, raised } = recoveryAt(9_999, true);
+  const failure = new Error('render failed');
+  assert.equal(recovery.markFailed(failure), true);
+  assert.deepEqual(raised, [failure]);
+});
+
+test('a thrown value that is not an error is wrapped before it is raised', () => {
+  const { recovery, raised } = recoveryAt(0, true);
+  assert.equal(recovery.markFailed('boom'), true);
+  assert.equal(raised[0]?.message, 'boom');
+});
+
+test('a crash after the recovery window raises nothing', () => {
+  const { recovery, raised } = recoveryAt(LaunchRecovery.windowMs, true);
+  assert.equal(recovery.markFailed(new Error('late')), false);
+  assert.deepEqual(raised, []);
+});
+
+test('a crash in a launch that is not an update raises nothing', () => {
+  const { recovery, raised } = recoveryAt(0, false);
+  assert.equal(recovery.markFailed(new Error('embedded')), false);
+  assert.deepEqual(raised, []);
 });

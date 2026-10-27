@@ -46,7 +46,11 @@ const SAFE_EXTRA_KEYS = new Set(['componentStack']);
 
 const SAFE_CONTEXT_KEYS = new Set(['app', 'os', 'runtime', 'culture', 'device']);
 
-const SAFE_BREADCRUMB_KEYS = new Set(['method', 'status_code', 'url', 'from', 'to']);
+const SAFE_BREADCRUMB_CATEGORIES = new Set(['navigation', 'app.lifecycle', 'http', 'fetch', 'xhr']);
+
+const SAFE_BREADCRUMB_FIELDS = new Set(['type', 'category', 'level', 'timestamp', 'data']);
+
+const SAFE_BREADCRUMB_KEYS = new Set(['method', 'status_code', 'url', 'from', 'to', 'state']);
 
 const SAFE_FRAME_KEYS = new Set([
   'filename',
@@ -118,11 +122,11 @@ export class SentryScrubber {
     return segments.join('/') || '/';
   }
 
-  static scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb {
-    const scrubbed: Breadcrumb = { ...breadcrumb };
-    if (typeof scrubbed.message === 'string') {
-      scrubbed.message = SentryScrubber.scrubString(scrubbed.message);
+  static scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
+    if (!breadcrumb.category || !SAFE_BREADCRUMB_CATEGORIES.has(breadcrumb.category)) {
+      return null;
     }
+    const scrubbed: Breadcrumb = SentryScrubber.allowKeys(breadcrumb, SAFE_BREADCRUMB_FIELDS);
     if (scrubbed.data) {
       scrubbed.data = SentryScrubber.breadcrumbData(scrubbed.data);
     }
@@ -176,7 +180,7 @@ export class SentryScrubber {
       };
     }
     if (scrubbed.breadcrumbs) {
-      scrubbed.breadcrumbs = scrubbed.breadcrumbs.map((entry) => SentryScrubber.scrubBreadcrumb(entry));
+      scrubbed.breadcrumbs = scrubbed.breadcrumbs.flatMap((entry) => SentryScrubber.scrubBreadcrumb(entry) ?? []);
     }
     if (scrubbed.extra) {
       scrubbed.extra = SentryScrubber.stringValues(SentryScrubber.allowKeys(scrubbed.extra, SAFE_EXTRA_KEYS));

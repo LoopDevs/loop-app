@@ -82,12 +82,43 @@ test('breadcrumbs keep method, status and a route template only', () => {
     },
   };
   const scrubbed = SentryScrubber.scrubBreadcrumb(breadcrumb);
-  assert.deepEqual(scrubbed.data, {
+  assert.deepEqual(scrubbed?.data, {
     method: 'GET',
     status_code: 200,
     url: '/users/:id/gift-cards/:id',
   });
   assert.ok(!dump(scrubbed).includes('redeem'));
+});
+
+test('breadcrumbs outside the category list are dropped', () => {
+  for (const category of ['console', 'ui.click', 'ui.tap', 'touch', 'sentry.event', 'custom']) {
+    assert.equal(SentryScrubber.scrubBreadcrumb({ category, message: 'Bought Aerie gift card for $25.00' }), null);
+  }
+  assert.equal(SentryScrubber.scrubBreadcrumb({ message: 'no category' }), null);
+});
+
+test('breadcrumb free text and unlisted fields are dropped even in listed categories', () => {
+  const scrubbed = SentryScrubber.scrubBreadcrumb({
+    category: 'navigation',
+    type: 'navigation',
+    level: 'info',
+    timestamp: 1,
+    message: 'Opened Aerie $25.00',
+    event_id: 'abc',
+    data: { from: '/shop/aerie', to: '/wallet/ord_1', note: 'Aerie $25.00' },
+  });
+  assert.deepEqual(scrubbed, {
+    category: 'navigation',
+    type: 'navigation',
+    level: 'info',
+    timestamp: 1,
+    data: { from: '/shop/:id', to: '/wallet/:id' },
+  });
+});
+
+test('the app lifecycle state survives', () => {
+  const scrubbed = SentryScrubber.scrubBreadcrumb({ category: 'app.lifecycle', data: { state: 'background' } });
+  assert.deepEqual(scrubbed?.data, { state: 'background' });
 });
 
 test('route templates drop query strings and unknown segments', () => {
@@ -171,9 +202,13 @@ test('events lose user, request data, headers and unlisted extra keys', () => {
 test('event breadcrumbs are scrubbed too', () => {
   const scrubbed = SentryScrubber.scrubEvent(
     eventWith({
-      breadcrumbs: [{ category: 'console', message: `signed ${signedXdr} for ${email}`, data: { arguments: [jwt] } }],
+      breadcrumbs: [
+        { category: 'console', message: `signed ${signedXdr} for ${email}`, data: { arguments: [jwt] } },
+        { category: 'http', message: `signed ${signedXdr} for ${email}`, data: { url: `/users/${email}`, arguments: [jwt] } },
+      ],
     }),
   );
+  assert.equal(scrubbed.breadcrumbs?.length, 1);
   const everything = dump(scrubbed.breadcrumbs);
   assert.ok(!everything.includes(signedXdr));
   assert.ok(!everything.includes(email));
