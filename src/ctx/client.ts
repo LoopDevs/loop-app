@@ -126,6 +126,7 @@ export type GiftCard = {
   paymentMethod: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
+  paymentCryptoAddress?: string;
   paymentCryptoTxId?: string;
   paymentUrlExpiration?: string;
   number?: string;

@@ -94,26 +94,38 @@ export default function WalletScreen() {
         if (keepPaged && !changed && loadedPages.current > 1) {
           return;
         }
-        const next = changed ? 1 : requested;
-        const { result, pagination } = await ctx.giftCards({
-          notStatus: unpaidStatuses,
-          perPage: ordersPerPage,
-          page: next,
-        });
-        const sent = await Promise.all(
-          result.map((giftCard) =>
-            sentPayments.get(giftCard.paymentId).catch(() => null),
-          ),
-        );
-        const shownResult = result.filter(
-          (giftCard, index) =>
-            !isHiddenFromHistory(giftCard, sent[index] !== null),
-        );
+        const first = changed ? 1 : requested;
+        let next = first;
+        let pageCount = 0;
+        const shownResult: GiftCard[] = [];
+        for (;;) {
+          const { result, pagination } = await ctx.giftCards({
+            notStatus: unpaidStatuses,
+            perPage: ordersPerPage,
+            page: next,
+          });
+          const sent = await Promise.all(
+            result.map((giftCard) =>
+              sentPayments.get(giftCard.paymentId).catch(() => null),
+            ),
+          );
+          shownResult.push(
+            ...result.filter(
+              (giftCard, index) =>
+                !isHiddenFromHistory(giftCard, sent[index] !== null),
+            ),
+          );
+          pageCount = pagination.pages;
+          if (shownResult.length > 0 || next >= pageCount) {
+            break;
+          }
+          next += 1;
+        }
         setGiftCards((shown) =>
-          next === 1 ? shownResult : [...shown, ...shownResult],
+          first === 1 ? shownResult : [...shown, ...shownResult],
         );
         setPage(next);
-        setPages(pagination.pages);
+        setPages(pageCount);
         loadedPages.current = next;
       } catch (error) {
         setFailure({
