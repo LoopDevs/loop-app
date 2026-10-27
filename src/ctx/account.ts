@@ -95,7 +95,7 @@ export class Account {
     if (routing.savesCashback()) {
       return {
         ...item,
-        label: `held: Loop savings holds ${Profile.currencyLabel(Savings.currency)}, switch to Account to receive it`,
+        label: `held: Loop savings holds ${Profile.savingsLabel()}, switch to Account to receive it`,
         heldBySavings: true,
       };
     }

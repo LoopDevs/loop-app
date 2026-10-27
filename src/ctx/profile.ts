@@ -143,6 +143,10 @@ export class Profile {
     }
   }
 
+  static savingsLabel(): string {
+    return Savings.currencies.map((currency) => Profile.currencyLabel(currency)).join(' and ');
+  }
+
   static countryFlag(country: string): string {
     if (!/^[A-Z]{2}$/.test(country)) {
       return '';

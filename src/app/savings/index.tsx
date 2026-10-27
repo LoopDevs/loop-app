@@ -40,25 +40,30 @@ export default function SavingsScreen() {
   const { busy, message, setMessage, run } = useBusyAction();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [adding, setAdding] = useState(false);
-  const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
+  const savings = view?.holdings.withdrawableSavings() ?? [];
 
   const withdraw = () =>
     run(async () => {
-      if (!wallet || vaultShares === 0n) {
+      if (!wallet || savings.length === 0) {
         return;
       }
-      const result = await wallet.withdraw(vaultShares).catch((error: unknown) => {
-        if (error instanceof UnlinkedDevice) {
-          reload();
+      try {
+        for (const { currency, shares } of savings) {
+          const result = await wallet.withdraw(currency, shares).catch((error: unknown) => {
+            if (error instanceof UnlinkedDevice) {
+              reload();
+            }
+            throw error;
+          });
+          if (result.error) {
+            setMessage(result.error);
+            return;
+          }
         }
-        throw error;
-      });
-      if (result.error) {
-        setMessage(result.error);
-      } else {
         toast('Savings moved to your balance');
+      } finally {
+        await refresh();
       }
-      await refresh();
     });
 
   const confirmWithdraw = () => {
@@ -130,7 +135,7 @@ export default function SavingsScreen() {
             <SavingsCard
               view={view}
               onWithdraw={confirmWithdraw}
-              withdrawDisabled={busy || vaultShares === 0n}
+              withdrawDisabled={busy || savings.length === 0}
               onCashback={() => router.push('/wallet/cashback')}
             />
           )}

@@ -38,7 +38,7 @@ export type StellarNetwork = {
   tokens: Token[];
   usdc: string;
   usdcIssuer: string;
-  usdcVault: string;
+  vaults: Partial<Record<PaymentCurrency, string>>;
 };
 
 const networks: Record<StellarNetworkName, StellarNetwork> = {
@@ -59,7 +59,9 @@ const networks: Record<StellarNetworkName, StellarNetwork> = {
     ],
     usdc: 'CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU',
     usdcIssuer: 'GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56',
-    usdcVault: 'CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN',
+    vaults: {
+      'XLM.USDC': 'CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN',
+    },
   },
   mainnet: {
     rpcUrls: ['https://mainnet.sorobanrpc.com', 'https://soroban-rpc.mainnet.stellar.gateway.fm'],
@@ -74,10 +76,14 @@ const networks: Record<StellarNetworkName, StellarNetwork> = {
       { currency: 'XLM', symbol: 'XLM', contract: 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA' },
       { currency: 'XLM.USDC', symbol: 'USDC', contract: 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75' },
       { currency: 'XLM.EURC', symbol: 'EURC', contract: 'CDTKPWPLOURQA2SGTKTUQOWRCBZEORB4BWBOMJ3D3ZTQQSGE5F6JBQLV' },
+      { currency: 'XLM.GBPLOOP', symbol: 'GBPLOOP', contract: 'CCU2SGN67UX2TI4KTZGGY457LBYBEPTWO5PMFTWELVUQLU5OEJEWSVNO' },
     ],
     usdc: 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75',
     usdcIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
-    usdcVault: 'CAJ2L33QVORJFSFCZYMXN7KU7E3TDVGXCLNHXUX64RJZNT4XYZJUA4WY',
+    vaults: {
+      'XLM.USDC': 'CAJ2L33QVORJFSFCZYMXN7KU7E3TDVGXCLNHXUX64RJZNT4XYZJUA4WY',
+      'XLM.GBPLOOP': 'CCMSIXASOCYJZDZQKSWYLPTW2GG6ONBWNL4NG4P6T6RYLUZXQIH4BIBF',
+    },
   },
 };
 

@@ -1,3 +1,4 @@
+import type { PaymentCurrency } from '../stellar/network.ts';
 import type { PendingWithdrawal } from './savings-top-up.ts';
 
 export type PendingWithdrawalStorage = {
@@ -16,28 +17,31 @@ export class PendingWithdrawals {
     this.storage = storage;
   }
 
-  static keyOf(address: string): string {
-    return `${PendingWithdrawals.keyPrefix}${address}`;
+  static keyOf(address: string, currency: PaymentCurrency): string {
+    return `${PendingWithdrawals.keyPrefix}${address}.${currency}`;
   }
 
-  async get(address: string): Promise<PendingWithdrawal | undefined> {
-    const stored = PendingWithdrawals.parse(await this.storage.getItem(PendingWithdrawals.keyOf(address)));
-    return this.unsaved.get(address) ?? stored;
+  async get(address: string, currency: PaymentCurrency): Promise<PendingWithdrawal | undefined> {
+    const key = PendingWithdrawals.keyOf(address, currency);
+    const stored = PendingWithdrawals.parse(await this.storage.getItem(key));
+    return this.unsaved.get(key) ?? stored;
   }
 
-  async set(address: string, withdrawal: PendingWithdrawal): Promise<void> {
+  async set(address: string, currency: PaymentCurrency, withdrawal: PendingWithdrawal): Promise<void> {
+    const key = PendingWithdrawals.keyOf(address, currency);
     try {
-      await this.storage.setItem(PendingWithdrawals.keyOf(address), JSON.stringify(withdrawal));
-      this.unsaved.delete(address);
+      await this.storage.setItem(key, JSON.stringify(withdrawal));
+      this.unsaved.delete(key);
     } catch (error) {
-      this.unsaved.set(address, withdrawal);
+      this.unsaved.set(key, withdrawal);
       throw error;
     }
   }
 
-  async delete(address: string): Promise<void> {
-    this.unsaved.delete(address);
-    await this.storage.removeItem(PendingWithdrawals.keyOf(address));
+  async delete(address: string, currency: PaymentCurrency): Promise<void> {
+    const key = PendingWithdrawals.keyOf(address, currency);
+    this.unsaved.delete(key);
+    await this.storage.removeItem(key);
   }
 
   private static parse(stored: string | null): PendingWithdrawal | undefined {

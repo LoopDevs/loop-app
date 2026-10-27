@@ -55,7 +55,8 @@ import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
 import type { Coverage, Holdings } from '@/wallet/holdings';
 import { PendingWithdrawals } from '@/wallet/pending-withdrawals';
-import { SavingsTopUp, type TopUpOutcome } from '@/wallet/savings-top-up';
+import { Savings } from '@/wallet/savings';
+import type { TopUpOutcome } from '@/wallet/savings-top-up';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
 type Props = {
@@ -366,21 +367,25 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
     setSpent(0n);
   };
 
-  const topUpFromSavings = async (giftCard: GiftCard, price: bigint): Promise<PaymentState | null> => {
+  const topUpFromSavings = async (
+    giftCard: GiftCard,
+    currency: PaymentCurrency,
+    price: bigint,
+  ): Promise<PaymentState | null> => {
     setPayment({ kind: 'movingSavings' });
     let outcome: TopUpOutcome;
     try {
       outcome = await wallet
-        .savingsTopUp()
-        .run(price, PriceWindow.of(giftCard), await pendingTopUps.get(wallet.address));
+        .savingsTopUp(currency)
+        .run(price, PriceWindow.of(giftCard), await pendingTopUps.get(wallet.address, currency));
     } finally {
       refresh().catch((error: unknown) => setMessage(errorMessage(error)));
     }
     const unconfirmed = outcome.kind === 'stillMoving' || outcome.kind === 'covered' ? outcome.withdrawal : undefined;
     if (unconfirmed) {
-      await pendingTopUps.set(wallet.address, unconfirmed);
+      await pendingTopUps.set(wallet.address, currency, unconfirmed);
     } else {
-      await pendingTopUps.delete(wallet.address);
+      await pendingTopUps.delete(wallet.address, currency);
     }
     switch (outcome.kind) {
       case 'covered':
@@ -395,7 +400,9 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
 
   const payOrder = async (giftCard: GiftCard, holdings: Holdings | null): Promise<SendOutcome> => {
     const coverage = orderCoverage(giftCard, holdings);
-    const toppingUp = coverage?.kind === 'savings' || (await hasPendingTopUp(giftCard, wallet));
+    const savingsCurrency = Savings.takes(giftCard.paymentCryptoCurrency) ? giftCard.paymentCryptoCurrency : null;
+    const toppingUp =
+      savingsCurrency !== null && (coverage?.kind === 'savings' || (await hasPendingTopUp(wallet, savingsCurrency)));
     if (coverage?.kind === 'short' && !toppingUp) {
       return { state: { kind: 'notSent', detail: notEnoughMessage }, resumed: false };
     }
@@ -405,12 +412,12 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
       if (recorded) {
         return { state: recorded, resumed: true };
       }
-      if (topUpPrice !== null) {
+      if (topUpPrice !== null && savingsCurrency !== null) {
         const settled = OneTapBuy.beforeTopUp(await ctx.giftCard(giftCard.id));
         if (settled) {
           return settled;
         }
-        const stopped = await topUpFromSavings(giftCard, topUpPrice);
+        const stopped = await topUpFromSavings(giftCard, savingsCurrency, topUpPrice);
         if (stopped) {
           return { state: stopped, resumed: false };
         }
@@ -937,11 +944,8 @@ function orderCoverage(order: GiftCard, holdings: Holdings | null): Coverage | n
   return holdings.coverage(order.paymentCryptoCurrency, price);
 }
 
-async function hasPendingTopUp(order: GiftCard, wallet: SmartWallet): Promise<boolean> {
-  if (order.paymentCryptoCurrency !== SavingsTopUp.currency) {
-    return false;
-  }
-  return (await pendingTopUps.get(wallet.address)) !== undefined;
+async function hasPendingTopUp(wallet: SmartWallet, currency: PaymentCurrency): Promise<boolean> {
+  return (await pendingTopUps.get(wallet.address, currency)) !== undefined;
 }
 
 type OrderViewProps = {
