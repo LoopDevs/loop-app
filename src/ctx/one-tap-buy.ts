@@ -96,7 +96,11 @@ export class OneTapBuy {
           const detail = state.kind === 'notSent' ? state.detail : '';
           return { kind: 'rollBack', message: detail !== '' ? detail : OneTapBuy.notBoughtMessage };
         }
-        return { kind: 'show', shown: OneTapBuy.shown(result.order, state, true), celebrate: !resumed };
+        return {
+          kind: 'show',
+          shown: OneTapBuy.shown(result.order, state, true),
+          celebrate: !resumed && state.txId !== undefined,
+        };
       }
     }
   }

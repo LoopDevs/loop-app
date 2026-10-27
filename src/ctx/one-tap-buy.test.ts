@@ -345,3 +345,11 @@ test('an already paying order shown after a sent record keeps its chain record',
     celebrate: false,
   });
 });
+
+test('a send with no transaction hash shows as confirming without celebrating', () => {
+  const view = OneTapBuy.view(
+    { kind: 'payment', order: giftCard(1), outcome: { state: { kind: 'confirming' }, resumed: false } },
+    null,
+  );
+  assert.equal(view.kind === 'show' && view.celebrate, false);
+});

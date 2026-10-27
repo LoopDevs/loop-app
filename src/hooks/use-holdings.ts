@@ -26,12 +26,18 @@ export function useHoldings(wallet: SmartWallet | null) {
       setLoaded(null);
       return;
     }
-    const [balances, account, profile, rates] = await Promise.all([
+    const [balances, fetchedAccount, profile, rates] = await Promise.all([
       wallet.balances(),
       ctx.account().catch((error: unknown) => new Error(errorMessage(error))),
       ctx.me().catch((error: unknown) => new Error(errorMessage(error))),
       Rates.fetch(network.tokens.map((token) => token.currency)),
     ]);
+    const account =
+      fetchedAccount instanceof Error
+        ? fetchedAccount
+        : await fetchedAccount
+            .withoutLandedPayouts(wallet.address, (txHash) => wallet.transactionLanded(txHash))
+            .catch((error: unknown) => new Error(errorMessage(error)));
     if (request !== latestRequest.current) {
       return;
     }
