@@ -45,7 +45,7 @@ import {
   unpaidStatuses,
 } from "@/ctx/gift-card-status";
 import { useAppRefresh } from "@/hooks/use-app-refresh";
-import { PaymentCheck } from "@/hooks/use-sent-payment";
+import { paymentCheck } from "@/hooks/use-sent-payment";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useSessionOwner } from "@/hooks/use-session-owner";
 import { useTheme } from "@/hooks/use-theme";
@@ -103,16 +103,17 @@ export default function WalletScreen() {
         let pageCount = 0;
         const shownResult: GiftCard[] = [];
         const sentIds: string[] = [];
-        const paymentCheck = new PaymentCheck();
+        const check = paymentCheck();
         for (;;) {
           const { result, pagination } = await ctx.giftCards({
             notStatus: unpaidStatuses,
             perPage: ordersPerPage,
             page: next,
           });
-          const sent = await Promise.all(
-            result.map((giftCard) => paymentCheck.sent(giftCard)),
+          const payments = await Promise.all(
+            result.map((giftCard) => check.sent(giftCard)),
           );
+          const sent = payments.map((payment) => payment.kind !== "notSent");
           shownResult.push(
             ...result.filter(
               (giftCard, index) => !isHiddenFromHistory(giftCard, sent[index]),

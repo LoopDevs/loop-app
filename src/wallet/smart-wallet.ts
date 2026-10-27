@@ -22,7 +22,7 @@ import { DeviceLink } from '@/wallet/device-link';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey, type Passkey } from '@/wallet/passkey';
-import { PaymentSearch } from '@/wallet/payment-search';
+import { PaymentSearch, type OrderPayment } from '@/wallet/payment-search';
 import { Savings } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
@@ -205,17 +205,8 @@ export class SmartWallet {
     return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
   }
 
-  async orderPaid(giftCard: GiftCard): Promise<boolean> {
-    const { paymentCryptoAmount, paymentCryptoAddress, paymentUrlExpiration } = giftCard;
-    const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
-    if (!token || !paymentCryptoAmount || !paymentCryptoAddress || !paymentUrlExpiration) {
-      return false;
-    }
-    const muxedId = SponsoredCall.muxedIdOf(paymentCryptoAddress);
-    const amount = units.parse(paymentCryptoAmount);
-    const expected: SignedTransfer = muxedId === undefined ? { amount } : { amount, muxedId };
-    const span = { from: Date.parse(giftCard.created), to: Date.parse(paymentUrlExpiration) };
-    return new PaymentSearch(soroban, this.address, network.payee).landedDuring(token.contract, expected, span, Date.now());
+  orderPaid(giftCard: GiftCard): Promise<OrderPayment> {
+    return new PaymentSearch(soroban, this.address, network.payee).orderPaid(giftCard, Date.now());
   }
 
   async transactionLanded(hash: string): Promise<boolean> {

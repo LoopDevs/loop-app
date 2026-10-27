@@ -168,8 +168,9 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const { gutter } = usePageLayout();
   const reduceMotion = useReducedMotion();
   const cashback = cashbackState(giftCard);
-  const sent = usePaymentSent(giftCard);
-  const outcome = sent === undefined ? null : outcomeText(giftCard, sent);
+  const payment = usePaymentSent(giftCard);
+  const outcome = payment === undefined ? null : outcomeText(giftCard, payment.kind !== 'notSent');
+  const sentTxId = payment?.kind === 'sent' ? payment.txId : undefined;
   const processing = giftCard.status === 'paid';
   const paid = wasCharged(giftCard)
     ? amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency)
@@ -226,7 +227,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
             aside={
               <>
                 {summary}
-                <OrderHelp giftCard={giftCard} />
+                <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
               </>
             }>
             {outcome ? <Notice message={outcome} /> : null}
@@ -238,7 +239,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
           {outcome ? <Notice message={outcome} /> : null}
           <GiftCardDetails giftCard={giftCard} />
           {summary}
-          <OrderHelp giftCard={giftCard} />
+          <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
         </View>
       )}
     </Animated.View>
