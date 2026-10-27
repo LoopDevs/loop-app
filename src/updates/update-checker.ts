@@ -3,7 +3,7 @@ import * as Updates from 'expo-updates';
 
 import { errorReporting } from '@/ops/error-reporting';
 
-import { isCriticalUpdate, ReloadGate } from './critical-update';
+import { ReloadGate, reloadsNow } from './critical-update';
 
 const gate = new ReloadGate();
 let checking = false;
@@ -26,11 +26,11 @@ export async function checkForUpdate(): Promise<void> {
   checking = true;
   try {
     const check = await Updates.checkForUpdateAsync();
-    if (!check.isAvailable) {
+    if (!check.isAvailable && !check.isRollBackToEmbedded) {
       return;
     }
     const fetched = await Updates.fetchUpdateAsync();
-    if (fetched.isNew && isCriticalUpdate(fetched.manifest, Constants.expoConfig?.extra)) {
+    if (reloadsNow(fetched, Constants.expoConfig?.extra)) {
       gate.request(() =>
         Updates.reloadAsync().catch((error: unknown) => {
           errorReporting.reportMessage(`Critical update reload failed: ${error instanceof Error ? error.message : String(error)}`);
