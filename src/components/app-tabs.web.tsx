@@ -34,7 +34,7 @@ export default function AppTabs() {
     }
   }, [hydrated]);
   return (
-    <Tabs style={styles.shell}>
+    <Tabs style={styles.shell} options={{ backBehavior: 'fullHistory' }}>
       {wide ? null : <TabSlot style={styles.slot} />}
       <TabList asChild>
         <CustomTabList>
