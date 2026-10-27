@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 
+import { errorReporting } from '@/ops/error-reporting';
+
 import { isCriticalUpdate, ReloadGate } from './critical-update';
 
 const gate = new ReloadGate();
@@ -34,7 +36,7 @@ export async function checkForUpdate(): Promise<void> {
       });
     }
   } catch (error) {
-    console.warn('Update check failed', error);
+    errorReporting.reportMessage(`Update check failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     checking = false;
   }
