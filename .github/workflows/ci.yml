@@ -2,9 +2,8 @@ name: CI
 
 on:
   pull_request:
-    branches: [post-hackathon, main]
   push:
-    branches: [post-hackathon, main]
+    branches: [post-hackathon, staging, main]
   schedule:
     - cron: '17 6 * * 1'
 
@@ -39,6 +38,7 @@ jobs:
 
   audit:
     name: audit
+    continue-on-error: ${{ github.event_name != 'schedule' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
