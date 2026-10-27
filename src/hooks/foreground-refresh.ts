@@ -5,8 +5,12 @@ export class ForegroundRefresh {
   private lastEmittedAt: number | null = null;
   private lastReconnectAt: number | null = null;
 
+  private static isTooSoon(last: number | null, now: number): boolean {
+    return last !== null && now >= last && now - last < ForegroundRefresh.minimumIntervalMs;
+  }
+
   shouldRefreshOnReconnect(now: number): boolean {
-    if (this.lastReconnectAt !== null && now - this.lastReconnectAt < ForegroundRefresh.minimumIntervalMs) {
+    if (ForegroundRefresh.isTooSoon(this.lastReconnectAt, now)) {
       return false;
     }
     this.lastReconnectAt = now;
@@ -22,7 +26,7 @@ export class ForegroundRefresh {
       return false;
     }
     this.wasBackgrounded = false;
-    if (this.lastEmittedAt !== null && now - this.lastEmittedAt < ForegroundRefresh.minimumIntervalMs) {
+    if (ForegroundRefresh.isTooSoon(this.lastEmittedAt, now)) {
       return false;
     }
     this.lastEmittedAt = now;
