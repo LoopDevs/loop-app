@@ -58,7 +58,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "TZ=UTC LC_ALL=en_US.UTF-8 EXPO_PUBLIC_LOOP_ENV=staging node --test 'src/**/*.test.ts' 'edge/**/*.test.ts'",
-    "export:web": "rm -rf dist && EXPO_PUBLIC_LOOP_ENV=production EXPO_PUBLIC_CATALOG_URL=/api/catalog expo export --platform web && cp dist/+not-found.html dist/404.html && node -p \"JSON.stringify({ criticalIndex: require('./app.json').expo.extra.criticalIndex })\" > dist/app-version.json &&mv dist/assets/node_modules dist/assets/vendor && grep -rl assets/node_modules/ dist | xargs perl -pi -e 's#assets/node_modules/#assets/vendor/#g'",
+    "export:web": "rm -rf dist && export EXPO_PUBLIC_LOOP_ENV=production EXPO_PUBLIC_CATALOG_URL=/api/catalog && expo export --platform web &&cp dist/+not-found.html dist/404.html && node -p \"JSON.stringify({ criticalIndex: require('./app.json').expo.extra.criticalIndex })\" > dist/app-version.json &&mv dist/assets/node_modules dist/assets/vendor && grep -rl assets/node_modules/ dist | xargs perl -pi -e 's#assets/node_modules/#assets/vendor/#g' && node scripts/content-security-policy.ts dist",
     "deploy:web": "npm run export:web && npx --yes wrangler@4.152.0 pages deploy --branch main"
   },
   "engines": {
