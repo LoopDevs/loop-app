@@ -14,18 +14,19 @@ Everyday consumers in the US, UK, Europe and Canada who already shop at big-name
 
 ## Product Purpose
 
-Loop is a gift-card cashback and savings wallet. Users buy gift cards from retailers at face value, earn cashback on every card, pay from a self-custodied Stellar smart wallet, and hold balances in USDC, EURC and GBPLOOP, with a savings balance that earns yield. Success: a purchase feels as quick and safe as a card tap, and the user can see at a glance how much they hold and how much they have earned.
+Loop is a gift-card cashback and savings wallet. Users buy gift cards from retailers at face value, earn cashback on every card, pay from a self-custodied Stellar smart wallet, and hold balances in dollar and euro tokens (the set per environment is `offeredTokens` in `src/stellar/network.ts`), with a savings balance that earns yield. Success: a purchase feels as quick and safe as a card tap, and the user can see at a glance how much they hold and how much they have earned.
 
 ## Positioning
 
-The cashback, the wallet and the savings live in one place the user owns: a passkey-secured smart wallet, not a points scheme or a custodial account. Gift cards are paid from that wallet and the money left over earns yield.
+The cashback, the wallet and the savings live in one place the user owns: a smart wallet unlocked with Face ID or a fingerprint, not a points scheme or a custodial account. Gift cards are paid from that wallet and the money left over earns yield.
 
 ## Operating Context
 
-- Sign-in by email code (proxied CTX auth), then wallet creation with a passkey.
-- Home, top to bottom: a full-width blue panel with the total balance and round actions, a next-step card, Spending balance and Savings cards, recent gift cards, then a Top cashback strip. Shop is a discovery feed: category tiles, strips of photo cards, then every gift card. Founder references: a Revolut-style money overview and the Too Good To Go Discover feed.
+- Sign-in by email code (proxied CTX auth) or social sign-in where enabled, then wallet creation with a passkey (Face ID or fingerprint).
+- Tabs: Home, Shop, Savings, Wallet, Profile.
+- Home is a balances overview. A signed-in user sees a total-balance card with its actions, a savings nudge, a next-step card and recent gift cards. A signed-out visitor sees the top cashback offers and the brand wall. Shop is a discovery feed: category tiles, strips of photo cards (top cashback, favourites, bought recently), then every gift card. Founder references: a Revolut-style money overview and the Too Good To Go Discover feed.
 - Gift card purchase: search merchant, pick amount, pick pay-with token, see price, pay, wait for fulfilment.
-- Orders: list of purchased gift cards; detail with barcode, number, PIN, redeem link.
+- Wallet: spendable balance, add money, purchased gift cards; detail with barcode, number, PIN, redeem link.
 - Savings: savings (vault) value, yield earned, withdraw.
 - Releases: `eas build --profile production` builds the store binary (`preview` builds go to testers, both on EAS-managed signing). A JS-only fix ships with `EXPO_PUBLIC_LOOP_ENV=production eas update --channel production` (`eas update` reads the local `.env`, not the `eas.json` build env); it downloads in the background and applies on the next cold start. A critical update (must apply at once) is the same command after raising `extra.criticalIndex` in `app.json`, which only ever increases and does not change the runtime fingerprint; running binaries reload as soon as they fetch it, waiting for any payment being sent. On web, `npm run deploy:web` publishes `criticalIndex` as `/app-version.json`; open tabs check it at launch and on return to the foreground, and reload once the same way. To stop an old binary from paying, check out its release tag, replace `GiftCardPurchase` with a blocking "Update Loop" view that links to the store listing, raise `criticalIndex`, and publish with `EXPO_PUBLIC_LOOP_ENV=production eas update --channel production`; Orders stays usable so bought codes remain reachable.
 - Environments: `EXPO_PUBLIC_LOOP_ENV` is `staging` (CTX staging + Stellar testnet) or `production` (CTX production + Stellar mainnet); any other value or none fails at startup. The environment also carries the CTX client id, so an OTA built from any `.env` keeps it. Staging passkeys are named `<email> (test)`.
@@ -39,8 +40,8 @@ The cashback, the wallet and the savings live in one place the user owns: a pass
 ## Capabilities and Constraints
 
 - Expo 58 / React Native 0.88 app with expo-router native tabs, reanimated and gesture-handler, also shipped to web.
-- Offer model: cashback and savings only. Gift cards sell at face value; there is no discount at purchase. Each gift card tile leads with its cashback rate, and the hero's earnings line shows cashback earned and savings yield.
-- Terminology: "gift card", "order", "cashback", "savings", "wallet", "balance". Tokens are USDC, EURC, GBPLOOP, XLM.
+- Offer model: cashback and savings only. Gift cards sell at face value; there is no discount at purchase. Each gift card tile leads with its cashback rate, and the balance card shows cashback on the way and the savings balance.
+- Terminology: "gift card", "order", "cashback", "savings", "wallet", "balance". Token codes come from `src/stellar/network.ts`.
 - Greenfield: no backwards compatibility owed.
 - Code rules for every builder (project CLAUDE.md): no code comments; no before/after framing in code, names or copy; edit files with Edit/Write, never sed; no screenshot or browser-automation QA of the app code; no git commits unless asked; do not touch `android/`, `ios/`, `.env` or `../loop-landing`.
 
