@@ -564,7 +564,7 @@ export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
   const [total, setTotal] = useState<number | null>(null);
-  const { busy, message, run } = useBusyAction();
+  const { busy, message, load: track } = useBusyAction();
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
 
@@ -575,7 +575,7 @@ export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef
 
   const load = useCallback(
     (next: number) =>
-      run(async () => {
+      track(async () => {
         const request = ++latestRequest.current;
         retryPage.current = next;
         const merchantQuery = {
@@ -603,7 +603,7 @@ export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef
         setPages(pagination.pages);
         setTotal(pagination.total);
       }),
-    [run, country, query, category],
+    [track, country, query, category],
   );
 
   useEffect(() => {

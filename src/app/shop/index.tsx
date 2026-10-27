@@ -73,8 +73,8 @@ export default function ShopScreen() {
   const account = useBusyAction();
   const listing = useBusyAction();
   const busy = account.busy || listing.busy;
-  const runAccount = account.run;
-  const runListing = listing.run;
+  const runAccount = account.load;
+  const runListing = listing.load;
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, setProfile } = useProfile();
   const { country: marketCountry } = useMarket();

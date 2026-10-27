@@ -47,7 +47,7 @@ const sectionTitles: Record<SettingsSection, string> = {
 export default function SettingsScreen() {
   const router = useRouter();
   const { wide } = usePageLayout();
-  const { busy, message, run } = useBusyAction();
+  const { busy, message, run, load } = useBusyAction();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
@@ -65,7 +65,7 @@ export default function SettingsScreen() {
 
   const loadAccount = useCallback(
     () =>
-      run(async () => {
+      load(async () => {
         const isSignedIn = await ctx.isSignedIn();
         setSignedIn(isSignedIn);
         const userId = isSignedIn ? await ctx.userId() : null;
@@ -81,7 +81,7 @@ export default function SettingsScreen() {
           setProfile(loaded);
         }
       }),
-    [run, setProfile],
+    [load, setProfile],
   );
 
   useFocusEffect(

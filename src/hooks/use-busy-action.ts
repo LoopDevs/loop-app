@@ -10,18 +10,22 @@ export function useBusyAction() {
   const [inFlight, setInFlight] = useState(0);
   const [message, setMessage] = useState('');
 
-  const run = useCallback(async (action: () => Promise<void>) => {
+  const track = useCallback(async (action: () => Promise<void>, onFailure: () => void) => {
     setInFlight((count) => count + 1);
     setMessage('');
     try {
       await action();
     } catch (error) {
-      haptics.error();
+      onFailure();
       setMessage(errorMessage(error));
     } finally {
       setInFlight((count) => count - 1);
     }
   }, []);
 
-  return { busy: inFlight > 0, message, setMessage, run };
+  const run = useCallback((action: () => Promise<void>) => track(action, () => haptics.error()), [track]);
+
+  const load = useCallback((action: () => Promise<void>) => track(action, () => undefined), [track]);
+
+  return { busy: inFlight > 0, message, setMessage, run, load };
 }
