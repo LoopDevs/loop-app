@@ -18,9 +18,9 @@ export const passkey = {
   async create(label: string): Promise<Passkey> {
     const passkeyLabel = loopEnvironment.passkeyLabel(label);
     const created = await Passkeys.create({
-      challenge: base64.encode(randomBytes(32)),
+      challenge: base64.encodeUrl(randomBytes(32)),
       rp: { id: rpId(), name: 'Loop' },
-      user: { id: base64.encode(randomBytes(16)), name: passkeyLabel, displayName: passkeyLabel },
+      user: { id: base64.encodeUrl(randomBytes(16)), name: passkeyLabel, displayName: passkeyLabel },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
     }).catch((error: unknown) => {
