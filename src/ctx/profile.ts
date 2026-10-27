@@ -1,3 +1,4 @@
+import { loopLinks } from '../constants/loop-links.ts';
 import { offeredCurrencies, stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { Savings } from '../wallet/savings.ts';
 import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client.ts';
@@ -15,6 +16,7 @@ export type CountryChoice = {
 };
 
 export class Profile {
+  readonly id: string;
   readonly email?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
@@ -24,6 +26,7 @@ export class Profile {
   readonly stableCurrencies: string[];
 
   constructor(user: UserJson, company: MeJson['company']) {
+    this.id = user.id;
     this.email = user.email;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
@@ -66,6 +69,16 @@ export class Profile {
   isFor(email: string): boolean {
     const own = this.email?.trim().toLowerCase();
     return !!own && own === email.trim().toLowerCase();
+  }
+
+  deletionRequestMail(): string {
+    const body = [
+      'Please delete my Loop account.',
+      '',
+      `Account id: ${this.id}`,
+      `Account email: ${this.email ?? ''}`,
+    ].join('\n');
+    return loopLinks.supportMail('Delete my account', body);
   }
 
   passkeyLabel(): string {
