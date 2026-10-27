@@ -52,6 +52,14 @@ test('balances that display as zero are not listed', () => {
   assert.deepEqual(labels(json, nonSaver), ['XLM.USDC waiting for payout']);
 });
 
+test('an amount counts from one cent and malformed amounts do not count', () => {
+  assert.equal(Account.hasAmount('0.01'), true);
+  assert.equal(Account.hasAmount('12.5'), true);
+  for (const amount of ['0.0099999', '-5', '', 'abc', '1e3', 'NaN']) {
+    assert.equal(Account.hasAmount(amount), false, amount);
+  }
+});
+
 test('an XLM balance waits to convert whatever the destination', () => {
   const json = { wallet: [{ currency: 'XLM', amount: '3' }], payouts: [] };
   for (const routing of [saver, nonSaver]) {
