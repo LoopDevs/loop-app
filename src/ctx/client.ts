@@ -1,8 +1,12 @@
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import Constants from 'expo-constants';
+
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
+import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
+import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { signInReportMessage } from '@/ctx/sign-in-report';
-import { OrderRequest } from '@/ctx/order-request';
 import { OrderWake } from '@/ctx/order-wake';
 import { Deadline } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
@@ -21,7 +25,7 @@ import {
 } from '@/session/social-sign-in';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
-import { holdCriticalReload } from '@/updates/update-checker';
+import { holdCriticalReload, runningUpdateId } from '@/updates/update-checker';
 
 export { CtxError };
 
@@ -230,12 +234,20 @@ export type SponsoredResult = {
 class CtxClient {
   private readonly auth = new SessionAuth(this.send.bind(this), tokenStore);
   private serviceStateListener: ServiceStateListener | null = null;
+  private readonly orderKeys = new OrderKeys(() => bytesToHex(randomBytes(16)));
 
   constructor(
     private readonly baseUrl: string,
     private readonly clientId: string,
     private readonly catalogUrl: string,
+    private readonly appVersion: string,
   ) {}
+
+  static runningAppVersion(): string {
+    const version = Constants.expoConfig?.version ?? 'unknown';
+    const updateId = runningUpdateId();
+    return updateId ? `${version}+${updateId}` : version;
+  }
 
   onServiceState(listener: ServiceStateListener): () => void {
     this.serviceStateListener = listener;
@@ -306,7 +318,10 @@ class CtxClient {
   }
 
   async account(): Promise<Account> {
-    return new Account(await this.userRequest<AccountJson>('GET', '/account'));
+    const json = await this.userRequest('GET', '/account');
+    return new Account(
+      this.checked((value) => CtxResponse.account(value, (detail) => errorReporting.reportMessage(detail)), json),
+    );
   }
 
   async merchants({ country, name, ids, category, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
@@ -350,16 +365,24 @@ class CtxClient {
 
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
-    const card: GiftCard = await this.auth.sessionRequest('POST', '/gift-cards', body);
+    const idempotencyKey = this.orderKeys.keyFor(order);
+    const card = this.checked(
+      CtxResponse.giftCard,
+      await this.auth.sessionRequest('POST', '/gift-cards', body, true, { 'Idempotency-Key': idempotencyKey }),
+    );
     if (!new OrderRequest(order).matches(card)) {
       errorReporting.reportMessage('CTX order does not match the request');
       throw new Error('CTX order does not match the request');
     }
+    this.orderKeys.settle(idempotencyKey);
     return card;
   }
 
-  giftCard(id: string): Promise<GiftCard> {
-    return this.auth.sessionRequest('GET', `/gift-cards/${encodeURIComponent(id)}`);
+  async giftCard(id: string): Promise<GiftCard> {
+    return this.checked(
+      CtxResponse.giftCard,
+      await this.auth.sessionRequest('GET', `/gift-cards/${encodeURIComponent(id)}`),
+    );
   }
 
   async watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
@@ -370,7 +393,11 @@ class CtxClient {
       options: { headers: Record<string, string> },
     ) => WebSocket;
     const socket = new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
-      headers: { Authorization: `Bearer ${accessToken}`, 'X-Client-Id': this.clientId },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Client-Id': this.clientId,
+        'X-App-Version': this.appVersion,
+      },
     });
     socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic: 'giftcard' }));
     socket.onmessage = (message) => {
@@ -402,10 +429,17 @@ class CtxClient {
       query.set('perPage', String(perPage));
     }
     const { result, pagination } = await this.auth.sessionRequest<{
-      result: GiftCard[] | null;
+      result: unknown;
       pagination: Pagination;
     }>('GET', `/gift-cards?${query}`);
-    return { result: result ?? [], pagination };
+    return {
+      result: this.checked(
+        (cards) =>
+          CtxResponse.listOf('gift cards', cards, CtxResponse.giftCard, (detail) => errorReporting.reportMessage(detail)),
+        result,
+      ),
+      pagination,
+    };
   }
 
   async activeGiftCard(merchantId?: string): Promise<GiftCard | null> {
@@ -415,24 +449,45 @@ class CtxClient {
   }
 
   async wallets(): Promise<WalletLink[]> {
-    const { result } = await this.userRequest<{ result: WalletLink[] }>('GET', '/wallets');
-    return result;
+    const { result } = await this.userRequest<{ result: unknown }>('GET', '/wallets');
+    return this.checked(
+      (links) =>
+        CtxResponse.listOf('wallets', links, CtxResponse.walletLink, (detail) => errorReporting.reportMessage(detail)),
+      result,
+    );
   }
 
-  deployWallet(userId: string, body: DeployWalletIn): Promise<WalletLink> {
-    return this.requestAs(userId, 'POST', '/wallets/deploy', body);
+  async deployWallet(userId: string, body: DeployWalletIn): Promise<WalletLink> {
+    return this.checked(CtxResponse.walletLink, await this.requestAs(userId, 'POST', '/wallets/deploy', body));
   }
 
-  buildTransaction(walletId: string, intent: SmartWalletIntent): Promise<BuiltTransaction> {
-    return this.userRequest('POST', `/wallets/${walletId}/stellar/transaction`, intent);
+  async buildTransaction(walletId: string, intent: SmartWalletIntent): Promise<BuiltTransaction> {
+    return this.checked(
+      CtxResponse.builtTransaction,
+      await this.userRequest('POST', `/wallets/${walletId}/stellar/transaction`, intent),
+    );
   }
 
-  sponsorTransaction(
+  async sponsorTransaction(
     walletId: string,
     intent: SmartWalletIntent,
     signed: SignedTransaction,
   ): Promise<SponsoredResult> {
-    return this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed });
+    return this.checked(
+      CtxResponse.sponsored,
+      await this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed }),
+    );
+  }
+
+  private checked<T>(read: (value: unknown) => T, value: unknown): T {
+    try {
+      return read(value);
+    } catch (error) {
+      if (error instanceof UnexpectedResponse) {
+        errorReporting.reportMessage(error.detail);
+      }
+      throw error;
+    }
   }
 
   private async merchantRequest<T>(path: string): Promise<T> {
@@ -489,6 +544,7 @@ class CtxClient {
         headers: {
           'Content-Type': 'application/json',
           'X-Client-Id': this.clientId,
+          'X-App-Version': this.appVersion,
           ...headers,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -517,4 +573,5 @@ export const ctx = new CtxClient(
   loopEnvironment.ctxApiUrl,
   loopEnvironment.ctxClientId,
   process.env.EXPO_PUBLIC_CATALOG_URL || loopEnvironment.ctxApiUrl,
+  CtxClient.runningAppVersion(),
 );

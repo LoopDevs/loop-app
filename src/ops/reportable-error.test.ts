@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { CtxError } from '../ctx/ctx-error.ts';
+import { UnexpectedResponse } from '../ctx/ctx-response.ts';
 import { RequestTimeoutError } from '../ctx/deadline.ts';
 import { UpdateInProgress } from '../updates/critical-update.ts';
 import { IdentityNotConfirmed } from '../wallet/device-key.ts';
@@ -58,4 +59,8 @@ test('the summary carries the error name and stack but not its message', () => {
   assert.equal(summary.name, 'RangeError');
   assert.equal(summary.stack, failure.stack);
   assert.equal(ReportableError.summary('boom', 'load').message, 'load failed: NonError');
+});
+
+test('a malformed CTX response is not an anomaly', () => {
+  assert.equal(ReportableError.isAnomaly(new UnexpectedResponse('CTX payout response has an unexpected id')), false);
 });

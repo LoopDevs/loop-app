@@ -1,4 +1,5 @@
 import { CtxError } from '../ctx/ctx-error.ts';
+import { UnexpectedResponse } from '../ctx/ctx-response.ts';
 import { RequestTimeoutError } from '../ctx/deadline.ts';
 import { UpdateInProgress } from '../updates/critical-update.ts';
 import { IdentityNotConfirmed } from '../wallet/device-key.ts';
@@ -34,6 +35,7 @@ export class ReportableError {
   private static isExpected(error: unknown): boolean {
     return (
       error instanceof CtxError ||
+      error instanceof UnexpectedResponse ||
       error instanceof IdentityNotConfirmed ||
       error instanceof RequestTimeoutError ||
       error instanceof UpdateInProgress ||

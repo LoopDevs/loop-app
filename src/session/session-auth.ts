@@ -54,9 +54,11 @@ export class SessionAuth {
     path: string,
     body?: unknown,
     reportServiceState = true,
+    headers: Record<string, string> = {},
   ): Promise<T> {
     const generation = this.session.current();
-    const request = (accessToken: string) => this.authorized<T>(accessToken, method, path, body, reportServiceState);
+    const request = (accessToken: string) =>
+      this.authorized<T>(accessToken, method, path, body, reportServiceState, headers);
     const accessToken = await this.requireAccessToken();
     try {
       return await request(accessToken);
@@ -115,9 +117,10 @@ export class SessionAuth {
     path: string,
     body: unknown,
     reportServiceState: boolean,
+    headers: Record<string, string>,
   ): Promise<T> {
     return this.send<T>(method, path, body, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { ...headers, Authorization: `Bearer ${accessToken}` },
       reportServiceState,
     });
   }
