@@ -76,7 +76,7 @@ export default function ShopScreen() {
   const runAccount = account.load;
   const runListing = listing.load;
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const { profile, setProfile } = useProfile();
+  const { profile, startProfileRead } = useProfile();
   const { country: marketCountry } = useMarket();
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
   const { q } = useLocalSearchParams<{ q?: string }>();
@@ -109,10 +109,11 @@ export default function ShopScreen() {
           return;
         }
         const loadedOrder = ctx.activeGiftCard().catch(() => null);
-        setProfile(await ctx.me());
+        const commitProfile = startProfileRead();
+        commitProfile(await ctx.me());
         setActiveOrder(await loadedOrder);
       }),
-    [runAccount, setProfile],
+    [runAccount, startProfileRead],
   );
 
   useFocusEffect(
