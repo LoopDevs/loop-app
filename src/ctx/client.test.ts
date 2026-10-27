@@ -250,9 +250,14 @@ function card(overrides: Partial<Record<'cardFiatAmount' | 'merchantId' | 'cardF
   return {
     id: 'g1',
     status: 'unpaid',
+    paymentStatus: 'unpaid',
     merchantId: 'm1',
+    merchantName: 'Merchant One',
+    created: '2026-10-27T10:00:00Z',
     cardFiatAmount: '25.00',
     cardFiatCurrency: 'GBP',
+    paymentId: 'p1',
+    paymentMethod: 'XLM.USDC',
     ...overrides,
   };
 }
