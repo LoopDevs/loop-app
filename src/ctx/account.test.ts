@@ -111,6 +111,57 @@ test('a balance with a failed payout in its currency reads delayed', () => {
   }
 });
 
+test('an in-flight payout that has not failed leaves the balance label normal', () => {
+  for (const status of ['pending-approval', 'approved', 'held', 'pending', 'submitted', 'queued'] as const) {
+    const json = { wallet: [{ currency: 'XLM.USDC', amount: '1' }], payouts: [payout({ status })] };
+    assert.deepEqual(
+      new Account(json).onTheWay(nonSaver).map((item) => [item.key, item.label]),
+      [
+        ['balance:XLM.USDC', 'waiting for payout'],
+        ['payout:p1', status === 'queued' ? 'retrying' : 'on the way'],
+      ],
+      status,
+    );
+  }
+});
+
+test('a failed payout in another currency does not delay this balance', () => {
+  const json = {
+    wallet: [{ currency: 'XLM.USDC', amount: '1' }],
+    payouts: [payout({ status: 'failed', currency: 'XLM.EURC' })],
+  };
+  assert.deepEqual(labels(json, nonSaver), ['XLM.USDC waiting for payout', 'XLM.EURC delayed, contact support']);
+});
+
+test('a failed payout delays a savings balance and a held balance alike', () => {
+  const json = {
+    wallet: [
+      { currency: 'XLM.USDC', amount: '1' },
+      { currency: 'XLM.GBPLOOP', amount: '1' },
+    ],
+    payouts: [payout({ status: 'failed', currency: 'XLM.GBPLOOP' })],
+  };
+  assert.deepEqual(
+    new Account(json).onTheWay(profile('XLM.GBPLOOP', 'savings')).map((item) => [item.key, item.label, item.heldBySavings]),
+    [
+      ['balance:XLM.USDC', 'goes to savings when savings is available', false],
+      ['balance:XLM.GBPLOOP', 'delayed, contact support', false],
+      ['payout:p1', 'delayed, contact support', false],
+    ],
+  );
+});
+
+test('an in-flight payout is listed after the balances in the order CTX returned them', () => {
+  const json = {
+    wallet: [{ currency: 'XLM.USDC', amount: '1' }],
+    payouts: [payout({ id: 'p2', status: 'submitted' }), payout({ id: 'p1', status: 'queued' })],
+  };
+  assert.deepEqual(
+    new Account(json).onTheWay(nonSaver).map((item) => item.key),
+    ['balance:XLM.USDC', 'payout:p2', 'payout:p1'],
+  );
+});
+
 test('a queued savings payout is listed as retrying to savings', () => {
   const items = new Account({ wallet: [], payouts: [payout({ kind: 'savings', status: 'queued' })] }).onTheWay(saver);
   assert.deepEqual(
