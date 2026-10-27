@@ -163,3 +163,8 @@ test('a card CTX marks paid is never described as not charged or possibly charge
     assert.ok(!text.includes('If you were charged'));
   }
 });
+
+test('an expired order this device sent a payment for is shown in history', () => {
+  assert.equal(isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'expired' }), true), false);
+  assert.equal(isHiddenFromHistory(card({ status: 'unpaid', paymentStatus: 'unpaid' }), true), true);
+});

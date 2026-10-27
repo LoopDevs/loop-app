@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
@@ -6,6 +5,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { Button, Notice } from '@/components/form';
+import { OrderHelp } from '@/components/order-help';
 import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -37,12 +37,12 @@ import {
   type PayRejection,
   type SignedTransfer,
 } from '@/ctx/payment-state';
-import { SentPayments } from '@/ctx/sent-payments';
 import { PriceWindow } from '@/ctx/price-window';
 import { Profile } from '@/ctx/profile';
 import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
+import { sentPayments } from '@/hooks/use-sent-payment';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
@@ -111,7 +111,6 @@ function payRejection(error: unknown): PayRejection | undefined {
   };
 }
 
-const sentPayments = new SentPayments(AsyncStorage);
 const paymentSender = new PaymentSender(sentPayments, payRejection, paymentLock);
 const pendingTopUps = new Map<string, PendingWithdrawal>();
 const inFlightPayments = new InFlightPayments();
@@ -810,7 +809,10 @@ function OrderView({
 
       {outcome && <Notice message={outcome} />}
       {order?.status === 'unpaid' && needsSupport(payment) && (
-        <Notice message="We couldn't find this payment. Contact support about this order." />
+        <>
+          <Notice message="We couldn't find this payment. Contact support about this order." />
+          <OrderHelp giftCard={order} />
+        </>
       )}
       {canRetry && (
         <Notice

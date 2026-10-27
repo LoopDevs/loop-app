@@ -11,6 +11,11 @@ export const deviceSigner = {
   },
 
   async create(userId: string): Promise<string> {
+    keepStorage();
+    const existing = await readOwn(userId);
+    if (existing) {
+      return exportPublicKey(existing);
+    }
     const keyPair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, false, [
       'sign',
       'verify',
@@ -60,10 +65,23 @@ async function transact<T>(
 
 const sharedKeyName = 'device';
 
-async function read(userId: string): Promise<CryptoKeyPair | undefined> {
+function readOwn(userId: string): Promise<CryptoKeyPair | undefined> {
   const keyName = DeviceKey.storageName(userId);
-  const own = await transact<CryptoKeyPair | undefined>('readonly', (store) => store.get(keyName));
+  return transact('readonly', (store) => store.get(keyName));
+}
+
+async function read(userId: string): Promise<CryptoKeyPair | undefined> {
+  const own = await readOwn(userId);
   return own ?? transact('readonly', (store) => store.get(sharedKeyName));
+}
+
+let storageKept: Promise<boolean> | null = null;
+
+function keepStorage(): void {
+  storageKept ??= Promise.resolve(navigator.storage?.persist?.() ?? false).catch((error: unknown) => {
+    console.warn('Asking the browser to keep storage failed', error);
+    return false;
+  });
 }
 
 async function write(userId: string, keyPair: CryptoKeyPair): Promise<void> {
