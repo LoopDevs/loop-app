@@ -9,8 +9,12 @@ class MemoryStorage implements DeviceKeyStorage {
   readonly entries = new Map<string, { value: string; biometric: boolean }>();
   readonly touched: string[] = [];
 
-  async read(name: string): Promise<string | null> {
-    return this.entries.get(name)?.value ?? null;
+  async read(name: string, biometric: boolean): Promise<string | null> {
+    const entry = this.entries.get(name);
+    if (entry && entry.biometric !== biometric) {
+      throw new Error(`${name} read with the wrong biometric flag`);
+    }
+    return entry?.value ?? null;
   }
 
   async write(name: string, value: string, biometric: boolean): Promise<void> {
