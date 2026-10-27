@@ -81,6 +81,10 @@ export class SmartWallet {
     return wallet;
   }
 
+  sameAs(other: SmartWallet | null): boolean {
+    return other !== null && other.id === this.id && other.address === this.address && other.userId === this.userId;
+  }
+
   static unlessUnlinked(error: unknown): null {
     if (error instanceof UnlinkedDevice) {
       return null;

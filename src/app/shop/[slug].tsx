@@ -71,7 +71,7 @@ export default function MerchantScreen() {
                   .catch(() => undefined),
               ])
             : [null, undefined];
-          setWallet(loadedWallet);
+          setWallet((current) => (loadedWallet?.sameAs(current) ? current : loadedWallet));
           setUserCountry(country);
           setSignedIn(isSignedIn);
         });
