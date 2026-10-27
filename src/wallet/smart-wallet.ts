@@ -20,11 +20,12 @@ import { MissingDeviceSecret } from '@/wallet/device-key';
 import { DeviceLink } from '@/wallet/device-link';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
-import { passkey } from '@/wallet/passkey';
+import { passkey, type Passkey } from '@/wallet/passkey';
 import { PaymentSearch } from '@/wallet/payment-search';
 import { Savings } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
+import { WalletCreation } from '@/wallet/wallet-creation';
 import { WalletPin } from '@/wallet/wallet-pin';
 import { WalletRules, type ContextRule, type WalletCheck } from '@/wallet/wallet-rules';
 
@@ -55,8 +56,14 @@ export class SmartWallet {
     readonly userId: string,
   ) {}
 
+  private static readonly creation = new WalletCreation<SmartWallet>();
+
   static async load(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
+    await SmartWallet.creation.settled(userId);
+    if ((await ctx.userId()) !== userId) {
+      return SmartWallet.load();
+    }
     const pin = new WalletPin(AsyncStorage, userId);
     const [links, pinned] = await Promise.all([ctx.wallets(), pin.read()]);
     const link = WalletPin.choose(links, pinned);
@@ -81,14 +88,17 @@ export class SmartWallet {
     throw error;
   }
 
-  static async create(label: string): Promise<SmartWallet> {
-    const existing = await SmartWallet.load();
-    if (existing) {
-      return existing;
+  static async create(label: string): Promise<void> {
+    if (await SmartWallet.load()) {
+      return;
     }
     const userId = await ctx.userId();
     const devicePublicKey = await deviceSigner.create(userId);
     const created = await passkey.create(label);
+    SmartWallet.creation.start(userId, SmartWallet.deploy(userId, devicePublicKey, created));
+  }
+
+  private static async deploy(userId: string, devicePublicKey: string, created: Passkey): Promise<SmartWallet> {
     const link = await ctx.deployWallet({
       credentialId: created.credentialId,
       passkeyPublicKey: base64.encode(created.publicKey),

@@ -34,6 +34,7 @@ import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
 import type { CountryChoice } from '@/ctx/profile';
 import type { SocialProvider } from '@/session/social-sign-in';
+import { passkey } from '@/wallet/passkey';
 import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type SignInListener = () => void;
@@ -240,7 +241,6 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
         finish();
         return;
       }
-      setStep('secure');
     } catch (error) {
       if (error instanceof UnlinkedDevice) {
         setUnlinkedWallet(error.wallet);
@@ -249,6 +249,20 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
       }
       throw error;
     }
+    setStep('secure');
+    if (Platform.OS !== 'web') {
+      await createWallet().catch((error: unknown) => {
+        if (!passkey.isUserCancel(error)) {
+          throw error;
+        }
+      });
+    }
+  };
+
+  const createWallet = async () => {
+    const profile = await ctx.me();
+    await SmartWallet.create(profile.passkeyLabel());
+    finish();
   };
 
   const chooseCountry = (choice: CountryChoice) =>
@@ -257,12 +271,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
       await openWallet();
     });
 
-  const secureAccount = () =>
-    run(async () => {
-      const profile = await ctx.me();
-      await SmartWallet.create(profile.passkeyLabel());
-      finish();
-    });
+  const secureAccount = () => run(createWallet);
 
   const requestCode = () =>
     run(async () => {

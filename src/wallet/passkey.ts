@@ -45,6 +45,8 @@ export const passkey = {
     }
     return PasskeyAssertion.fromResponse(signed.response);
   },
+
+  isUserCancel,
 };
 
 const providerHelp: Partial<Record<typeof Platform.OS, string>> = {
