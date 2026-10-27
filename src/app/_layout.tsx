@@ -6,6 +6,7 @@ import { DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { AppLockProvider } from '@/components/app-lock';
 import AppTabs from '@/components/app-tabs';
@@ -50,10 +51,17 @@ export default function TabLayout() {
           <ToastProvider>
             <MarketProvider>
               <SignInProvider>
-                {blocked ? (
-                  <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} />
-                ) : (
+                <View
+                  style={styles.fill}
+                  aria-hidden={blocked !== null}
+                  accessibilityElementsHidden={blocked !== null}
+                  importantForAccessibility={blocked ? 'no-hide-descendants' : 'auto'}>
                   <AppTabs />
+                </View>
+                {blocked && (
+                  <View style={StyleSheet.absoluteFill}>
+                    <ServiceUnavailable state={blocked} onRecovered={() => setBlocked(null)} />
+                  </View>
                 )}
                 <OfflineBanner />
               </SignInProvider>
@@ -64,3 +72,7 @@ export default function TabLayout() {
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+});
