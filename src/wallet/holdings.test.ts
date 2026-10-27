@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Payout, type PayoutJson } from '../ctx/payout.ts';
+import { Account } from '../ctx/account.ts';
+import type { BalanceJson } from '../ctx/client.ts';
+import type { PayoutJson } from '../ctx/payout.ts';
 import { Rates } from '../ctx/rates.ts';
 import type { PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
@@ -33,8 +35,8 @@ function holdings(
   );
 }
 
-function payout(overrides: Partial<PayoutJson>): Payout {
-  return new Payout({
+function payout(overrides: Partial<PayoutJson>): PayoutJson {
+  return {
     id: 'p1',
     status: 'pending',
     currency: 'XLM.GBPLOOP',
@@ -42,8 +44,15 @@ function payout(overrides: Partial<PayoutJson>): Payout {
     address: walletAddress,
     reservationTransferId: 't1',
     ...overrides,
-  });
+  };
 }
+
+function accountOf(wallet: BalanceJson[], payouts: PayoutJson[] = []): Account {
+  return new Account({ wallet, payouts });
+}
+
+const toBalance = { stableCurrency: 'XLM.USDC', savesCashback: () => false };
+const toSavings = { stableCurrency: 'XLM.USDC', savesCashback: () => true };
 
 test('an amount in the stable counts at 1 with no rate for it', () => {
   const empty = holdings({}, { rates: Rates.fromPrices({}) });
@@ -125,51 +134,71 @@ test('a token with no rate hides the converted spendable figure', () => {
 });
 
 test('on the way lists ledger balances and in-flight payouts to this wallet only', () => {
-  const onTheWay = Holdings.onTheWayFrom(
-    {
-      wallet: [
-        { currency: 'XLM.GBPLOOP', amount: '2.50', estimates: { USD: '3.3' } },
-        { currency: 'XLM.EURC', amount: '0' },
-      ],
-      payouts: [
-        payout({ amount: '1.25' }),
-        payout({ address: 'GELSEWHERE', amount: '9' }),
-        payout({ address: undefined, amount: '9' }),
-        payout({ status: 'complete', amount: '9' }),
-        payout({ reservationTransferId: undefined, amount: '9' }),
-        payout({ reversalTransferId: 'r1', amount: '9' }),
-      ],
-    },
-    walletAddress,
+  const account = accountOf(
+    [
+      { currency: 'XLM.GBPLOOP', amount: '2.50', estimates: { USD: '3.3' } },
+      { currency: 'XLM.EURC', amount: '0' },
+    ],
+    [
+      payout({ amount: '1.25' }),
+      payout({ address: 'GELSEWHERE', amount: '9' }),
+      payout({ address: undefined, amount: '9' }),
+      payout({ status: 'complete', amount: '9' }),
+      payout({ reservationTransferId: undefined, amount: '9' }),
+      payout({ reversalTransferId: 'r1', amount: '9' }),
+    ],
   );
-  assert.deepEqual(onTheWay, [
+  assert.deepEqual(Holdings.onTheWayFrom(account, walletAddress, toBalance), [
     { currency: 'XLM.GBPLOOP', amount: units.parse('2.5'), estimates: { USD: '3.3' } },
     { currency: 'XLM.GBPLOOP', amount: units.parse('1.25'), estimates: undefined },
   ]);
 });
 
+test('cashback that savings holds back is not on the way, what savings takes still is', () => {
+  const account = accountOf([
+    { currency: 'XLM.GBPLOOP', amount: '2.50' },
+    { currency: 'XLM.USDC', amount: '1.50' },
+    { currency: 'XLM', amount: '10' },
+  ]);
+  assert.deepEqual(
+    Holdings.onTheWayFrom(account, walletAddress, toSavings).map(({ currency }) => currency),
+    ['XLM.USDC', 'XLM'],
+  );
+  assert.deepEqual(
+    Holdings.onTheWayFrom(account, walletAddress, toBalance).map(({ currency }) => currency),
+    ['XLM.GBPLOOP', 'XLM.USDC', 'XLM'],
+  );
+});
+
 test('a payout counts what CTX sends after the network fee', () => {
-  const account = { wallet: [], payouts: [payout({ currency: 'XLM.USDC', amount: '4', sentAmount: '3.99' })] };
-  const held = holdings({}, { onTheWay: Holdings.onTheWayFrom(account, walletAddress) });
+  const account = accountOf([], [payout({ currency: 'XLM.USDC', amount: '4', sentAmount: '3.99' })]);
+  const held = holdings({}, { onTheWay: Holdings.onTheWayFrom(account, walletAddress, toBalance) });
   assert.equal(held.onTheWayIn('USD'), units.parse('3.99'));
 });
 
 test('a payout to another address adds nothing to the total', () => {
-  const account = { wallet: [], payouts: [payout({ address: 'GELSEWHERE', currency: 'XLM.USDC', amount: '4' })] };
-  const held = holdings({ 'XLM.USDC': '4' }, { onTheWay: Holdings.onTheWayFrom(account, walletAddress) });
+  const account = accountOf([], [payout({ address: 'GELSEWHERE', currency: 'XLM.USDC', amount: '4' })]);
+  const held = holdings({ 'XLM.USDC': '4' }, { onTheWay: Holdings.onTheWayFrom(account, walletAddress, toBalance) });
   assert.equal(held.totalIn('USD'), units.parse('4'));
 });
 
+test('an in-flight payout to another wallet is reported as paid elsewhere', () => {
+  assert.equal(Holdings.paidElsewhere(accountOf([], [payout({ address: 'GELSEWHERE' })]), walletAddress), true);
+  assert.equal(Holdings.paidElsewhere(accountOf([], [payout({})]), walletAddress), false);
+  assert.equal(Holdings.paidElsewhere(accountOf([], [payout({ address: undefined })]), walletAddress), false);
+  assert.equal(
+    Holdings.paidElsewhere(accountOf([], [payout({ address: 'GELSEWHERE', status: 'complete' })]), walletAddress),
+    false,
+  );
+});
+
 test('a ledger balance that does not parse is skipped and the rest still count', () => {
-  const account = {
-    wallet: [
-      { currency: 'XLM.USDC', amount: '-1' },
-      { currency: 'XLM.USDC', amount: 'abc' },
-      { currency: 'XLM.USDC', amount: '1.123456789' },
-    ],
-    payouts: [],
-  };
-  assert.deepEqual(Holdings.onTheWayFrom(account, walletAddress), [
+  const account = accountOf([
+    { currency: 'XLM.USDC', amount: '-1' },
+    { currency: 'XLM.USDC', amount: 'abc' },
+    { currency: 'XLM.USDC', amount: '1.123456789' },
+  ]);
+  assert.deepEqual(Holdings.onTheWayFrom(account, walletAddress, toBalance), [
     { currency: 'XLM.USDC', amount: units.parse('1.1234567'), estimates: undefined },
   ]);
 });

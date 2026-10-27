@@ -11,7 +11,11 @@ export type Holding = {
   estimates?: Readonly<Record<string, string>>;
 };
 
-export type Coverage = { kind: 'wallet' } | { kind: 'savings'; fromSavings: bigint } | { kind: 'short' };
+type OnTheWayAccount = Pick<Account, 'wallet' | 'payouts' | 'onTheWay'>;
+
+type CashbackRouting = Parameters<Account['onTheWay']>[0];
+
+export type Coverage ={ kind: 'wallet' } | { kind: 'savings'; fromSavings: bigint } | { kind: 'short' };
 
 export class Holdings {
   static readonly withdrawSlippageBasisPoints = 100n;
@@ -27,14 +31,26 @@ export class Holdings {
     this.rates = rates;
   }
 
-  static onTheWayFrom(account: Pick<Account, 'wallet' | 'payouts'>, address: string): Holding[] {
-    const ledger = account.wallet.flatMap(({ currency, amount, estimates }) =>
-      Holdings.holdingOf(currency, amount, estimates),
+  static onTheWayFrom(account: OnTheWayAccount, address: string, routing: CashbackRouting): Holding[] {
+    const held = new Set(
+      account
+        .onTheWay(routing)
+        .filter((item) => item.heldBySavings)
+        .map((item) => item.currency),
     );
+    const ledger = account.wallet
+      .filter(({ currency }) => !held.has(currency))
+      .flatMap(({ currency, amount, estimates }) => Holdings.holdingOf(currency, amount, estimates));
     const payouts = account.payouts
       .filter((payout) => payout.isInFlight() && payout.address === address)
       .flatMap((payout) => Holdings.holdingOf(payout.currency, payout.netAmount()));
     return [...ledger, ...payouts];
+  }
+
+  static paidElsewhere(account: Pick<Account, 'payouts'>, address: string): boolean {
+    return account.payouts.some(
+      (payout) => payout.isInFlight() && payout.address !== undefined && payout.address !== address,
+    );
   }
 
   static floorOf(value: bigint): bigint {

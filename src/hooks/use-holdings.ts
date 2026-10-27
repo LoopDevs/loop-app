@@ -13,6 +13,8 @@ const pricedCurrencies = new Set<string>([
   ...offeredCurrencies,
 ]);
 
+const paidElsewhereProblem = 'Some of your cashback is going somewhere other than this balance. Contact support.';
+
 export type HoldingsView = {
   holdings: Holdings;
   account: Account | null;
@@ -48,17 +50,25 @@ export function useHoldings(wallet: SmartWallet | null) {
     }
     const failure = [account, profile].find((result) => result instanceof Error);
     const loadedAccount = account instanceof Error ? null : account;
+    const loadedProfile = profile instanceof Error ? null : profile;
+    const paidElsewhere = loadedAccount !== null && Holdings.paidElsewhere(loadedAccount, wallet.address);
     setLoaded({
       address: wallet.address,
       view: {
         holdings: new Holdings(
           balances,
-          loadedAccount ? Holdings.onTheWayFrom(loadedAccount, wallet.address) : null,
+          loadedAccount && loadedProfile
+            ? Holdings.onTheWayFrom(loadedAccount, wallet.address, loadedProfile)
+            : null,
           rates,
         ),
         account: loadedAccount,
-        stable: profile instanceof Error ? null : shownCurrency(profile.stableCurrency),
-        problem: failure ? `Couldn't load your cashback: ${failure.message}` : '',
+        stable: loadedProfile ? shownCurrency(loadedProfile.stableCurrency) : null,
+        problem: failure
+          ? `Couldn't load your cashback: ${failure.message}`
+          : paidElsewhere
+            ? paidElsewhereProblem
+            : '',
       },
     });
   }, [wallet]);

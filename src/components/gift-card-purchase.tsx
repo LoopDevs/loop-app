@@ -5,10 +5,12 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/form';
 import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
+import { loopLinks } from '@/constants/loop-links';
 import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
@@ -25,7 +27,7 @@ import {
   pollIntervalMs,
   settledStatuses,
 } from '@/ctx/gift-card-status';
-import type { Merchant } from '@/ctx/merchant';
+import { CashbackRate, type Merchant } from '@/ctx/merchant';
 import { OneTapBuy, type BuyResult, type BuySteps, type SentRecord, type ShownOrder } from '@/ctx/one-tap-buy';
 import { paymentLock } from '@/ctx/payment-lock';
 import { PaymentSender, type SendOutcome } from '@/ctx/payment-sender';
@@ -113,6 +115,12 @@ const pendingTopUps = new PendingWithdrawals(AsyncStorage);
 const inFlightPayments = new InFlightPayments();
 const oneTapBuy = new OneTapBuy();
 const noRates = new Rates(new Map());
+const purchaseTermsKey = 'loop.purchaseTermsAccepted';
+const purchaseTerms = [
+  "Once your gift card is delivered, you can't cancel or return it, except where the law gives you that right. If a card is faulty or never arrives, contact support and we will put it right.",
+  'Cashback is added to your balance once your gift card is delivered.',
+  "Each gift card is subject to the brand's own terms, including where it can be used and any expiry date.",
+];
 
 export function GiftCardPurchase({ merchant, wallet }: Props) {
   const router = useRouter();
@@ -127,8 +135,16 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const [confirmPrice, setConfirmPrice] = useState<bigint | null>(null);
   const [spent, setSpent] = useState(0n);
   const [cardRates, setCardRates] = useState<Rates | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showingTerms, setShowingTerms] = useState(false);
   const { view, refresh } = useHoldings(wallet);
   const toast = useToast();
+
+  useEffect(() => {
+    AsyncStorage.getItem(purchaseTermsKey)
+      .then((accepted) => setTermsAccepted(accepted === 'yes'))
+      .catch(() => setTermsAccepted(false));
+  }, []);
 
   const currencies = offeredTokens.map((token) => token.currency);
   const stable = view?.stable ?? Rates.usd;
@@ -357,6 +373,13 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         return { state: recorded, resumed: true };
       }
       if (topUpPrice !== null) {
+        const current = await ctx.giftCard(giftCard.id);
+        if (current.status === 'expired') {
+          return { state: { kind: 'priceExpired' }, resumed: false };
+        }
+        if (OneTapBuy.paymentStarted(current, false)) {
+          return { state: { kind: 'confirming', txId: current.paymentCryptoTxId }, resumed: true };
+        }
         const stopped = await topUpFromSavings(giftCard, topUpPrice);
         if (stopped) {
           return { state: stopped, resumed: false };
@@ -483,6 +506,21 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     void settle(currency, () => oneTapBuy.start(buySteps(fiatAmount, currency), quote));
   };
 
+  const startBuy = () => {
+    if (termsAccepted) {
+      buy();
+      return;
+    }
+    setShowingTerms(true);
+  };
+
+  const agreeAndBuy = () => {
+    setTermsAccepted(true);
+    setShowingTerms(false);
+    AsyncStorage.setItem(purchaseTermsKey, 'yes').catch(() => setTermsAccepted(false));
+    buy();
+  };
+
   const payConfirmedPrice = () => {
     if (!order || confirmPrice === null || !currency || !canPay(order, payment)) {
       return;
@@ -606,14 +644,50 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         {balanceText && <SummaryRow label="Your balance" value={balanceText} />}
       </View>
       {short && <InlineError text={notEnoughMessage} />}
-      <Button
-        label={cardLabel ? `Buy ${cardLabel} gift card` : 'Buy gift card'}
-        variant="primary"
-        onPress={buy}
-        disabled={!canBuy}
-      />
+      {showingTerms ? (
+        <PurchaseTerms onAgree={agreeAndBuy} onCancel={() => setShowingTerms(false)} disabled={!canBuy} />
+      ) : (
+        <Button
+          label={cardLabel ? `Buy ${cardLabel} gift card` : 'Buy gift card'}
+          variant="primary"
+          onPress={startBuy}
+          disabled={!canBuy}
+        />
+      )}
       {message !== '' && <Notice message={message} actionLabel="Try again" onAction={buy} disabled={!canBuy} />}
     </PurchaseCard>
+  );
+}
+
+function PurchaseTerms({
+  onAgree,
+  onCancel,
+  disabled,
+}: {
+  onAgree: () => void;
+  onCancel: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <View style={styles.step} accessibilityLiveRegion="polite">
+      <ThemedText type="heading" accessibilityRole="header">
+        Before your first gift card
+      </ThemedText>
+      {purchaseTerms.map((term) => (
+        <ThemedText key={term} type="small" themeColor="textSecondary">
+          {term}
+        </ThemedText>
+      ))}
+      <ThemedText type="small" themeColor="textSecondary">
+        Read the full{' '}
+        <ExternalLink href={loopLinks.terms} style={styles.termsLink}>
+          Terms
+        </ExternalLink>
+        .
+      </ThemedText>
+      <Button label="Agree and buy" variant="primary" onPress={onAgree} disabled={disabled} />
+      <Button label="Not now" variant="quiet" onPress={onCancel} />
+    </View>
   );
 }
 
@@ -743,6 +817,13 @@ type OrderViewProps = {
   onDone: () => void;
 };
 
+function orderCashback(order: GiftCard): string | null {
+  if (order.cashbackAmount && order.cashbackCurrency) {
+    return money.ctx(order.cashbackAmount, order.cashbackCurrency);
+  }
+  return CashbackRate.quotedFor(order);
+}
+
 function OrderView({
   merchant,
   cardAmount,
@@ -756,6 +837,7 @@ function OrderView({
   onDone,
 }: OrderViewProps) {
   const theme = useTheme();
+  const cashback = order ? orderCashback(order) : null;
   const sentUnconfirmed = payment.kind === 'confirming';
   const outcome = order ? outcomeText(order, sentUnconfirmed) : null;
   const ready = order?.status === 'fulfilled';
@@ -776,9 +858,10 @@ function OrderView({
         )}
       </View>
 
-      {balance && (
+      {(balance || cashback) && (
         <View style={[styles.summary, { borderColor: theme.border }]}>
-          <SummaryRow label="Your balance" value={balance} />
+          {cashback && <SummaryRow label="Cashback" value={cashback} emphasis />}
+          {balance && <SummaryRow label="Your balance" value={balance} />}
         </View>
       )}
 
@@ -908,6 +991,9 @@ const styles = StyleSheet.create({
   },
   step: {
     gap: Spacing.two,
+  },
+  termsLink: {
+    textDecorationLine: 'underline',
   },
   grid: {
     flexDirection: 'row',
