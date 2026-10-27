@@ -37,6 +37,11 @@ test('a card without a cashback amount has no cashback', () => {
   assert.equal(cashbackState(card({ cashbackCredited: true })), 'none');
 });
 
+test('a zero cashback amount has no cashback', () => {
+  assert.equal(cashbackState(card({ cashbackAmount: '0' })), 'none');
+  assert.equal(cashbackState(card({ cashbackAmount: '0.00', cashbackCredited: true })), 'none');
+});
+
 test('reversed wins over credited', () => {
   assert.equal(cashbackState(card({ cashbackAmount: '1', cashbackCredited: true, cashbackReversed: true })), 'reversed');
 });

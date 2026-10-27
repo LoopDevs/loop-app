@@ -95,7 +95,7 @@ export default function ShopScreen() {
   const cardColumns = columns > 4 ? 4 : columns > 2 ? columns - 1 : columns;
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
-  const listedCountry = useRef<string | undefined>(undefined);
+  const listedSearch = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
   const { scrollRef, onScroll, scrim } = useScrimScroll<FlatList<Merchant>>();
 
@@ -147,10 +147,6 @@ export default function ShopScreen() {
         if (!country) {
           return;
         }
-        if (listedCountry.current !== country) {
-          listedCountry.current = country;
-          setMerchants([]);
-        }
         const request = ++latestRequest.current;
         retryPage.current = next;
         const merchantQuery = {
@@ -160,6 +156,11 @@ export default function ShopScreen() {
           page: next,
           perPage: merchantsPerPage,
         };
+        const search = JSON.stringify([country, merchantQuery.name, merchantQuery.category ?? null]);
+        if (listedSearch.current !== search) {
+          listedSearch.current = search;
+          setMerchants([]);
+        }
         const cached = next === 1 ? cachedMerchantPage(merchantQuery) : null;
         if (cached) {
           setMerchants(cached.result);
@@ -168,10 +169,16 @@ export default function ShopScreen() {
         } else if (next === 1) {
           setPage(0);
         }
-        const { result, pagination } = await loadMerchantPage(merchantQuery);
-        if (request !== latestRequest.current) {
+        const loaded = await loadMerchantPage(merchantQuery).catch((error: unknown) => {
+          if (request === latestRequest.current) {
+            throw error;
+          }
+          return null;
+        });
+        if (!loaded || request !== latestRequest.current) {
           return;
         }
+        const { result, pagination } = loaded;
         setMerchants((shown) => MerchantPaging.merge(shown, result, next));
         setPage(next);
         setPages(pagination.pages);

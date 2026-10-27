@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PressScale } from '@/components/press-scale';
@@ -63,7 +64,8 @@ type CoverProps = {
 export function MerchantCover({ merchant, size }: CoverProps) {
   const theme = useTheme();
   const badgeSize = badgeSizes[size];
-  const tint = `hsl(${merchant.tileHue()}, 45%, 92%)`;
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const tint =`hsl(${merchant.tileHue()}, 45%, 92%)`;
   return (
     <View>
       <View
@@ -94,13 +96,14 @@ export function MerchantCover({ merchant, size }: CoverProps) {
             borderWidth: size === 'hero' ? 4 : 3,
           },
         ]}>
-        {merchant.logoUrl ? (
+        {merchant.logoUrl && merchant.logoUrl !== failedLogoUrl ? (
           <Image
             source={{ uri: merchant.logoUrl }}
             contentFit="cover"
             transition={Motion.state}
             style={styles.badgeImage}
             accessible={false}
+            onError={() => setFailedLogoUrl(merchant.logoUrl ?? null)}
           />
         ) : (
           <View style={[styles.badgeInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>

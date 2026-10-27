@@ -106,6 +106,8 @@ export class Merchant {
     return text
       .normalize('NFD')
       .replace(/[̀-ͯ]/g, '')
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .replace(/\s+/g, ' ')
       .toLowerCase()
       .trim();
   }

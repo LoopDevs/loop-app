@@ -70,7 +70,7 @@ export function outcomeText(card: GiftCard, sentUnconfirmed = false): string | n
 }
 
 export function cashbackState(card: GiftCard): CashbackState {
-  if (!card.cashbackAmount) {
+  if (!card.cashbackAmount || !(Number(card.cashbackAmount) > 0)) {
     return 'none';
   }
   if (card.cashbackReversed) {

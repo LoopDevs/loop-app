@@ -156,6 +156,15 @@ test('search matches rank name starts, then word starts, then anywhere', () => {
   assert.deepEqual(Merchant.matching(merchants, '  ', 10), []);
 });
 
+test('search ignores apostrophes and punctuation on either side', () => {
+  const named = (id: string, name: string) => new Merchant({ ...json, id, name });
+  const merchants = [named('a', "Macy's"), named('b', 'H&M'), named('c', 'Toys"R"Us')];
+  assert.deepEqual(Merchant.matching(merchants, 'macys', 10).map((merchant) => merchant.id), ['a']);
+  assert.deepEqual(Merchant.matching(merchants, 'macy’s', 10).map((merchant) => merchant.id), ['a']);
+  assert.deepEqual(Merchant.matching(merchants, 'h&m', 10).map((merchant) => merchant.id), ['b']);
+  assert.deepEqual(Merchant.matching(merchants, 'toysrus', 10).map((merchant) => merchant.id), ['c']);
+});
+
 test('quick amounts fall inside the range', () => {
   assert.deepEqual(new Merchant(json).quickAmounts(), ['10', '25', '50', '100']);
   assert.deepEqual(new Merchant({ ...json, denominationValues: ['30', '150'] }).quickAmounts(), ['50', '100']);
