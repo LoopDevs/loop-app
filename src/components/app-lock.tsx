@@ -14,7 +14,7 @@ import { haptics } from '@/native/haptics';
 import { AppLock, type AuthenticationResult } from '@/session/app-lock';
 import { appLockStore } from '@/session/app-lock-store';
 
-const notConfirmedMessage = "Couldn't confirm it's you. Try again.";
+const notConfirmedMessage = AppLock.notConfirmedMessage;
 const lockLabel = 'Lock Loop with Face ID, fingerprint or passcode';
 
 function useAnnouncement(message: string) {

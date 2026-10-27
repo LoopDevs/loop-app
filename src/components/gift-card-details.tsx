@@ -12,6 +12,7 @@ import { useToast } from '@/components/toast';
 import { Collapsible } from '@/components/ui/collapsible';
 import { Elevation, FontFamily, Fonts, Radius, Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
+import { useBusyAction } from '@/hooks/use-busy-action';
 import { useTheme } from '@/hooks/use-theme';
 import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
@@ -20,7 +21,6 @@ import { AppLock } from '@/session/app-lock';
 
 const clipboardLifetimeMs = 60_000;
 const maskedSecret = '•'.repeat(12);
-const notConfirmedMessage = "Couldn't confirm it's you. Try again.";
 const copiedResetMs = 2000;
 
 export function statusTone(status: GiftCard['status']): 'success' | 'danger' | 'accent' | 'textSecondary' {
@@ -39,6 +39,7 @@ export function statusTone(status: GiftCard['status']): 'success' | 'danger' | '
 
 function useSecretReveal() {
   const toast = useToast();
+  const { busy, run } = useBusyAction();
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
@@ -54,21 +55,25 @@ function useSecretReveal() {
     if (revealed) {
       return true;
     }
-    const result = await biometrics.confirmUser('Show gift card details');
-    if (AppLock.unlocksWith(result)) {
-      setRevealed(true);
-      return true;
-    }
-    if (!AppLock.isCancel(result)) {
-      haptics.error();
-      toast(notConfirmedMessage);
-    }
-    return false;
-  }, [revealed, toast]);
+    let confirmed = false;
+    await run(async () => {
+      const result = await biometrics.confirmUser('Show gift card details');
+      if (AppLock.unlocksWith(result)) {
+        setRevealed(true);
+        confirmed = true;
+        return;
+      }
+      if (!AppLock.isCancel(result)) {
+        haptics.error();
+        toast(AppLock.notConfirmedMessage);
+      }
+    });
+    return confirmed;
+  }, [revealed, run, toast]);
 
   const hide = useCallback(() => setRevealed(false), []);
 
-  return { revealed, reveal, hide };
+  return { revealed, reveal, hide, confirming: busy };
 }
 
 export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
@@ -80,6 +85,12 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
   const hasCode = Boolean(
     giftCard.barcodeUrl || giftCard.number || giftCard.pin || giftCard.redeemUrlChallenge,
   );
+  const openRedeemPage = async (url: string) => {
+    if (process.env.EXPO_OS !== 'web' && !(await secrets.reveal())) {
+      return;
+    }
+    openExternal(url);
+  };
   const awaitingCode = giftCard.status === 'fulfilled' && !hasCode && !redeemUrl;
   return (
     <View style={styles.section}>
@@ -116,12 +127,18 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
           )}
           <Button
             label={secrets.revealed ? 'Hide details' : 'Show details'}
+            disabled={secrets.confirming}
             onPress={secrets.revealed ? secrets.hide : () => void secrets.reveal()}
           />
         </View>
       )}
       {redeemUrl && (
-        <Button label="Open redeem page" variant="primary" onPress={() => openExternal(redeemUrl)} />
+        <Button
+          label="Open redeem page"
+          variant="primary"
+          disabled={secrets.confirming}
+          onPress={() => void openRedeemPage(redeemUrl)}
+        />
       )}
       {giftCard.info?.instructions && (
         <Collapsible title="How to use">

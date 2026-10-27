@@ -13,7 +13,7 @@ export function useAppSwitcherProtection(): void {
       ScreenCapture.enableAppSwitcherProtectionAsync().catch(() => {});
       return;
     }
-    if (Platform.OS === 'android') {
+    if (Platform.OS === 'android' && !__DEV__) {
       ScreenCapture.preventScreenCaptureAsync(key).catch(() => {});
       return () => {
         ScreenCapture.allowScreenCaptureAsync(key).catch(() => {});
