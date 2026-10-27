@@ -24,10 +24,7 @@ const withdrawal = { hash: 'abc', expiryLedger: 500 };
 test('a pending withdrawal survives a restart', async () => {
   const storage = memoryStorage();
   await new PendingWithdrawals(storage).set('GW', withdrawal);
-  const restarted = new PendingWithdrawals(storage);
-  assert.equal(restarted.has('GW'), false);
-  assert.deepEqual(await restarted.get('GW'), withdrawal);
-  assert.equal(restarted.has('GW'), true);
+  assert.deepEqual(await new PendingWithdrawals(storage).get('GW'), withdrawal);
 });
 
 test('a deleted withdrawal is gone after a restart', async () => {
@@ -35,7 +32,7 @@ test('a deleted withdrawal is gone after a restart', async () => {
   const pending = new PendingWithdrawals(storage);
   await pending.set('GW', withdrawal);
   await pending.delete('GW');
-  assert.equal(pending.has('GW'), false);
+  assert.equal(await pending.get('GW'), undefined);
   assert.equal(await new PendingWithdrawals(storage).get('GW'), undefined);
 });
 

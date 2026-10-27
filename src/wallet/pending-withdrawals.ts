@@ -20,10 +20,6 @@ export class PendingWithdrawals {
     return `${PendingWithdrawals.keyPrefix}${address}`;
   }
 
-  has(address: string): boolean {
-    return this.known.has(address);
-  }
-
   async get(address: string): Promise<PendingWithdrawal | undefined> {
     const known = this.known.get(address);
     if (known) {

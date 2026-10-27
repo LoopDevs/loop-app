@@ -1,4 +1,5 @@
 import type { SponsoredResult } from '../ctx/client.ts';
+import { CtxError } from '../ctx/ctx-error.ts';
 import { chainOutcome } from '../ctx/payment-state.ts';
 import type { PriceWindow } from '../ctx/price-window.ts';
 import { money } from '../money.ts';
@@ -66,6 +67,13 @@ export class SavingsTopUp {
       return 'failed';
     }
     return chainOutcome(transaction.status);
+  }
+
+  static refusedWithdrawal(error: unknown): SentWithdrawal {
+    if (error instanceof CtxError && error.status === 400) {
+      return { hash: '', status: 'failed', error: error.message, expiryLedger: 0 };
+    }
+    throw error;
   }
 
   static notEnough(symbol: string): string {
@@ -155,7 +163,7 @@ export class SavingsTopUp {
       if (shares === null) {
         return { kind: 'notEnough' };
       }
-      const result = await this.chain.withdraw(shares);
+      const result = await this.chain.withdraw(shares).catch(SavingsTopUp.refusedWithdrawal);
       if (result.hash && !result.error && result.status !== 'failed') {
         return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
       }

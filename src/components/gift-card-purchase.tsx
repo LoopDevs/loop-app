@@ -345,7 +345,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const payOrder = async (giftCard: GiftCard, holdings: Holdings | null): Promise<SendOutcome> => {
     const coverage = orderCoverage(giftCard, holdings);
-    const toppingUp = coverage?.kind === 'savings' || hasPendingTopUp(giftCard, wallet);
+    const toppingUp = coverage?.kind === 'savings' || (await hasPendingTopUp(giftCard, wallet));
     if (coverage?.kind === 'short' && !toppingUp) {
       return { state: { kind: 'notSent', detail: notEnoughMessage }, resumed: false };
     }
@@ -721,8 +721,11 @@ function orderCoverage(order: GiftCard, holdings: Holdings | null): Coverage | n
   return holdings.coverage(order.paymentCryptoCurrency, price);
 }
 
-function hasPendingTopUp(order: GiftCard, wallet: SmartWallet): boolean {
-  return order.paymentCryptoCurrency === SavingsTopUp.currency && pendingTopUps.has(wallet.address);
+async function hasPendingTopUp(order: GiftCard, wallet: SmartWallet): Promise<boolean> {
+  if (order.paymentCryptoCurrency !== SavingsTopUp.currency) {
+    return false;
+  }
+  return (await pendingTopUps.get(wallet.address)) !== undefined;
 }
 
 type OrderViewProps = {
