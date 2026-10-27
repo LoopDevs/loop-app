@@ -1,4 +1,4 @@
-import { SocialSignInConfig, type SocialProvider } from '@/session/social-sign-in';
+import { SocialSignInConfig, type SocialCredential, type SocialProvider } from '@/session/social-sign-in';
 
 const config = new SocialSignInConfig({});
 
@@ -11,7 +11,7 @@ export const socialSignIn = {
     return config.appleAccountHint('web');
   },
 
-  async idToken(_provider: SocialProvider): Promise<string | null> {
+  async credential(_provider: SocialProvider): Promise<SocialCredential | null> {
     return null;
   },
 };
