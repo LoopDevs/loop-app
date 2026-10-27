@@ -37,7 +37,7 @@ export class SocialSignInConfig {
         if (!this.appleSignIn) {
           return [];
         }
-        return this.googleWebClientId && this.googleIosClientId ? ['apple', 'google'] : ['apple'];
+        return this.googleWebClientId && this.googleIosUrlScheme() ? ['apple', 'google'] : ['apple'];
       case 'android':
         return this.googleWebClientId ? ['google'] : [];
       default:
