@@ -24,8 +24,8 @@ export const deviceSigner = {
         console.warn('Creating a device key failed', error);
         throw new Error(unsupportedBrowserMessage);
       })) as CryptoKeyPair;
-    await write(userId, keyPair);
-    return exportPublicKey(keyPair);
+    const stored = await writeIfAbsent(userId, keyPair);
+    return exportPublicKey(stored);
   },
 
   async sign(userId: string, digest: Uint8Array): Promise<string> {
@@ -46,24 +46,53 @@ async function exportPublicKey(keyPair: CryptoKeyPair): Promise<string> {
   return base64.encode(new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey)));
 }
 
+let database: Promise<IDBDatabase> | null = null;
+
 function open(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  database ??= new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(databaseName, 1);
     request.onupgradeneeded = () => request.result.createObjectStore(storeName);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const opened = request.result;
+      opened.onversionchange = () => {
+        opened.close();
+        database = null;
+      };
+      opened.onclose = () => {
+        database = null;
+      };
+      resolve(opened);
+    };
     request.onerror = () => reject(request.error);
+  }).catch((error: unknown) => {
+    database = null;
+    throw error;
   });
+  return database;
+}
+
+async function begin(mode: IDBTransactionMode): Promise<IDBTransaction> {
+  try {
+    return (await open()).transaction(storeName, mode);
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === 'InvalidStateError')) {
+      throw error;
+    }
+    database = null;
+    return (await open()).transaction(storeName, mode);
+  }
 }
 
 async function transact<T>(
   mode: IDBTransactionMode,
   action: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
-  const database = await open();
+  const transaction = await begin(mode);
+  const request = action(transaction.objectStore(storeName));
   return new Promise((resolve, reject) => {
-    const request = action(database.transaction(storeName, mode).objectStore(storeName));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => resolve(request.result);
+    transaction.onerror = () => reject(transaction.error ?? request.error);
+    transaction.onabort = () => reject(transaction.error ?? request.error);
   });
 }
 
@@ -88,7 +117,16 @@ function keepStorage(): void {
   });
 }
 
-async function write(userId: string, keyPair: CryptoKeyPair): Promise<void> {
+async function writeIfAbsent(userId: string, keyPair: CryptoKeyPair): Promise<CryptoKeyPair> {
   const keyName = DeviceKey.storageName(userId);
-  await transact('readwrite', (store) => store.put(keyPair, keyName));
+  try {
+    await transact('readwrite', (store) => store.add(keyPair, keyName));
+    return keyPair;
+  } catch (error) {
+    const existing = error instanceof DOMException && error.name === 'ConstraintError' ? await readOwn(userId) : null;
+    if (!existing) {
+      throw error;
+    }
+    return existing;
+  }
 }
