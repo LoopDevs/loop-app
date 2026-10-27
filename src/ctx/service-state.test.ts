@@ -6,6 +6,7 @@ import {
   hasRecovered,
   recoveryProbe,
   serviceState,
+  serviceStateMessages,
   type RecoveryChecks,
 } from './service-state.ts';
 
@@ -16,9 +17,26 @@ test('each CTX switch error maps to its service state', () => {
 });
 
 test('other errors are not service states', () => {
-  assert.equal(serviceState('ErrAmountBelowMinimum'), null);
-  assert.equal(serviceState('ErrPaymentAlreadySubmitted'), null);
-  assert.equal(serviceState(undefined), null);
+  for (const name of [
+    'ErrAmountBelowMinimum',
+    'ErrPaymentAlreadySubmitted',
+    'errmaintenancemode',
+    'ErrMaintenanceMode ',
+    'toString',
+    '',
+    undefined,
+  ]) {
+    assert.equal(serviceState(name), null, String(name));
+    assert.equal(blockingServiceState(name), null, String(name));
+  }
+});
+
+test('each service state has its own message', () => {
+  assert.deepEqual(serviceStateMessages, {
+    maintenance: 'Loop is down for maintenance',
+    'purchases-paused': 'Gift card purchases are paused, try again later',
+    'app-disabled': 'Loop is unavailable right now',
+  });
 });
 
 test('only maintenance and app-disabled block the app', () => {
@@ -131,4 +149,40 @@ test('signed in, other profile errors surface while the session holds', async ()
   const checks = new FakeChecks(true);
   checks.profileError = new Error('CTX 500');
   await assert.rejects(hasRecovered('app-disabled', checks), /CTX 500/);
+});
+
+test('signed in, a readable profile recovers without touching the status or catalog checks', async () => {
+  const checks = new FakeChecks(true);
+  assert.equal(await hasRecovered('app-disabled', checks), true);
+  assert.deepEqual([checks.statusCalls, checks.profileCalls, checks.catalogCalls], [0, 1, 0]);
+});
+
+test('signed in, a blocking profile error stays blocked even when the session is gone', async () => {
+  const checks = new FakeChecks(true);
+  checks.profileError = blockingError;
+  checks.sessionAfterProfile = false;
+  assert.equal(await hasRecovered('app-disabled', checks), false);
+  assert.deepEqual([checks.statusCalls, checks.profileCalls, checks.catalogCalls], [0, 1, 0]);
+});
+
+test('maintenance recovers through the status check whether or not a session exists', async () => {
+  for (const session of [true, false]) {
+    const checks = new FakeChecks(session);
+    assert.equal(await hasRecovered('maintenance', checks), true);
+    assert.deepEqual([checks.statusCalls, checks.profileCalls, checks.catalogCalls], [1, 0, 0]);
+  }
+});
+
+test('a failing status check surfaces as an error instead of reading as recovered', async () => {
+  const checks = new FakeChecks(true);
+  checks.maintenance = async () => {
+    throw new Error('offline');
+  };
+  await assert.rejects(hasRecovered('maintenance', checks), /offline/);
+});
+
+test('a catalog read that succeeds recovers a signed-out app-disabled state exactly once', async () => {
+  const checks = new FakeChecks(false);
+  assert.equal(await hasRecovered('app-disabled', checks), true);
+  assert.deepEqual([checks.statusCalls, checks.profileCalls, checks.catalogCalls], [0, 0, 1]);
 });
