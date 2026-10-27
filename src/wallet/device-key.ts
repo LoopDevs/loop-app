@@ -70,6 +70,11 @@ export class DeviceKey {
     return publicKey;
   }
 
+  async remove(): Promise<void> {
+    await this.storage.remove(this.secretName);
+    await this.storage.remove(this.publicKeyName);
+  }
+
   async sign(digest: Uint8Array): Promise<string> {
     const ownPublicKey = await this.storage.read(this.publicKeyName, false);
     const secretName = ownPublicKey ? this.secretName : DeviceKey.sharedSecretName;

@@ -184,3 +184,13 @@ test('a profile is not for a different email', () => {
 test('a profile without an email is for no email', () => {
   assert.equal(Profile.fromMe(newUser).isFor(''), false);
 });
+
+test('the deletion request carries the account id and email to support', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', email: 'ash@example.com' }, company });
+  const mail = new URL(profile.deletionRequestMail());
+  assert.equal(mail.pathname, 'hello@loopfinance.io');
+  assert.equal(mail.searchParams.get('subject'), 'Delete my account');
+  const body = mail.searchParams.get('body') ?? '';
+  assert.match(body, /^Account id: u1$/m);
+  assert.match(body, /^Account email: ash@example\.com$/m);
+});

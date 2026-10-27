@@ -13,6 +13,9 @@ function memoryStorage(): WalletPinStorage & { values: Map<string, string> } {
     async setItem(key, value) {
       values.set(key, value);
     },
+    async removeItem(key) {
+      values.delete(key);
+    },
   };
 }
 
@@ -48,6 +51,15 @@ test('a pin is kept per user and survives a reload', async () => {
   await new WalletPin(storage, 'user-1').write(pinned);
   assert.deepEqual(await new WalletPin(storage, 'user-1').read(), pinned);
   assert.equal(await new WalletPin(storage, 'user-2').read(), null);
+});
+
+test('clearing a pin forgets it for that user only', async () => {
+  const storage = memoryStorage();
+  await new WalletPin(storage, 'user-1').write(pinned);
+  await new WalletPin(storage, 'user-2').write(pinned);
+  await new WalletPin(storage, 'user-1').clear();
+  assert.equal(await new WalletPin(storage, 'user-1').read(), null);
+  assert.deepEqual(await new WalletPin(storage, 'user-2').read(), pinned);
 });
 
 test('an unreadable pin reads as none', async () => {
