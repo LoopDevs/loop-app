@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import { LoopEnvironment } from './environment.ts';
@@ -31,6 +32,25 @@ describe('LoopEnvironment.resolve', () => {
     for (const value of ['', 'prod', 'Production', 'testnet', 'mainnet', ' staging']) {
       assert.throws(() => LoopEnvironment.resolve(value), /EXPO_PUBLIC_LOOP_ENV must be/);
     }
+  });
+});
+
+describe('LoopEnvironment release channels', () => {
+  type BuildProfile = { channel?: string; env?: Record<string, string> };
+  const easConfig: { build: Record<string, BuildProfile> } = JSON.parse(
+    readFileSync(new URL('../eas.json', import.meta.url), 'utf8'),
+  );
+
+  function environmentsForChannel(channel: string): string[] {
+    const names = Object.values(easConfig.build)
+      .filter((profile) => profile.channel === channel)
+      .map((profile) => LoopEnvironment.resolve(profile.env?.EXPO_PUBLIC_LOOP_ENV).name);
+    return [...new Set(names)];
+  }
+
+  it('pins one Loop environment per release channel in eas.json', () => {
+    assert.deepEqual(environmentsForChannel('preview'), ['staging']);
+    assert.deepEqual(environmentsForChannel('production'), ['production']);
   });
 });
 
