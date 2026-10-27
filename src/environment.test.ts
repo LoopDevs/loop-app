@@ -40,3 +40,10 @@ describe('LoopEnvironment naming', () => {
     assert.equal(LoopEnvironment.resolve('production').passkeyLabel('ash@example.com'), 'ash@example.com');
   });
 });
+
+describe('LoopEnvironment storage keys', () => {
+  it('keeps staging and production values apart on a shared install', () => {
+    assert.equal(LoopEnvironment.resolve('staging').storageKey('ctx.refreshToken'), 'ctx.refreshToken.staging');
+    assert.equal(LoopEnvironment.resolve('production').storageKey('ctx.refreshToken'), 'ctx.refreshToken.production');
+  });
+});

@@ -44,6 +44,10 @@ export class LoopEnvironment {
   passkeyLabel(label: string): string {
     return `${label}${definitions[this.name].passkeyLabelSuffix}`;
   }
+
+  storageKey(key: string): string {
+    return `${key}.${this.name}`;
+  }
 }
 
 export const loopEnvironment = LoopEnvironment.resolve(process.env.EXPO_PUBLIC_LOOP_ENV);
