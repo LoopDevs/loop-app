@@ -47,6 +47,15 @@ test('iOS needs the iOS client id for Google', () => {
   assert.deepEqual(noIosId.providers('ios'), ['apple']);
 });
 
+test('iOS hides Google when the iOS client id gives no URL scheme', () => {
+  const malformedIosId = new SocialSignInConfig({
+    appleSignIn: 'true',
+    googleWebClientId: '111-web.apps.googleusercontent.com',
+    googleIosClientId: '222-ios',
+  });
+  assert.deepEqual(malformedIosId.providers('ios'), ['apple']);
+});
+
 test('Android shows Google with the web client id and never Apple', () => {
   assert.deepEqual(allIds.providers('android'), ['google']);
   const appleOnly = new SocialSignInConfig({ appleSignIn: 'true' });
