@@ -1,15 +1,32 @@
 import { bytesToHex } from '@noble/hashes/utils';
 import {
   Address,
+  MuxedAccount,
+  StrKey,
   Transaction,
   TransactionBuilder,
   buildAuthorizationEntryPreimage,
   hash,
+  scValToNative,
   xdr,
 } from '@stellar/stellar-sdk';
 
 import type { BuiltTransaction } from '../ctx/client.ts';
-import { network } from '../stellar/network.ts';
+import type { SignedTransfer } from '../ctx/payment-state.ts';
+import { network, type Token } from '../stellar/network.ts';
+
+export type ExpectedPayment = {
+  from: string;
+  token: Token;
+  amount: bigint;
+  orderAddress?: string;
+};
+
+export type ExpectedWithdrawal = {
+  from: string;
+  vault: string;
+  shares: bigint;
+};
 
 export class SponsoredCall {
   readonly contract: string;
@@ -87,6 +104,53 @@ export class SponsoredCall {
       call.args,
       digest,
     );
+  }
+
+  requirePayment({ from, token, amount, orderAddress }: ExpectedPayment): SignedTransfer {
+    if (this.contract !== token.contract || this.method !== 'transfer' || this.args.length !== 3) {
+      throw new Error(`The transaction is not a ${token.symbol} transfer`);
+    }
+    const [payer, to, transferred] = this.nativeArgs() as [string, string, bigint];
+    if (payer !== from || SponsoredCall.accountOf(to) !== network.payee) {
+      throw new Error('The payment goes to an unexpected address');
+    }
+    if (orderAddress && StrKey.isValidMed25519PublicKey(orderAddress) && to !== orderAddress) {
+      throw new Error('The payment is for a different order');
+    }
+    if (transferred !== amount) {
+      throw new Error('The payment amount does not match the order');
+    }
+    const muxedId = SponsoredCall.muxedIdOf(to);
+    return muxedId === undefined ? { amount } : { amount, muxedId };
+  }
+
+  requireWithdrawal({ from, vault, shares }: ExpectedWithdrawal): bigint {
+    if (this.contract !== vault || this.method !== 'withdraw' || this.args.length !== 3) {
+      throw new Error('The transaction is not a withdrawal from the savings vault');
+    }
+    const [withdrawn, minimums, owner] = this.nativeArgs() as [bigint, bigint[], string];
+    if (withdrawn !== shares || owner !== from || minimums.length !== 1) {
+      throw new Error('The withdrawal does not match the request');
+    }
+    return minimums[0];
+  }
+
+  private nativeArgs(): unknown[] {
+    return this.args.map((arg) => scValToNative(arg));
+  }
+
+  private static accountOf(address: string): string {
+    if (StrKey.isValidMed25519PublicKey(address)) {
+      return MuxedAccount.fromAddress(address, '0').baseAccount().accountId();
+    }
+    return address;
+  }
+
+  private static muxedIdOf(address: string): bigint | undefined {
+    if (!StrKey.isValidMed25519PublicKey(address)) {
+      return undefined;
+    }
+    return BigInt(MuxedAccount.fromAddress(address, '0').id());
   }
 }
 
