@@ -14,7 +14,7 @@ export function isCriticalUpdate(manifest: unknown, runningExtra: unknown): bool
 
 export class ReloadGate {
   private running = 0;
-  private pending: (() => void) | null = null;
+  private pending: (() => void | Promise<void>) | null = null;
   private reloading = false;
 
   async hold<T>(task: () => Promise<T>): Promise<T> {
@@ -30,7 +30,7 @@ export class ReloadGate {
     }
   }
 
-  request(reload: () => void): void {
+  request(reload: () => void | Promise<void>): void {
     this.pending = reload;
     this.flush();
   }
@@ -42,6 +42,8 @@ export class ReloadGate {
     const reload = this.pending;
     this.pending = null;
     this.reloading = true;
-    reload();
+    new Promise<void>((resolve) => resolve(reload())).catch(() => {
+      this.reloading = false;
+    });
   }
 }

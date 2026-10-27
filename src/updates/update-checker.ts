@@ -31,12 +31,15 @@ export async function checkForUpdate(): Promise<void> {
     }
     const fetched = await Updates.fetchUpdateAsync();
     if (fetched.isNew && isCriticalUpdate(fetched.manifest, Constants.expoConfig?.extra)) {
-      gate.request(() => {
-        void Updates.reloadAsync();
-      });
+      gate.request(() =>
+        Updates.reloadAsync().catch((error: unknown) => {
+          errorReporting.reportMessage(`Critical update reload failed: ${error instanceof Error ? error.message : String(error)}`);
+          throw error;
+        }),
+      );
     }
   } catch (error) {
-    errorReporting.reportMessage(`Update check failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn('Update check failed', error);
   } finally {
     checking = false;
   }
