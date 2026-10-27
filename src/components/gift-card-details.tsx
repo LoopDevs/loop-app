@@ -1,10 +1,10 @@
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { externalUrl, useOpenExternal } from '@/components/external-link';
 import { Button } from '@/components/form';
 import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
@@ -36,6 +36,8 @@ export function statusTone(status: GiftCard['status']): 'success' | 'danger' | '
 export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
   useBlockScreenCapture();
   const theme = useTheme();
+  const openExternal = useOpenExternal();
+  const redeemUrl = giftCard.redeemUrl && externalUrl.isWeb(giftCard.redeemUrl) ? giftCard.redeemUrl : null;
   const hasCode = Boolean(
     giftCard.barcodeUrl || giftCard.number || giftCard.pin || giftCard.redeemUrlChallenge,
   );
@@ -66,12 +68,8 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
           )}
         </View>
       )}
-      {giftCard.redeemUrl && (
-        <Button
-          label="Open redeem page"
-          variant="primary"
-          onPress={() => WebBrowser.openBrowserAsync(giftCard.redeemUrl as string)}
-        />
+      {redeemUrl && (
+        <Button label="Open redeem page" variant="primary" onPress={() => openExternal(redeemUrl)} />
       )}
       {giftCard.info?.instructions && (
         <Collapsible title="How to use">

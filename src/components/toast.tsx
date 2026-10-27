@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { BottomTabInset,FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
@@ -39,7 +39,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <View pointerEvents="none" style={styles.host}>
+      <View
+        pointerEvents="none"
+        style={styles.host}
+        accessibilityLiveRegion={Platform.OS === 'web' ? 'polite' : 'none'}>
         {toast && (
           <Animated.View
             key={toast.id}

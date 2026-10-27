@@ -333,7 +333,7 @@ class CtxClient {
   }
 
   giftCard(id: string): Promise<GiftCard> {
-    return this.auth.sessionRequest('GET', `/gift-cards/${id}`);
+    return this.auth.sessionRequest('GET', `/gift-cards/${encodeURIComponent(id)}`);
   }
 
   async watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
