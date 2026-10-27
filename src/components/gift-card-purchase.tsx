@@ -351,21 +351,22 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       return { state: { kind: 'notSent', detail: notEnoughMessage }, resumed: false };
     }
     const topUpPrice = toppingUp ? orderPrice(giftCard) : null;
+    const send = async (): Promise<SendOutcome> => {
+      const recorded = await paymentSender.recorded(giftCard.paymentId);
+      if (recorded) {
+        return { state: recorded, resumed: true };
+      }
+      if (topUpPrice !== null) {
+        const stopped = await topUpFromSavings(giftCard, topUpPrice);
+        if (stopped) {
+          return { state: stopped, resumed: false };
+        }
+      }
+      setPayment({ kind: 'sending' });
+      return paymentSender.send(giftCard.paymentId, () => wallet.pay(giftCard, buyTimer.current));
+    };
     const task = inFlightPayments.start(giftCard.paymentId, () =>
-      holdCriticalReload(async (): Promise<SendOutcome> => {
-        const recorded = await paymentSender.recorded(giftCard.paymentId);
-        if (recorded) {
-          return { state: recorded, resumed: true };
-        }
-        if (topUpPrice !== null) {
-          const stopped = await topUpFromSavings(giftCard, topUpPrice);
-          if (stopped) {
-            return { state: stopped, resumed: false };
-          }
-        }
-        setPayment({ kind: 'sending' });
-        return paymentSender.send(giftCard.paymentId, () => wallet.pay(giftCard, buyTimer.current));
-      }),
+      holdCriticalReload(() => paymentLock.exclusive(`spend:${wallet.address}`, send)),
     );
     if (!task) {
       throw new Error('This payment is already on its way');
