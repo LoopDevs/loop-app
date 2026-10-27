@@ -246,6 +246,10 @@ class CtxClient {
     return { maintenance: maintenance === true };
   }
 
+  async readCatalogUncached(): Promise<void> {
+    await this.send('GET', '/merchants?enabled=1&perPage=1');
+  }
+
   hasSession(): Promise<boolean> {
     return this.auth.hasSession();
   }

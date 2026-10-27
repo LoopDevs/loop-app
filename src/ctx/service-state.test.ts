@@ -33,17 +33,19 @@ test('maintenance recovers through the public status check', () => {
   assert.equal(recoveryProbe('maintenance', false), 'GET /status');
 });
 
-test('app-disabled recovers through the profile read when signed in, the status check otherwise', () => {
+test('app-disabled recovers through the profile read when signed in, the catalog read otherwise', () => {
   assert.equal(recoveryProbe('app-disabled', true), 'GET /me');
-  assert.equal(recoveryProbe('app-disabled', false), 'GET /status');
+  assert.equal(recoveryProbe('app-disabled', false), 'GET /merchants');
 });
 
 class FakeChecks implements RecoveryChecks {
   session: boolean;
   maintenanceOn = false;
   profileError: unknown = null;
+  catalogError: unknown = null;
   statusCalls = 0;
   profileCalls = 0;
+  catalogCalls = 0;
   sessionAfterProfile: boolean | null = null;
 
   constructor(session: boolean) {
@@ -70,6 +72,14 @@ class FakeChecks implements RecoveryChecks {
     return {};
   }
 
+  async readCatalog(): Promise<unknown> {
+    this.catalogCalls += 1;
+    if (this.catalogError) {
+      throw this.catalogError;
+    }
+    return {};
+  }
+
   isBlocking(error: unknown): boolean {
     return error === blockingError;
   }
@@ -80,22 +90,28 @@ const blockingError = new Error('blocked');
 test('signed out, app-disabled checks the network before recovering', async () => {
   const checks = new FakeChecks(false);
   assert.equal(await hasRecovered('app-disabled', checks), true);
-  assert.equal(checks.statusCalls, 1);
+  assert.equal(checks.catalogCalls, 1);
+  assert.equal(checks.statusCalls, 0);
   assert.equal(checks.profileCalls, 0);
 });
 
-test('signed out, app-disabled stays blocked while the status check reports maintenance', async () => {
+test('signed out, app-disabled stays blocked while the catalog read is refused', async () => {
   const checks = new FakeChecks(false);
-  checks.maintenanceOn = true;
+  checks.catalogError = blockingError;
   assert.equal(await hasRecovered('app-disabled', checks), false);
 });
 
-test('a status check failure surfaces as an error', async () => {
+test('a catalog read failure surfaces as an error', async () => {
   const checks = new FakeChecks(false);
-  checks.maintenance = async () => {
-    throw new Error('offline');
-  };
+  checks.catalogError = new Error('offline');
   await assert.rejects(hasRecovered('app-disabled', checks), /offline/);
+});
+
+test('maintenance stays blocked while the status check reports it', async () => {
+  const checks = new FakeChecks(false);
+  checks.maintenanceOn = true;
+  assert.equal(await hasRecovered('maintenance', checks), false);
+  assert.equal(checks.catalogCalls, 0);
 });
 
 test('signed in, a blocking profile error stays blocked', async () => {
