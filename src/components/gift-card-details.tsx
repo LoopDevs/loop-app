@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { externalUrl, useOpenExternal } from '@/components/external-link';
-import { Button } from '@/components/form';
+import { Button, Notice } from '@/components/form';
 import { PressScale } from '@/components/press-scale';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -41,8 +41,15 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
   const hasCode = Boolean(
     giftCard.barcodeUrl || giftCard.number || giftCard.pin || giftCard.redeemUrlChallenge,
   );
+  const awaitingCode = giftCard.status === 'fulfilled' && !hasCode && !redeemUrl;
   return (
     <View style={styles.section}>
+      {awaitingCode && (
+        <Notice
+          tone="neutral"
+          message="Your card is bought, but its code hasn't come through yet. Check back in a few minutes, or get help below."
+        />
+      )}
       {hasCode && (
         <View
           style={[

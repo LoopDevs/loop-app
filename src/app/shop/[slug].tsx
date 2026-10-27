@@ -58,17 +58,13 @@ export default function MerchantScreen() {
           setMerchant(cachedMerchant(slug));
           setSignedIn(null);
         }
-        const isSignedIn = await ctx.isSignedIn();
-        const walletLoad = isSignedIn
-          ? SmartWallet.load().catch(SmartWallet.unlessUnlinked)
-          : Promise.resolve(null);
-        await Promise.all([
-          loadMerchant(slug).then(setMerchant),
-          walletLoad.then((loadedWallet) => {
-            setWallet(loadedWallet);
-            setSignedIn(isSignedIn);
-          }),
-        ]);
+        const merchantLoad = loadMerchant(slug).then(setMerchant);
+        const walletLoad = ctx.isSignedIn().then(async (isSignedIn) => {
+          const loadedWallet = isSignedIn ? await SmartWallet.load().catch(SmartWallet.unlessUnlinked) : null;
+          setWallet(loadedWallet);
+          setSignedIn(isSignedIn);
+        });
+        await Promise.all([merchantLoad, walletLoad]);
       }),
     [run, slug],
   );
@@ -105,7 +101,7 @@ export default function MerchantScreen() {
   const buyCard = wallet ? (
     <GiftCardPurchase merchant={merchant} wallet={wallet} />
   ) : signedIn === null ? (
-    <BuySkeleton />
+    retry ? null : <BuySkeleton />
   ) : signedIn ? (
     <View style={cardStyle}>
       <ThemedText type="heading">Finish setting up Loop</ThemedText>
