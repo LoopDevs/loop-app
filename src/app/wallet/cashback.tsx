@@ -138,7 +138,7 @@ export default function CashbackScreen() {
       </ListGroup>
       {destinations.includes('savings') && (
         <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-          {savingsNote}
+          {savingsNote} {Savings.riskNote}
         </ThemedText>
       )}
       {message !== '' && <Notice message={message} />}

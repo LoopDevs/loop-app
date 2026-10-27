@@ -740,7 +740,7 @@ const benefits: Point[] = [
   {
     icon: { ios: 'leaf.fill', android: 'savings', web: 'savings' },
     title: 'Savings that earn',
-    body: `Move your cashback to savings. ${Savings.rateHeadline}.`,
+    body: `Move your cashback to savings. ${Savings.rateHeadline}. ${Savings.riskShort}.`,
   },
   {
     icon: { ios: 'lock.shield', android: 'verified_user', web: 'verified_user' },

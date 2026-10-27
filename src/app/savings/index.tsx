@@ -196,6 +196,9 @@ function SavingsFacts() {
           </View>
         </View>
       ))}
+      <ThemedText type="small" themeColor="textSecondary">
+        {Savings.riskNote}
+      </ThemedText>
       <Button label="Read the FAQ" variant="quiet" onPress={() => router.navigate('/faq')} />
     </View>
   );

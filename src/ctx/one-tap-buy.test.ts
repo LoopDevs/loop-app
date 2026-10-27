@@ -259,6 +259,33 @@ test('a sent payment shows as confirming and is followed with its chain record',
   });
 });
 
+test('before a savings top-up, an expired order stops, a paid order is not paid again and an unpaid order goes ahead', () => {
+  const unpaid = { status: 'unpaid', paymentStatus: 'unpaid' } as const;
+  assert.deepEqual(OneTapBuy.beforeTopUp({ ...unpaid, status: 'expired' }), {
+    state: { kind: 'priceExpired' },
+    resumed: false,
+  });
+  assert.deepEqual(OneTapBuy.beforeTopUp({ ...unpaid, paymentCryptoTxId: 'tx-elsewhere' }), {
+    state: { kind: 'confirming', txId: 'tx-elsewhere' },
+    resumed: true,
+    paidElsewhere: true,
+  });
+  assert.equal(OneTapBuy.beforeTopUp({ status: 'paid', paymentStatus: 'paid' })?.paidElsewhere, true);
+  assert.equal(OneTapBuy.beforeTopUp(unpaid), null);
+});
+
+test('an order paid from elsewhere is followed with a notice and no celebration', () => {
+  const order = giftCard(1, { paymentCryptoTxId: 'tx-elsewhere' });
+  const outcome = OneTapBuy.beforeTopUp(order);
+  assert.ok(outcome);
+  assert.deepEqual(OneTapBuy.view({ kind: 'payment', order, outcome }, null), {
+    kind: 'show',
+    shown: { order, payment: outcome.state, follow: true, sent: { txId: 'tx-elsewhere', expiryLedger: undefined } },
+    celebrate: false,
+    notice: OneTapBuy.paidElsewhereMessage,
+  });
+});
+
 test('a payment that was not sent rolls back with its reason or the not-bought message', () => {
   const order = giftCard(1);
   const notSent = (detail: string) =>

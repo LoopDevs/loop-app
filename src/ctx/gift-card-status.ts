@@ -78,7 +78,9 @@ export function outcomeText(card: GiftCard, sentUnconfirmed = false): string | n
   return null;
 }
 
-export function cashbackState(card: GiftCard): CashbackState {
+export function cashbackState(
+  card: Pick<GiftCard, 'status' | 'cashbackAmount' | 'cashbackCredited' | 'cashbackReversed'>,
+): CashbackState {
   if (!card.cashbackAmount || !(Number(card.cashbackAmount) > 0)) {
     return 'none';
   }

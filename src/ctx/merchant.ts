@@ -1,17 +1,87 @@
 import { money } from '../money.ts';
 import { units } from '../stellar/units.ts';
 import { invalidAmountMessage, normalizeAmount } from './amount-input.ts';
-import type {
-  GiftCard,
-  GiftCardInfo,
-  MerchantJson,
-  MerchantLinkJson,
-  MerchantRedeemLocation,
-  MerchantRedeemType,
-} from './client.ts';
+import type { GiftCard, GiftCardInfo, MerchantJson, MerchantRedeemLocation, MerchantRedeemType } from './client.ts';
+import { cashbackState } from './gift-card-status.ts';
 
 const basisPointsPerWhole = 10_000n;
 const hueCount = 360;
+
+type QuotedOrder = Pick<GiftCard, 'status' | 'cardFiatAmount' | 'cardFiatCurrency' | 'userDiscountBasisPoints'>;
+
+type CashbackOrder = Pick<
+  GiftCard,
+  'cashbackAmount' | 'cashbackCurrency' | 'cashbackCredited' | 'cashbackReversed'
+>;
+
+function currencyDigits(currency: string): number {
+  try {
+    const formatter = new Intl.NumberFormat('en', { style: 'currency', currency });
+    return formatter.resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    return 2;
+  }
+}
+
+export class CashbackRate {
+  static readonly quotedStatuses: readonly GiftCard['status'][] = ['unpaid', 'paid'];
+
+  readonly basisPoints: number;
+
+  constructor(basisPoints: number) {
+    this.basisPoints = basisPoints;
+  }
+
+  static ofMerchant({ userDiscount, link }: Pick<MerchantJson, 'userDiscount' | 'link'>): CashbackRate {
+    const override = link?.userDiscountOverride ? link.userDiscountBasisPoints : undefined;
+    return new CashbackRate(override ?? userDiscount);
+  }
+
+  static quotedFor(order: QuotedOrder, locale?: string): string | null {
+    const basisPoints = order.userDiscountBasisPoints;
+    if (!CashbackRate.quotedStatuses.includes(order.status) || basisPoints === undefined || basisPoints <= 0) {
+      return null;
+    }
+    const rate = new CashbackRate(basisPoints);
+    const amount = rate.on(order.cardFiatAmount, order.cardFiatCurrency, locale);
+    return amount && `About ${amount} (${rate.figure(locale)})`;
+  }
+
+  static shownFor(order: QuotedOrder & CashbackOrder, locale?: string): string | null {
+    const state = cashbackState(order);
+    const quoted = CashbackRate.quotedStatuses.includes(order.status) && !order.cashbackReversed;
+    const counts = state === 'pending' || state === 'credited' || (quoted && Number(order.cashbackAmount) > 0);
+    if (counts && order.cashbackAmount && order.cashbackCurrency) {
+      return money.ctx(order.cashbackAmount, order.cashbackCurrency, locale);
+    }
+    return CashbackRate.quotedFor(order, locale);
+  }
+
+  figure(locale?: string): string {
+    const rate = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 });
+    return rate.format(this.basisPoints / Number(basisPointsPerWhole));
+  }
+
+  label(locale?: string): string {
+    return `${this.figure(locale)} cashback`;
+  }
+
+  on(amount: string, currency: string, locale?: string): string | null {
+    let parsed: bigint;
+    try {
+      parsed = units.parse(amount);
+    } catch {
+      return null;
+    }
+    if (parsed <= 0n) {
+      return null;
+    }
+    const subunit = 10n ** BigInt(units.decimals - currencyDigits(currency));
+    const divisor = basisPointsPerWhole * subunit;
+    const subunits = (parsed * BigInt(this.basisPoints) + divisor / 2n) / divisor;
+    return money.fiat(units.format(subunits * subunit, units.decimals), currency, locale);
+  }
+}
 
 export class Merchant {
   static readonly quickAmountChoices = ['10', '25', '50', '100', '200', '500'];
@@ -40,8 +110,7 @@ export class Merchant {
   readonly redeemLocation?: MerchantRedeemLocation;
   readonly redeemType?: MerchantRedeemType;
   readonly info?: GiftCardInfo;
-  readonly userDiscount: number;
-  readonly link?: MerchantLinkJson;
+  readonly cashback: CashbackRate;
 
   constructor(json: MerchantJson) {
     this.id = json.id;
@@ -58,8 +127,7 @@ export class Merchant {
     this.redeemLocation = json.redeemLocation || undefined;
     this.redeemType = json.redeemType || undefined;
     this.info = json.info;
-    this.userDiscount = json.userDiscount;
-    this.link = json.link;
+    this.cashback = CashbackRate.ofMerchant(json);
   }
 
   static searchPattern(name: string): string {
@@ -188,35 +256,19 @@ export class Merchant {
   }
 
   cashbackBasisPoints(): number {
-    if (this.link?.userDiscountOverride && this.link.userDiscountBasisPoints !== undefined) {
-      return this.link.userDiscountBasisPoints;
-    }
-    return this.userDiscount;
+    return this.cashback.basisPoints;
   }
 
   rateFigure(locale?: string): string {
-    const rate = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 });
-    return rate.format(this.cashbackBasisPoints() / Number(basisPointsPerWhole));
+    return this.cashback.figure(locale);
   }
 
   rateLabel(locale?: string): string {
-    return `${this.rateFigure(locale)} cashback`;
+    return this.cashback.label(locale);
   }
 
   cashbackEstimate(amount: string, locale?: string): string | null {
-    let parsed: bigint;
-    try {
-      parsed = units.parse(amount);
-    } catch {
-      return null;
-    }
-    if (parsed <= 0n) {
-      return null;
-    }
-    const subunit = 10n ** BigInt(units.decimals - this.currencyDigits());
-    const divisor = basisPointsPerWhole * subunit;
-    const subunits = (parsed * BigInt(this.cashbackBasisPoints()) + divisor / 2n) / divisor;
-    return money.fiat(units.format(subunits * subunit, units.decimals), this.currency, locale);
+    return this.cashback.on(amount, this.currency, locale);
   }
 
   amountRange(): { min: string; max: string } | null {
@@ -290,11 +342,6 @@ export class Merchant {
   }
 
   private currencyDigits(): number {
-    try {
-      const formatter = new Intl.NumberFormat('en', { style: 'currency', currency: this.currency });
-      return formatter.resolvedOptions().maximumFractionDigits ?? 2;
-    } catch {
-      return 2;
-    }
+    return currencyDigits(this.currency);
   }
 }

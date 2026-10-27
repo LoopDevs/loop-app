@@ -139,6 +139,7 @@ export type GiftCard = {
   barcodeUrl?: string;
   barcodeType?: string;
   info?: GiftCardInfo;
+  userDiscountBasisPoints?: number;
   cashbackAmount?: string;
   cashbackCurrency?: string;
   cashbackCredited?: boolean;

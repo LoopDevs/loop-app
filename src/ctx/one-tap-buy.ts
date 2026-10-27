@@ -33,7 +33,7 @@ export type ShownOrder = {
 export type BuyView =
   | { kind: 'rollBack'; message: string }
   | { kind: 'confirm'; order: GiftCard; price: bigint }
-  | { kind: 'show'; shown: ShownOrder; celebrate: boolean };
+  | { kind: 'show'; shown: ShownOrder; celebrate: boolean; notice?: string };
 
 const expired: SendOutcome = { state: { kind: 'priceExpired' }, resumed: false };
 
@@ -41,8 +41,19 @@ export class OneTapBuy {
   static readonly maxOrders = 2;
   static readonly notBoughtMessage = "Your card wasn't bought, and you weren't charged. Try again.";
   static readonly busyMessage = 'Another gift card purchase is still going. Try again in a moment.';
+  static readonly paidElsewhereMessage = 'This order was already paid, so nothing more was sent from this device.';
 
   private running = false;
+
+  static beforeTopUp(current: OrderPayment): SendOutcome | null {
+    if (current.status === 'expired') {
+      return expired;
+    }
+    if (OneTapBuy.paymentStarted(current, false)) {
+      return { state: { kind: 'confirming', txId: current.paymentCryptoTxId }, resumed: true, paidElsewhere: true };
+    }
+    return null;
+  }
 
   static paymentStarted(order: OrderPayment, sentHere: boolean): boolean {
     return (
@@ -95,6 +106,10 @@ export class OneTapBuy {
         if (state.kind !== 'confirming') {
           const detail = state.kind === 'notSent' ? state.detail : '';
           return { kind: 'rollBack', message: detail !== '' ? detail : OneTapBuy.notBoughtMessage };
+        }
+        if (result.outcome.paidElsewhere) {
+          const shown = OneTapBuy.shown(result.order, state, true);
+          return { kind: 'show', shown, celebrate: false, notice: OneTapBuy.paidElsewhereMessage };
         }
         return {
           kind: 'show',

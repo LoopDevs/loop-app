@@ -448,7 +448,7 @@ function SavingsNudge({ onPress }: { onPress: () => void }) {
     <PressScale
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Savings. ${Savings.rateHeadline}`}
+      accessibilityLabel={`Savings. ${Savings.rateHeadline}. ${Savings.riskShort}.`}
       style={[styles.nudge, { backgroundColor: theme.accentSoft }]}>
       <View style={[styles.nudgeIcon, { backgroundColor: theme.accent }]}>
         <SymbolView name={{ ios: 'leaf', android: 'savings', web: 'savings' }} size={20} tintColor={theme.onAccent} />
@@ -456,7 +456,7 @@ function SavingsNudge({ onPress }: { onPress: () => void }) {
       <View style={styles.nudgeText}>
         <ThemedText type="smallBold">{Savings.rateHeadline}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Let your cashback grow in savings.
+          Let your cashback grow in savings. {Savings.riskShort}.
         </ThemedText>
       </View>
       <SymbolView
