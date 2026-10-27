@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
@@ -50,7 +51,8 @@ import { soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
 import type { Coverage, Holdings } from '@/wallet/holdings';
-import { SavingsTopUp, type PendingWithdrawal, type TopUpOutcome } from '@/wallet/savings-top-up';
+import { PendingWithdrawals } from '@/wallet/pending-withdrawals';
+import { SavingsTopUp, type TopUpOutcome } from '@/wallet/savings-top-up';
 import type { SmartWallet } from '@/wallet/smart-wallet';
 
 type Props = {
@@ -107,7 +109,7 @@ function payRejection(error: unknown): PayRejection | undefined {
 }
 
 const paymentSender = new PaymentSender(sentPayments, payRejection, paymentLock);
-const pendingTopUps = new Map<string, PendingWithdrawal>();
+const pendingTopUps = new PendingWithdrawals(AsyncStorage);
 const inFlightPayments = new InFlightPayments();
 const oneTapBuy = new OneTapBuy();
 const noRates = new Rates(new Map());
@@ -321,14 +323,14 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     try {
       outcome = await wallet
         .savingsTopUp()
-        .run(price, PriceWindow.of(giftCard), pendingTopUps.get(wallet.address));
+        .run(price, PriceWindow.of(giftCard), await pendingTopUps.get(wallet.address));
     } finally {
       refresh().catch((error: unknown) => setMessage(errorMessage(error)));
     }
     if (outcome.kind === 'stillMoving') {
-      pendingTopUps.set(wallet.address, outcome.withdrawal);
+      await pendingTopUps.set(wallet.address, outcome.withdrawal);
     } else {
-      pendingTopUps.delete(wallet.address);
+      await pendingTopUps.delete(wallet.address);
     }
     switch (outcome.kind) {
       case 'covered':
@@ -343,7 +345,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const payOrder = async (giftCard: GiftCard, holdings: Holdings | null): Promise<SendOutcome> => {
     const coverage = orderCoverage(giftCard, holdings);
-    const toppingUp = coverage?.kind === 'savings' || hasPendingTopUp(giftCard, wallet);
+    const toppingUp = coverage?.kind === 'savings' || (await hasPendingTopUp(giftCard, wallet));
     if (coverage?.kind === 'short' && !toppingUp) {
       return { state: { kind: 'notSent', detail: notEnoughMessage }, resumed: false };
     }
@@ -719,8 +721,11 @@ function orderCoverage(order: GiftCard, holdings: Holdings | null): Coverage | n
   return holdings.coverage(order.paymentCryptoCurrency, price);
 }
 
-function hasPendingTopUp(order: GiftCard, wallet: SmartWallet): boolean {
-  return order.paymentCryptoCurrency === SavingsTopUp.currency && pendingTopUps.has(wallet.address);
+async function hasPendingTopUp(order: GiftCard, wallet: SmartWallet): Promise<boolean> {
+  if (order.paymentCryptoCurrency !== SavingsTopUp.currency) {
+    return false;
+  }
+  return (await pendingTopUps.get(wallet.address)) !== undefined;
 }
 
 type OrderViewProps = {

@@ -1,4 +1,5 @@
 import type { SponsoredResult } from '../ctx/client.ts';
+import { CtxError } from '../ctx/ctx-error.ts';
 import { chainOutcome } from '../ctx/payment-state.ts';
 import type { PriceWindow } from '../ctx/price-window.ts';
 import { money } from '../money.ts';
@@ -43,6 +44,7 @@ export class SavingsTopUp {
   static readonly requiredWindowMs = 90_000;
   static readonly confirmTimeoutMs = 30_000;
   static readonly confirmPollMs = 2_000;
+  static readonly withdrawAttempts = 2;
 
   readonly chain: TopUpChain;
 
@@ -65,6 +67,13 @@ export class SavingsTopUp {
       return 'failed';
     }
     return chainOutcome(transaction.status);
+  }
+
+  static refusedWithdrawal(error: unknown): SentWithdrawal {
+    if (error instanceof CtxError && error.status === 400) {
+      return { hash: '', status: 'failed', error: error.message, expiryLedger: 0 };
+    }
+    throw error;
   }
 
   static notEnough(symbol: string): string {
@@ -145,18 +154,24 @@ export class SavingsTopUp {
     balances: Balances,
     window: PriceWindow | null,
   ): Promise<{ kind: 'sent'; withdrawal: PendingWithdrawal } | TopUpOutcome> {
-    if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
-      return { kind: 'priceClosing' };
+    let vault = balances;
+    for (let attempt = 1; ; attempt += 1) {
+      if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
+        return { kind: 'priceClosing' };
+      }
+      const shares = await this.sharesCovering(shortfall, vault);
+      if (shares === null) {
+        return { kind: 'notEnough' };
+      }
+      const result = await this.chain.withdraw(shares).catch(SavingsTopUp.refusedWithdrawal);
+      if (result.hash && !result.error && result.status !== 'failed') {
+        return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
+      }
+      if (result.hash || attempt >= SavingsTopUp.withdrawAttempts) {
+        return { kind: 'withdrawFailed' };
+      }
+      vault = await this.chain.balances();
     }
-    const shares = await this.sharesCovering(shortfall, balances);
-    if (shares === null) {
-      return { kind: 'notEnough' };
-    }
-    const result = await this.chain.withdraw(shares);
-    if (result.error || result.status === 'failed' || !result.hash) {
-      return { kind: 'withdrawFailed' };
-    }
-    return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
   }
 
   private async confirm(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
