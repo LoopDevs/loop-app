@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { GiftCard } from './client.ts';
-import { cashbackState, giftCardStatusLabel, isHiddenFromHistory, outcomeText } from './gift-card-status.ts';
+import {
+  cashbackState,
+  cashbackStateLabel,
+  giftCardStatusLabel,
+  isHiddenFromHistory,
+  outcomeText,
+} from './gift-card-status.ts';
 
 test('every gift card status has a plain label', () => {
   assert.equal(giftCardStatusLabel('unpaid'), 'Waiting for payment');
@@ -167,4 +173,9 @@ test('a card CTX marks paid is never described as not charged or possibly charge
 test('an expired order this device sent a payment for is shown in history', () => {
   assert.equal(isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'expired' }), true), false);
   assert.equal(isHiddenFromHistory(card({ status: 'unpaid', paymentStatus: 'unpaid' }), true), true);
+});
+
+test('cashback CTX has credited reads on the way, as the Cashback screen does until the payout lands', () => {
+  assert.equal(cashbackStateLabel('pending'), 'pending');
+  assert.equal(cashbackStateLabel('credited'), 'on the way');
 });
