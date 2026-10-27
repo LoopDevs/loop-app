@@ -170,3 +170,17 @@ test('the destination follows the saved user', () => {
   });
   assert.equal(saved.savesCashback(), true);
 });
+
+test('a profile is for its own email whatever the case or spacing', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', email: 'Ash@Example.com' }, company });
+  assert.equal(profile.isFor(' ash@example.com '), true);
+});
+
+test('a profile is not for a different email', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', email: 'ash@example.com' }, company });
+  assert.equal(profile.isFor('other@example.com'), false);
+});
+
+test('a profile without an email is for no email', () => {
+  assert.equal(Profile.fromMe(newUser).isFor(''), false);
+});

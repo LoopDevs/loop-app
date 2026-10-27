@@ -267,6 +267,13 @@ class CtxClient {
     return (await this.auth.accessToken()) !== null;
   }
 
+  async isSignedInAs(email: string): Promise<boolean> {
+    if (!(await this.isSignedIn())) {
+      return false;
+    }
+    return (await this.me()).isFor(email);
+  }
+
   async signOut(): Promise<void> {
     await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
     await this.auth.clearSession();

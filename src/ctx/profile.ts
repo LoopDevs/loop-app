@@ -63,6 +63,11 @@ export class Profile {
     return null;
   }
 
+  isFor(email: string): boolean {
+    const own = this.email?.trim().toLowerCase();
+    return !!own && own === email.trim().toLowerCase();
+  }
+
   passkeyLabel(): string {
     return this.email?.trim() || 'Loop wallet';
   }
