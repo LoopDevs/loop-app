@@ -106,7 +106,9 @@ export class SavingsTopUp {
   async run(price: bigint, window: PriceWindow | null, pending?: PendingWithdrawal): Promise<TopUpOutcome> {
     let balances = await this.chain.balances();
     if (SavingsTopUp.inWallet(balances) >= price) {
-      return pending ? { kind: 'covered', withdrawal: pending } : { kind: 'covered' };
+      return pending && (await this.status(pending)) === 'pending'
+        ? { kind: 'covered', withdrawal: pending }
+        : { kind: 'covered' };
     }
     if (pending) {
       if ((await this.confirm(pending)) === 'pending') {
@@ -183,14 +185,18 @@ export class SavingsTopUp {
   private async confirm(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
     const deadline = this.chain.now() + SavingsTopUp.confirmTimeoutMs;
     for (;;) {
-      const status = await this.chain.transaction(withdrawal.hash).then(
-        (transaction) => SavingsTopUp.outcomeOf(transaction, withdrawal),
-        () => 'pending' as const,
-      );
+      const status = await this.status(withdrawal);
       if (status !== 'pending' || this.chain.now() >= deadline) {
         return status;
       }
       await this.chain.sleep(SavingsTopUp.confirmPollMs);
     }
+  }
+
+  private status(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
+    return this.chain.transaction(withdrawal.hash).then(
+      (transaction) => SavingsTopUp.outcomeOf(transaction, withdrawal),
+      () => 'pending' as const,
+    );
   }
 }
