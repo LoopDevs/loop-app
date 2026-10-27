@@ -3,6 +3,16 @@ export function criticalIndexOf(extra: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 0;
 }
 
+export function criticalIndexFromEnv(value: string | undefined): number | undefined {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`LOOP_CRITICAL_INDEX must be a whole number, got "${value}"`);
+  }
+  return Number(value);
+}
+
 export function fetchedCriticalIndex(manifest: unknown): number {
   const extra = (manifest as { extra?: { expoClient?: { extra?: unknown } } } | null | undefined)?.extra;
   return criticalIndexOf(extra?.expoClient?.extra);
