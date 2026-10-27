@@ -22,7 +22,7 @@ export class PendingWithdrawals {
 
   async get(address: string): Promise<PendingWithdrawal | undefined> {
     const stored = PendingWithdrawals.parse(await this.storage.getItem(PendingWithdrawals.keyOf(address)));
-    return stored ?? this.unsaved.get(address);
+    return this.unsaved.get(address) ?? stored;
   }
 
   async set(address: string, withdrawal: PendingWithdrawal): Promise<void> {

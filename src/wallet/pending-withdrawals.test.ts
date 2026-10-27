@@ -47,12 +47,14 @@ test('a withdrawal saved by another tab replaces the one this tab read', async (
 
 test('a withdrawal whose save failed is still known to this tab', async () => {
   const storage = memoryStorage();
+  const pending = new PendingWithdrawals(storage);
+  await pending.set('GW', withdrawal);
   storage.setItem = async () => {
     throw new Error('storage full');
   };
-  const pending = new PendingWithdrawals(storage);
-  await assert.rejects(pending.set('GW', withdrawal), /storage full/);
-  assert.deepEqual(await pending.get('GW'), withdrawal);
+  const newer = { hash: 'def', expiryLedger: 900 };
+  await assert.rejects(pending.set('GW', newer), /storage full/);
+  assert.deepEqual(await pending.get('GW'), newer);
 });
 
 test('withdrawals are kept per wallet address', async () => {
