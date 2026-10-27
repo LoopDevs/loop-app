@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
+import { Rates } from '@/ctx/rates';
 import { errorMessage } from '@/hooks/use-busy-action';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,7 +20,7 @@ import { dates, money } from '@/money';
 import { stablePeg, type PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { haptics } from '@/native/haptics';
-import { Savings } from '@/wallet/savings';
+import type { SavingsHolding } from '@/wallet/holdings';
 
 const recentShown = 4;
 
@@ -227,7 +228,7 @@ export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: 
     );
   }
   const { holdings, stable } = view;
-  const savings = holdings.savings();
+  const savings = holdings.savingsHoldings();
   const onTheWay = stable ? holdings.onTheWayIn(stable) : null;
   return (
     <>
@@ -239,13 +240,13 @@ export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: 
         withdrawDisabled={withdrawDisabled}
         onCashback={onCashback}
       />
-      {savings === 0n && <SavingsPromo onPress={onCashback} />}
+      {savings.length === 0 && <SavingsPromo onPress={onCashback} />}
     </>
   );
 }
 
 type SavingsOverviewProps = {
-  savings: bigint;
+  savings: SavingsHolding[];
   onTheWay: bigint | null;
   stable: HoldingsView['stable'];
   onWithdraw: () => void;
@@ -262,11 +263,16 @@ function SavingsOverview({
   onCashback,
 }: SavingsOverviewProps) {
   const theme = useTheme();
+  const leaf = (
+    <Disc ground={theme.accent}>
+      <SymbolView name={{ ios: 'leaf', android: 'savings', web: 'savings' }} size={20} tintColor={theme.onAccent} />
+    </Disc>
+  );
   return (
     <OverviewCard
       title="Savings"
       accessory={
-        savings > 0n ? (
+        savings.length > 0 ? (
           <PressScale
             onPress={onWithdraw}
             disabled={withdrawDisabled}
@@ -279,20 +285,23 @@ function SavingsOverview({
           </PressScale>
         ) : null
       }>
-      <MoneyRow
-        leading={
-          <Disc ground={theme.accent}>
-            <SymbolView
-              name={{ ios: 'leaf', android: 'savings', web: 'savings' }}
-              size={20}
-              tintColor={theme.onAccent}
-            />
-          </Disc>
-        }
-        label="Savings"
-        detail={savings > 0n ? 'Earning interest' : 'Cashback lands here and earns interest'}
-        amount={money.token(savings, Savings.currency)}
-      />
+      {savings.length === 0 && (
+        <MoneyRow
+          leading={leaf}
+          label="Savings"
+          detail="Cashback lands here and earns interest"
+          amount={money.ctx('0', stable ?? Rates.usd)}
+        />
+      )}
+      {savings.map(({ currency, amount }) => (
+        <MoneyRow
+          key={currency}
+          leading={leaf}
+          label="Savings"
+          detail="Earning interest"
+          amount={money.token(amount, currency)}
+        />
+      ))}
       {onTheWay !== null && onTheWay > 0n && stable && (
         <MoneyRow
           leading={<IconDisc icon={{ ios: 'clock', android: 'schedule', web: 'schedule' }} />}

@@ -14,7 +14,7 @@ import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
 import type { TokenStorage } from '@/session/install-scoped-token';
 import { secureTokenStorage } from '@/session/secure-token-storage';
-import { network, type Token } from '@/stellar/network';
+import { network, type PaymentCurrency, type Token } from '@/stellar/network';
 import { holdCriticalReload } from '@/updates/update-checker';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
@@ -25,7 +25,7 @@ import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey, type Passkey } from '@/wallet/passkey';
 import { PaymentSearch, type OrderPayment } from '@/wallet/payment-search';
-import { Savings } from '@/wallet/savings';
+import { Savings, type SavingsBalance } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal, type SignedWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 import { WalletCreation } from '@/wallet/wallet-creation';
@@ -39,8 +39,7 @@ export type TokenBalance = {
 
 export type Balances = {
   tokens: TokenBalance[];
-  vaultShares: bigint;
-  vaultValue: bigint;
+  savings: SavingsBalance[];
 };
 
 export class UnlinkedDevice extends Error {
@@ -168,12 +167,11 @@ export class SmartWallet {
   }
 
   async balances(): Promise<Balances> {
-    const [tokens, vaultShares] = await Promise.all([
+    const [tokens, savings] = await Promise.all([
       Promise.all(network.tokens.map((token) => this.tokenBalance(token))),
-      soroban.balance(network.usdcVault, this.address),
+      Promise.all(Savings.currencies.map((currency) => this.savingsBalance(currency))),
     ]);
-    const vaultValue = vaultShares === 0n ? 0n : await this.valueOf(vaultShares);
-    return { tokens, vaultShares, vaultValue };
+    return { tokens, savings };
   }
 
   async fundWithFriendbot(): Promise<void> {
@@ -227,35 +225,38 @@ export class SmartWallet {
     return (await soroban.transaction(hash)).status === 'SUCCESS';
   }
 
-  async withdraw(shares: bigint): Promise<SentWithdrawal> {
-    return SavingsTopUp.send(await this.signWithdrawal(shares));
+  async withdraw(currency: PaymentCurrency, shares: bigint): Promise<SentWithdrawal> {
+    return SavingsTopUp.send(await this.signWithdrawal(currency, shares));
   }
 
-  savingsTopUp(): SavingsTopUp {
-    return new SavingsTopUp({
-      balances: () => this.balances(),
-      valueOf: (shares) => this.valueOf(shares),
-      signWithdrawal: (shares) => this.signWithdrawal(shares),
+  savingsTopUp(currency: PaymentCurrency): SavingsTopUp {
+    return new SavingsTopUp(
+      {
+        balances: () => this.balances(),
+        valueOf: (shares) => this.valueOf(currency, shares),
+        signWithdrawal: (shares) => this.signWithdrawal(currency, shares),
       transaction: (hash) => soroban.transaction(hash),
-      latestLedger: () => soroban.latestLedger(),
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      now: () => Date.now(),
-    });
+        latestLedger: () => soroban.latestLedger(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        now: () => Date.now(),
+      },
+      currency,
+    );
   }
 
-  private signWithdrawal(shares: bigint): Promise<SignedWithdrawal> {
-    return holdCriticalReload(() => this.buildSignedWithdrawal(shares));
+  private signWithdrawal(currency: PaymentCurrency, shares: bigint): Promise<SignedWithdrawal> {
+    return holdCriticalReload(() => this.buildSignedWithdrawal(currency, shares));
   }
 
-  private async buildSignedWithdrawal(shares: bigint): Promise<SignedWithdrawal> {
+  private async buildSignedWithdrawal(currency: PaymentCurrency, shares: bigint): Promise<SignedWithdrawal> {
     const intent: SmartWalletIntent = {
       intent: 'vault_withdraw',
-      currency: Savings.currency,
+      currency,
       shares: shares.toString(),
     };
     const built = await ctx.buildTransaction(this.id, intent);
     const call = await this.verifiedCall(built);
-    await this.requireWithdraw(call, shares);
+    await this.requireWithdraw(call, currency, shares);
     const signed = await this.sign(call);
     return {
       expiryLedger: built.expiryLedger,
@@ -301,15 +302,21 @@ export class SmartWallet {
     });
   }
 
-  private async requireWithdraw(call: SponsoredCall, shares: bigint): Promise<void> {
-    const minimum = call.requireWithdrawal({ from: this.address, vault: network.usdcVault, shares });
-    if (minimum < Holdings.floorOf(await this.valueOf(shares))) {
+  private async requireWithdraw(call: SponsoredCall, currency: PaymentCurrency, shares: bigint): Promise<void> {
+    const minimum = call.requireWithdrawal({ from: this.address, vault: Savings.vault(currency), shares });
+    if (minimum < Holdings.floorOf(await this.valueOf(currency, shares))) {
       throw new Error('The withdrawal minimum is too low');
     }
   }
 
-  private async valueOf(shares: bigint): Promise<bigint> {
-    const [value] = (await soroban.read(network.usdcVault, 'get_asset_amounts_per_shares', [
+  private async savingsBalance(currency: PaymentCurrency): Promise<SavingsBalance> {
+    const shares = await soroban.balance(Savings.vault(currency), this.address);
+    const value = shares === 0n ? 0n : await this.valueOf(currency, shares);
+    return { currency, shares, value };
+  }
+
+  private async valueOf(currency: PaymentCurrency, shares: bigint): Promise<bigint> {
+    const [value] = (await soroban.read(Savings.vault(currency), 'get_asset_amounts_per_shares', [
       i128(shares),
     ])) as bigint[];
     return value;

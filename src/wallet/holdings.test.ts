@@ -5,7 +5,7 @@ import { Account } from '../ctx/account.ts';
 import type { BalanceJson } from '../ctx/client.ts';
 import type { PayoutJson } from '../ctx/payout.ts';
 import { Rates } from '../ctx/rates.ts';
-import type { PaymentCurrency } from '../stellar/network.ts';
+import { network, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 import { Holdings, type Holding } from './holdings.ts';
 
@@ -21,15 +21,18 @@ const marketRates = Rates.fromPrices({
 
 function holdings(
   wallet: Partial<Record<PaymentCurrency, string>>,
-  options: { vaultValue?: string; onTheWay?: Holding[] | null; rates?: Rates } = {},
+  options: { savings?: Partial<Record<PaymentCurrency, string>>; onTheWay?: Holding[] | null; rates?: Rates } = {},
 ): Holdings {
   const tokens = currencies.map((currency) => ({
     token: { currency, symbol: currency, contract: '' },
     amount: units.parse(wallet[currency] ?? '0'),
   }));
-  const vaultValue = units.parse(options.vaultValue ?? '0');
+  const savings = Object.entries(options.savings ?? {}).map(([currency, amount]) => {
+    const value = units.parse(amount);
+    return { currency: currency as PaymentCurrency, shares: value, value };
+  });
   return new Holdings(
-    { tokens, vaultShares: vaultValue, vaultValue },
+    { tokens, savings },
     options.onTheWay === undefined ? [] : options.onTheWay,
     options.rates ?? marketRates,
   );
@@ -77,11 +80,45 @@ test('USD and USDC are priced at 1 with no fetched rates', () => {
 });
 
 test('spendable USDC adds the savings withdrawal floor to the wallet balance', () => {
-  const held = holdings({ 'XLM.USDC': '5', XLM: '20' }, { vaultValue: '10' });
+  const held = holdings({ 'XLM.USDC': '5', XLM: '20' }, { savings: { 'XLM.USDC': '10' } });
   assert.equal(held.spendable('XLM.USDC'), units.parse('5') + Holdings.floorOf(units.parse('10')));
   assert.equal(held.spendable('XLM.USDC'), units.parse('14.9'));
   assert.equal(held.spendable('XLM'), units.parse('20'));
   assert.equal(held.spendable('XLM.EURC'), 0n);
+});
+
+test('savings holdings list each vault with shares at its withdrawal floor', () => {
+  assert.deepEqual(holdings({}, { savings: { 'XLM.USDC': '10' } }).savingsHoldings(), [
+    { currency: 'XLM.USDC', amount: Holdings.floorOf(units.parse('10')) },
+  ]);
+  assert.deepEqual(holdings({}).savingsHoldings(), []);
+  assert.equal(holdings({}).savings('XLM.USDC'), 0n);
+});
+
+test('each savings currency counts only its own vault', () => {
+  network.vaults['XLM.GBPLOOP'] = 'CGBPLOOPVAULT';
+  try {
+    const held = holdings({ 'XLM.USDC': '5', 'XLM.GBPLOOP': '1' }, { savings: { 'XLM.USDC': '10', 'XLM.GBPLOOP': '2' } });
+    assert.equal(held.spendable('XLM.USDC'), units.parse('5') + Holdings.floorOf(units.parse('10')));
+    assert.equal(held.spendable('XLM.GBPLOOP'), units.parse('1') + Holdings.floorOf(units.parse('2')));
+    assert.deepEqual(held.coverage('XLM.GBPLOOP', units.parse('2.5')), {
+      kind: 'savings',
+      fromSavings: units.parse('1.5'),
+    });
+    assert.deepEqual(held.coverage('XLM.GBPLOOP', units.parse('3.5')), { kind: 'short' });
+    assert.deepEqual(held.savingsHoldings(), [
+      { currency: 'XLM.USDC', amount: Holdings.floorOf(units.parse('10')) },
+      { currency: 'XLM.GBPLOOP', amount: Holdings.floorOf(units.parse('2')) },
+    ]);
+  } finally {
+    delete network.vaults['XLM.GBPLOOP'];
+  }
+});
+
+test('shares whose withdrawal floor is nothing are neither shown nor withdrawable', () => {
+  const dust = holdings({}, { savings: { 'XLM.USDC': '0.0000001' } });
+  assert.deepEqual(dust.savingsHoldings(), []);
+  assert.deepEqual(dust.withdrawableSavings(), []);
 });
 
 test('on the way counts at 1 in the stable when the stable has no rate', () => {

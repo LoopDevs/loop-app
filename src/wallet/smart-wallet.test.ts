@@ -45,7 +45,11 @@ type Chain = {
   ledger: number;
   shareValue: bigint;
   shares: bigint;
+  gbpShareValue: bigint;
+  gbpShares: bigint;
 };
+
+const gbpVault = 'CGBPLOOPVAULT';
 
 let chain: Chain;
 let links: WalletLink[];
@@ -92,7 +96,10 @@ beforeEach(async () => {
     ledger: 1_000,
     shareValue: 0n,
     shares: 0n,
+    gbpShareValue: 0n,
+    gbpShares: 0n,
   };
+  network.vaults['XLM.GBPLOOP'] = gbpVault;
   links = [link];
   calls = [];
   await clearPins();
@@ -101,8 +108,13 @@ beforeEach(async () => {
   replace(ctx, 'wallets', async () => links);
   replace(soroban, 'wasmHash', async () => network.accountWasmHash);
   replace(soroban, 'latestLedger', async () => chain.ledger);
-  replace(soroban, 'balance', async (contract: string) => (contract === network.usdcVault ? chain.shares : 7n));
-  replace(soroban, 'read', async (_contract: string, method: string, args: xdr.ScVal[] = []) => {
+  replace(soroban, 'balance', async (contract: string) => {
+    if (contract === Savings.vault('XLM.USDC')) {
+      return chain.shares;
+    }
+    return contract === gbpVault ? chain.gbpShares : 7n;
+  });
+  replace(soroban, 'read', async (contract: string, method: string, args: xdr.ScVal[] = []) => {
     if (method === 'get_context_rules_count') {
       return 2;
     }
@@ -110,7 +122,7 @@ beforeEach(async () => {
       return contextRule((args[0] as unknown as { u32: number }).u32);
     }
     if (method === 'get_asset_amounts_per_shares') {
-      return [chain.shareValue];
+      return [contract === gbpVault ? chain.gbpShareValue : chain.shareValue];
     }
     throw new Error(`unexpected read ${method}`);
   });
@@ -118,6 +130,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  delete network.vaults['XLM.GBPLOOP'];
   while (restores.length > 0) {
     restores.pop()?.();
   }
@@ -324,13 +337,19 @@ test('balances list each token and skip the vault valuation for no shares', asyn
     empty.tokens.map(({ token, amount }) => [token.currency, amount]),
     network.tokens.map((token) => [token.currency, 7n]),
   );
-  assert.equal(empty.vaultShares, 0n);
-  assert.equal(empty.vaultValue, 0n);
+  assert.deepEqual(empty.savings, [
+    { currency: 'XLM.USDC', shares: 0n, value: 0n },
+    { currency: 'XLM.GBPLOOP', shares: 0n, value: 0n },
+  ]);
   chain.shares = 500n;
   chain.shareValue = 650n;
+  chain.gbpShares = 20n;
+  chain.gbpShareValue = 30n;
   const saved = await wallet.balances();
-  assert.equal(saved.vaultShares, 500n);
-  assert.equal(saved.vaultValue, 650n);
+  assert.deepEqual(saved.savings, [
+    { currency: 'XLM.USDC', shares: 500n, value: 650n },
+    { currency: 'XLM.GBPLOOP', shares: 20n, value: 30n },
+  ]);
 });
 
 const giftCard = {
@@ -445,7 +464,7 @@ test('a withdrawal asks CTX for the vault withdraw of exactly those shares and s
   replace(SponsoredCall, 'verify', () => ({
     digest: new Uint8Array([9]),
     requireWithdrawal: ({ shares, vault, from }: { shares: bigint; vault: string; from: string }) => {
-      assert.equal(vault, network.usdcVault);
+      assert.equal(vault, Savings.vault('XLM.USDC'));
       assert.equal(from, address);
       required.push(shares);
       return Holdings.floorOf(1_000n);
@@ -457,10 +476,34 @@ test('a withdrawal asks CTX for the vault withdraw of exactly those shares and s
     builtIntent = intent;
     return { transaction: 'xdr-2', digest: 'cd', contextRuleIds: [1], expiryLedger: 1_040 };
   });
-  const sent = await wallet.withdraw(250n);
-  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: Savings.currency, shares: '250' });
+  const sent = await wallet.withdraw('XLM.USDC', 250n);
+  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.USDC', shares: '250' });
   assert.deepEqual(required, [250n]);
   assert.deepEqual(sent, { hash: 'tx-1', status: 'PENDING', expiryLedger: 1_040 });
+  assert.equal(fakes.sponsored.length, 1);
+});
+
+test('a withdrawal in another savings currency targets that vault and is valued by it', async () => {
+  const wallet = (await SmartWallet.load()) as SmartWallet;
+  const fakes = fakePayment();
+  const required: { vault: string; shares: bigint }[] = [];
+  replace(SponsoredCall, 'verify', () => ({
+    digest: new Uint8Array([9]),
+    requireWithdrawal: ({ shares, vault }: { shares: bigint; vault: string }) => {
+      required.push({ vault, shares });
+      return Holdings.floorOf(1_000n);
+    },
+  }));
+  chain.shareValue = 5_000n;
+  chain.gbpShareValue = 1_000n;
+  let builtIntent: unknown;
+  replace(ctx, 'buildTransaction', async (_id: string, intent: unknown) => {
+    builtIntent = intent;
+    return { transaction: 'xdr-2', digest: 'cd', contextRuleIds: [1], expiryLedger: 1_040 };
+  });
+  await wallet.withdraw('XLM.GBPLOOP', 40n);
+  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.GBPLOOP', shares: '40' });
+  assert.deepEqual(required, [{ vault: gbpVault, shares: 40n }]);
   assert.equal(fakes.sponsored.length, 1);
 });
 
@@ -472,7 +515,7 @@ test('a withdrawal whose minimum is below the allowed slippage is not signed', a
     requireWithdrawal: () => Holdings.floorOf(1_000n) - 1n,
   }));
   chain.shareValue = 1_000n;
-  await assert.rejects(wallet.withdraw(250n), /The withdrawal minimum is too low/);
+  await assert.rejects(wallet.withdraw('XLM.USDC', 250n), /The withdrawal minimum is too low/);
   assert.deepEqual(fakes.sponsored, []);
 });
 

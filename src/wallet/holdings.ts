@@ -2,13 +2,18 @@ import type { Account } from '../ctx/account.ts';
 import type { Rates } from '../ctx/rates.ts';
 import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
-import { Savings } from './savings.ts';
+import { Savings, type SavingsBalance } from './savings.ts';
 import type { Balances } from './smart-wallet.ts';
 
 export type Holding = {
   currency: string;
   amount: bigint;
   estimates?: Readonly<Record<string, string>>;
+};
+
+export type SavingsHolding = {
+  currency: PaymentCurrency;
+  amount: bigint;
 };
 
 type OnTheWayAccount = Pick<Account, 'wallet' | 'payouts' | 'onTheWay'>;
@@ -73,8 +78,17 @@ export class Holdings {
     return sum - (sum % Holdings.shownUnit);
   }
 
-  savings(): bigint {
-    return Holdings.floorOf(this.balances.vaultValue);
+  savings(currency: string): bigint {
+    const saved = this.balances.savings.find((balance) => balance.currency === currency);
+    return saved ? Holdings.floorOf(saved.value) : 0n;
+  }
+
+  withdrawableSavings(): SavingsBalance[] {
+    return this.balances.savings.filter(({ value }) => Holdings.floorOf(value) > 0n);
+  }
+
+  savingsHoldings(): SavingsHolding[] {
+    return this.withdrawableSavings().map(({ currency, value }) => ({ currency, amount: Holdings.floorOf(value) }));
   }
 
   inWallet(currency: string): bigint {
@@ -83,7 +97,7 @@ export class Holdings {
 
   spendable(currency: string): bigint {
     const inWallet = this.inWallet(currency);
-    return currency === Savings.currency ? inWallet + this.savings() : inWallet;
+    return Savings.takes(currency) ? inWallet + this.savings(currency) : inWallet;
   }
 
   coverage(currency: string, price: bigint): Coverage {
@@ -91,7 +105,7 @@ export class Holdings {
     if (inWallet >= price) {
       return { kind: 'wallet' };
     }
-    if (currency === Savings.currency &&this.spendable(currency) >= price) {
+    if (Savings.takes(currency) && this.spendable(currency) >= price) {
       return { kind: 'savings', fromSavings: price - inWallet };
     }
     return { kind: 'short' };
@@ -162,7 +176,7 @@ export class Holdings {
     return (
       best?.currency ??
       funded.find((currency) => currency === stable) ??
-      funded.find((currency) => currency === Savings.currency) ??
+      funded.find((currency) => Savings.takes(currency)) ??
       funded[0] ??
       null
     );

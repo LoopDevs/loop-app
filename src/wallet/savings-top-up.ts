@@ -3,8 +3,8 @@ import { CtxError } from '../ctx/ctx-error.ts';
 import { chainOutcome } from '../ctx/payment-state.ts';
 import type { PriceWindow } from '../ctx/price-window.ts';
 import { money } from '../money.ts';
+import type { PaymentCurrency } from '../stellar/network.ts';
 import { Holdings } from './holdings.ts';
-import { Savings } from './savings.ts';
 import type { Balances } from './smart-wallet.ts';
 
 export type PendingWithdrawal = {
@@ -41,7 +41,7 @@ export type TopUpOutcome =
   | { kind: 'withdrawFailed' }
   | { kind: 'stillMoving'; withdrawal: PendingWithdrawal }
   | { kind: 'priceExpired' }
-  | { kind: 'stillShort'; moved: bigint };
+  | { kind: 'stillShort'; moved: bigint; currency: PaymentCurrency };
 
 type ChainOutcome = 'pending' | 'success' | 'failed';
 
@@ -63,26 +63,27 @@ export class UnansweredWithdrawal extends Error {
 }
 
 export class SavingsTopUp {
-  static readonly currency = Savings.currency;
   static readonly requiredWindowMs = 90_000;
   static readonly confirmTimeoutMs = 30_000;
   static readonly confirmPollMs = 2_000;
   static readonly withdrawAttempts = 2;
 
   readonly chain: TopUpChain;
+  readonly currency: PaymentCurrency;
 
-  constructor(chain: TopUpChain) {
+  constructor(chain: TopUpChain, currency: PaymentCurrency) {
     this.chain = chain;
+    this.currency = currency;
   }
 
-  static estimatedShares(shortfall: bigint, vaultShares: bigint, vaultValue: bigint): bigint {
-    if (shortfall <= 0n || vaultShares <= 0n || vaultValue <= 0n) {
+  static estimatedShares(shortfall: bigint, savedShares: bigint, savedValue: bigint): bigint {
+    if (shortfall <= 0n || savedShares <= 0n || savedValue <= 0n) {
       return 0n;
     }
-    const numerator = shortfall * 10_000n * vaultShares;
-    const denominator = (10_000n - Holdings.withdrawSlippageBasisPoints) * vaultValue;
+    const numerator = shortfall * 10_000n * savedShares;
+    const denominator = (10_000n - Holdings.withdrawSlippageBasisPoints) * savedValue;
     const shares = (numerator + denominator - 1n) / denominator;
-    return shares < vaultShares ? shares : vaultShares;
+    return shares < savedShares ? shares : savedShares;
   }
 
   static outcomeOf(transaction: ChainTransaction, withdrawal: PendingWithdrawal): ChainOutcome {
@@ -125,17 +126,21 @@ export class SavingsTopUp {
       case 'priceExpired':
         return 'This price expired; the funds are in your wallet';
       case 'stillShort':
-        return `Moved ${money.token(outcome.moved, SavingsTopUp.currency)} to your wallet, not enough to pay`;
+        return `Moved ${money.token(outcome.moved, outcome.currency)} to your wallet, not enough to pay`;
     }
   }
 
-  private static inWallet(balances: Balances): bigint {
-    return balances.tokens.find(({ token }) => token.currency === SavingsTopUp.currency)?.amount ?? 0n;
+  private inWallet(balances: Balances): bigint {
+    return balances.tokens.find(({ token }) => token.currency === this.currency)?.amount ?? 0n;
+  }
+
+  private saved(balances: Balances): { shares: bigint; value: bigint } {
+    return balances.savings.find((saved) => saved.currency === this.currency) ?? { shares: 0n, value: 0n };
   }
 
   async run(price: bigint, window: PriceWindow | null, pending?: PendingWithdrawal): Promise<TopUpOutcome> {
     let balances = await this.chain.balances();
-    if (SavingsTopUp.inWallet(balances) >= price) {
+    if (this.inWallet(balances) >= price) {
       return pending && (await this.status(pending)) === 'pending'
         ? { kind: 'covered', withdrawal: pending }
         : { kind: 'covered' };
@@ -146,7 +151,7 @@ export class SavingsTopUp {
       }
       balances = await this.chain.balances();
     }
-    const before = SavingsTopUp.inWallet(balances);
+    const before = this.inWallet(balances);
     if (before >= price) {
       return { kind: 'covered' };
     }
@@ -161,23 +166,24 @@ export class SavingsTopUp {
     if (status === 'pending') {
       return { kind: 'stillMoving', withdrawal: started.withdrawal };
     }
-    const after = SavingsTopUp.inWallet(await this.chain.balances());
+    const after = this.inWallet(await this.chain.balances());
     if (!window || window.isClosed(this.chain.now())) {
       return { kind: 'priceExpired' };
     }
     if (after < price) {
-      return { kind: 'stillShort', moved: after > before ? after - before : 0n };
+      return { kind: 'stillShort', moved: after > before ? after - before : 0n, currency: this.currency };
     }
     return { kind: 'covered' };
   }
 
-  async sharesCovering(shortfall: bigint, { vaultShares, vaultValue }: Balances): Promise<bigint | null> {
-    const estimate = SavingsTopUp.estimatedShares(shortfall, vaultShares, vaultValue);
+  async sharesCovering(shortfall: bigint, balances: Balances): Promise<bigint | null> {
+    const saved = this.saved(balances);
+    const estimate = SavingsTopUp.estimatedShares(shortfall, saved.shares, saved.value);
     if (estimate === 0n) {
       return null;
     }
     for (const shares of [estimate, estimate + 1n]) {
-      if (shares > vaultShares) {
+      if (shares > saved.shares) {
         return null;
       }
       if (Holdings.floorOf(await this.chain.valueOf(shares)) >= shortfall) {

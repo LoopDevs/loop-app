@@ -36,7 +36,7 @@ const destinationCopy: Record<CashbackDestination, { label: string; detail: stri
   },
 };
 
-const savingsNote = `Loop savings holds ${Profile.currencyLabel(Savings.currency)}. Cashback in another currency stays with Loop; switch to Account to have it paid into your balance.`;
+const savingsNote = `Loop savings holds ${Profile.savingsLabel()}. Cashback in another currency stays with Loop; switch to Account to have it paid into your balance.`;
 
 const signInFailure = 'Sign in to see your cashback.';
 const destinationFooter = 'Your choice applies to future cashback. Cashback already paid out stays where it is.';

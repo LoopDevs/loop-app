@@ -19,6 +19,7 @@ import {
 
 import type { BuiltTransaction } from '../ctx/client.ts';
 import { network } from '../stellar/network.ts';
+import { Savings } from './savings.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 
 const wallet = StrKey.encodeContract(Buffer.alloc(32, 1));
@@ -269,10 +270,11 @@ function withdrawArgs(contract: string, shares: bigint, minimums: bigint[], owne
   });
 }
 
-const expectedWithdrawal = { from: wallet, vault: network.usdcVault, shares: 40n };
+const usdcVault = Savings.vault('XLM.USDC');
+const expectedWithdrawal = { from: wallet, vault: usdcVault, shares: 40n };
 
 test('a matching withdrawal returns its minimum', () => {
-  const call = verified(withdrawArgs(network.usdcVault, 40n, [39n], wallet));
+  const call = verified(withdrawArgs(usdcVault, 40n, [39n], wallet));
   assert.equal(call.requireWithdrawal(expectedWithdrawal), 39n);
 });
 
@@ -282,15 +284,15 @@ test('a withdrawal from another contract, of other shares or for another owner i
     /not a withdrawal/,
   );
   assert.throws(
-    () => verified(withdrawArgs(network.usdcVault, 41n, [39n], wallet)).requireWithdrawal(expectedWithdrawal),
+    () => verified(withdrawArgs(usdcVault, 41n, [39n], wallet)).requireWithdrawal(expectedWithdrawal),
     /does not match/,
   );
   assert.throws(
-    () => verified(withdrawArgs(network.usdcVault, 40n, [39n], otherWallet)).requireWithdrawal(expectedWithdrawal),
+    () => verified(withdrawArgs(usdcVault, 40n, [39n], otherWallet)).requireWithdrawal(expectedWithdrawal),
     /does not match/,
   );
   assert.throws(
-    () => verified(withdrawArgs(network.usdcVault, 40n, [39n, 1n], wallet)).requireWithdrawal(expectedWithdrawal),
+    () => verified(withdrawArgs(usdcVault, 40n, [39n, 1n], wallet)).requireWithdrawal(expectedWithdrawal),
     /does not match/,
   );
 });
@@ -327,10 +329,10 @@ test('a transfer amount that is not an i128 is refused', () => {
 });
 
 test('withdrawal minimums that are not i128 values are refused', () => {
-  const call = verified(withdrawArgs(network.usdcVault, 40n, [], wallet));
+  const call = verified(withdrawArgs(usdcVault, 40n, [], wallet));
   const stringMinimum = verified(
     new xdr.InvokeContractArgs({
-      contractAddress: new Address(network.usdcVault).toScAddress(),
+      contractAddress: new Address(usdcVault).toScAddress(),
       functionName: 'withdraw',
       args: [
         nativeToScVal(40n, { type: 'i128' }),

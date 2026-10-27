@@ -17,7 +17,6 @@ import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
-import { Savings } from '@/wallet/savings';
 
 const scrimFadeDistance = 48;
 const nearEndDistance = 800;
@@ -142,9 +141,9 @@ function accountState(view: HoldingsView | null): string {
   if (onTheWay !== null && onTheWay > 0n) {
     return `${format(onTheWay)} cashback on the way`;
   }
-  const savings = holdings.savings();
-  if (savings > 0n) {
-    return `${money.token(savings, Savings.currency)} in savings`;
+  const savings = holdings.savingsHoldings();
+  if (savings.length > 0) {
+    return `${savings.map(({ currency, amount }) => money.token(amount, currency)).join(' and ')} in savings`;
   }
   const total = stable ? holdings.totalIn(stable) : null;
   if (total === 0n) {

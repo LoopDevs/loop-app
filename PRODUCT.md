@@ -35,9 +35,9 @@ The cashback, the wallet and the savings live in one place the user owns: a smar
 - Production release checklist (compare values, record them in the release PR):
   - `public/.well-known/assetlinks.json` lists the SHA-256 of both the EAS upload key and the Play App Signing key from Play Console, so app links and passkeys verify on installs from Play.
   - CTX production `crypto.xlm.smartWallet` `factory`, `ed25519Verifier` and `webauthnVerifier` equal the mainnet infrastructure deploy; relayer and system accounts are funded.
-  - The mainnet USDC DeFindex vault is `active` for `mainnet` in CTX, and `usdcVault` in `src/stellar/network.ts` equals its `ContractId`.
-  - The mainnet factory is the v2 deploy and its `config()` has `account_wasm_hash` = audited v2 account, both verifiers, `vaults` containing the active vault, `tokens` = XLM, USDC and EURC SACs, `payee` = CTX production payee, `recovery` = CTX production recovery address.
-  - `src/stellar/network.ts` mainnet `factory`, `payee`, `tokens`, `accountWasmHash`, `webauthnVerifier`, `ed25519Verifier` and `usdcVault` equal the values above. GBPLOOP stays testnet-only.
+  - Every vault in `vaults` in `src/stellar/network.ts` is a DeFindex vault that is `active` for `mainnet` in CTX, keyed by the currency of its underlying asset and mapped to its `ContractId`. Savings is per currency: the app reads every configured vault and withdraws from the vault of the currency it needs.
+  - The mainnet factory is the v2 deploy and its `config()` has `account_wasm_hash` = audited v2 account, both verifiers, `vaults` containing the active vaults, `tokens` = XLM, USDC and EURC SACs, `payee` = CTX production payee, `recovery` = CTX production recovery address.
+  - `src/stellar/network.ts` mainnet `factory`, `payee`, `tokens`, `accountWasmHash`, `webauthnVerifier`, `ed25519Verifier` and `vaults` equal the values above. The mainnet GBPLOOP token is the GBPLOOP vault's underlying asset.
 
 ## Capabilities and Constraints
 
