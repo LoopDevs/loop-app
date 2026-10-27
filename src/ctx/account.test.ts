@@ -148,3 +148,30 @@ test('an unreversed failed payout is listed as delayed', () => {
 test('a missing wallet and payout list reads as empty', () => {
   assert.deepEqual(labels({ wallet: null, payouts: null }, nonSaver), []);
 });
+
+test('a payout whose transaction already landed leaves the account', async () => {
+  const account = new Account({
+    wallet: [],
+    payouts: [
+      payout({ id: 'landed', status: 'submitted', txHash: 'h1' }),
+      payout({ id: 'pending', status: 'submitted', txHash: 'h2' }),
+      payout({ id: 'unsent' }),
+    ],
+  });
+  const checked: string[] = [];
+  const remaining = await account.withoutLandedPayouts(async (txHash) => {
+    checked.push(txHash);
+    return txHash === 'h1';
+  });
+  assert.deepEqual(
+    remaining.payouts.map((kept) => kept.id),
+    ['pending', 'unsent'],
+  );
+  assert.deepEqual(checked, ['h1', 'h2']);
+});
+
+test('finished payouts are not looked up on the ledger', async () => {
+  const account = new Account({ wallet: [], payouts: [payout({ status: 'complete', txHash: 'h1' })] });
+  const remaining = await account.withoutLandedPayouts(async () => assert.fail('looked up a finished payout'));
+  assert.equal(remaining, account);
+});

@@ -190,6 +190,10 @@ export class SmartWallet {
     return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
   }
 
+  async transactionLanded(hash: string): Promise<boolean> {
+    return (await soroban.transaction(hash)).status === 'SUCCESS';
+  }
+
   async withdraw(shares: bigint): Promise<SentWithdrawal> {
     const intent: SmartWalletIntent = {
       intent: 'vault_withdraw',

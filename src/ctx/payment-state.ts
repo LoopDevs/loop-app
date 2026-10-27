@@ -3,7 +3,7 @@ export type PaymentState =
   | { kind: 'movingSavings' }
   | { kind: 'sending' }
   | { kind: 'confirming'; txId?: string; expiryLedger?: number }
-  | { kind: 'failed'; contactSupport?: boolean }
+  | { kind: 'failed' }
   | { kind: 'priceExpired' }
   | { kind: 'notSent'; detail: string };
 

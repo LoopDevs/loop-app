@@ -21,9 +21,26 @@ export class Account {
   readonly wallet: BalanceJson[];
   readonly payouts: Payout[];
 
+  private readonly json: AccountJson;
+
   constructor(json: AccountJson) {
+    this.json = json;
     this.wallet = json.wallet ?? [];
     this.payouts = (json.payouts ?? []).map((payout) => new Payout(payout));
+  }
+
+  async withoutLandedPayouts(isLanded: (txHash: string) => Promise<boolean>): Promise<Account> {
+    const landed = await Promise.all(
+      this.payouts.map((payout) => payout.isInFlight() && !!payout.txHash && isLanded(payout.txHash)),
+    );
+    const landedIds = new Set(this.payouts.filter((_, index) => landed[index]).map((payout) => payout.id));
+    if (landedIds.size === 0) {
+      return this;
+    }
+    return new Account({
+      ...this.json,
+      payouts: (this.json.payouts ?? []).filter((payout) => !landedIds.has(payout.id)),
+    });
   }
 
   static hasAmount(amount: string): boolean {

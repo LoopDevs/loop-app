@@ -5,7 +5,6 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { Button, Notice } from '@/components/form';
-import { OrderHelp } from '@/components/order-help';
 import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -83,7 +82,8 @@ async function sentPaymentFailure(
   if (await wallet.paymentLanded(token, await signedTransfer(giftCard), expiryLedger)) {
     return null;
   }
-  return { kind: 'failed', contactSupport: true };
+  await sentPayments.forget(giftCard.paymentId);
+  return { kind: 'failed' };
 }
 
 async function signedTransfer(giftCard: GiftCard): Promise<SignedTransfer | null> {
@@ -93,10 +93,6 @@ async function signedTransfer(giftCard: GiftCard): Promise<SignedTransfer | null
   }
   const price = orderPrice(giftCard);
   return price === null ? null : { amount: price };
-}
-
-function needsSupport(state: PaymentState): boolean {
-  return state.kind === 'failed' && state.contactSupport === true;
 }
 
 function payRejection(error: unknown): PayRejection | undefined {
@@ -197,10 +193,9 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const pollOrder = useCallback(
     async (giftCard: GiftCard, sent: SentRecord | null, isCurrent: () => boolean, wake: OrderWake) => {
     let current = giftCard;
-    let checkingChain = sent !== null;
     let landed = false;
     while (isCurrent()) {
-      if (sent && checkingChain && OneTapBuy.checksChain(current)) {
+      if (sent && OneTapBuy.checksChain(current)) {
         const failure = await sentPaymentFailure(current, live.current.wallet, {
           txId: sent.txId ?? current.paymentCryptoTxId,
           expiryLedger: sent.expiryLedger,
@@ -210,11 +205,8 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         }
         if (failure) {
           setPayment(failure);
-          if (!needsSupport(failure)) {
-            setSpent(0n);
-            return;
-          }
-          checkingChain = false;
+          setSpent(0n);
+          return;
         }
       }
       if (settledStatuses.includes(current.status)) {
@@ -758,14 +750,14 @@ function OrderView({
   onDone,
 }: OrderViewProps) {
   const theme = useTheme();
-  const sentUnconfirmed = payment.kind === 'confirming' || needsSupport(payment);
+  const sentUnconfirmed = payment.kind === 'confirming';
   const outcome = order ? outcomeText(order, sentUnconfirmed) : null;
   const ready = order?.status === 'fulfilled';
   const submitted = order?.status === 'paid' || payment.kind === 'confirming';
   const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
   const paymentFailed = order?.status === 'unpaid' && payment.kind === 'failed';
   const failed = paymentFailed || outcome !== null;
-  const canRetry = paymentFailed && !needsSupport(payment);
+  const canRetry = paymentFailed;
   return (
     <PurchaseCard>
       <View style={styles.orderHead}>
@@ -808,12 +800,6 @@ function OrderView({
       )}
 
       {outcome && <Notice message={outcome} />}
-      {order?.status === 'unpaid' && needsSupport(payment) && (
-        <>
-          <Notice message="We couldn't find this payment. Contact support about this order." />
-          <OrderHelp giftCard={order} />
-        </>
-      )}
       {canRetry && (
         <Notice
           message="Your payment didn't go through, and you weren't charged."
