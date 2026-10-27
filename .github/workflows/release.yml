@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: EAS channel and environment
+        type: choice
+        options:
+          - preview
+          - production
+      kind:
+        description: OTA update or store build
+        type: choice
+        options:
+          - update
+          - build
+      message:
+        description: Update message (defaults to the commit subject)
+        type: string
+        required: false
+
+concurrency:
+  group: release-${{ inputs.channel }}-${{ inputs.kind }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.channel }}
+    env:
+      CHANNEL: ${{ inputs.channel }}
+      KIND: ${{ inputs.kind }}
+      MESSAGE: ${{ inputs.message }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS_CLI: eas-cli@25.3.0
+    steps:
+      - name: Check the release ref
+        run: |
+          case "$CHANNEL:$KIND:$GITHUB_REF" in
+            production:*:refs/tags/v*) ;;
+            preview:*:refs/heads/post-hackathon) ;;
+            preview:*:refs/tags/v*) ;;
+            *)
+              echo "::error::$CHANNEL $KIND cannot run from $GITHUB_REF. Production runs from a v* tag, preview from post-hackathon or a v* tag."
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Pin the Loop environment from eas.json
+        run: |
+          loop_env=$(jq -r --arg channel "$CHANNEL" '[.build[] | select(.channel == $channel) | .env.EXPO_PUBLIC_LOOP_ENV] | unique | if length == 1 then .[0] else error("channel \($channel) maps to \(.)") end' eas.json)
+          echo "EXPO_PUBLIC_LOOP_ENV=$loop_env" >> "$GITHUB_ENV"
+          echo "EXPECTED_LOOP_ENV=$loop_env" >> "$GITHUB_ENV"
+
+      - name: Check the EAS environment values
+        env:
+          CHECK_EAS_ENV: |
+            status=0
+            if [ "$EXPO_PUBLIC_LOOP_ENV" != "$EXPECTED_LOOP_ENV" ]; then
+              echo "::error::EXPO_PUBLIC_LOOP_ENV in the EAS $CHANNEL environment is '$EXPO_PUBLIC_LOOP_ENV', eas.json pins '$EXPECTED_LOOP_ENV'"
+              status=1
+            fi
+            case "$CHANNEL" in
+              production) required="EXPO_PUBLIC_SENTRY_DSN EXPO_PUBLIC_APPLE_SIGN_IN EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID" ;;
+              *) required="" ;;
+            esac
+            for key in $required; do
+              if [ -z "$(printenv "$key")" ]; then
+                echo "::error::$key is empty in the EAS $CHANNEL environment"
+                status=1
+              fi
+            done
+            exit $status
+        run: npx --yes "$EAS_CLI" env:exec "$CHANNEL" "$CHECK_EAS_ENV" --non-interactive
+
+      - name: Publish the OTA update
+        if: inputs.kind == 'update'
+        run: |
+          npx --yes "$EAS_CLI" update \
+            --channel "$CHANNEL" \
+            --environment "$CHANNEL" \
+            --message "${MESSAGE:-$(git log -1 --format=%s)}" \
+            --non-interactive
+
+      - name: Start the store build
+        if: inputs.kind == 'build'
+        run: npx --yes "$EAS_CLI" build --profile "$CHANNEL" --platform all --non-interactive --no-wait
