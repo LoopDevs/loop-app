@@ -33,6 +33,16 @@ test('a token left in secure storage from a deleted install is wiped and not rea
   assert.equal(secure.values.has('refresh'), false);
 });
 
+test('a token from a deleted install is wiped when this install only wrote a different key', async () => {
+  const secure = memoryStorage();
+  await new InstallScopedToken(secure, memoryStorage(), 'refresh.production').write('old');
+  const appStorage = memoryStorage();
+  await new InstallScopedToken(secure, appStorage, 'refresh.staging').write('new');
+  const production = new InstallScopedToken(secure, appStorage, 'refresh.production');
+  assert.equal(await production.read(), null);
+  assert.equal(secure.values.has('refresh.production'), false);
+});
+
 test('a token written after a fresh-install read is kept', async () => {
   const secure = memoryStorage();
   const token = new InstallScopedToken(secure, memoryStorage(), 'refresh');

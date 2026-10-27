@@ -5,22 +5,22 @@ export type TokenStorage = {
 };
 
 export class InstallScopedToken {
-  static readonly installedKey = 'session.installed';
-
   private readonly secure: TokenStorage;
   private readonly appStorage: TokenStorage;
   private readonly key: string;
+  private readonly installedKey: string;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(secure: TokenStorage, appStorage: TokenStorage, key: string) {
     this.secure = secure;
     this.appStorage = appStorage;
     this.key = key;
+    this.installedKey = `${key}.installed`;
   }
 
   read(): Promise<string | null> {
     return this.inTurn(async () => {
-      if ((await this.appStorage.getItem(InstallScopedToken.installedKey)) === null) {
+      if ((await this.appStorage.getItem(this.installedKey)) === null) {
         await this.secure.removeItem(this.key);
         return null;
       }
@@ -30,7 +30,7 @@ export class InstallScopedToken {
 
   write(token: string): Promise<void> {
     return this.inTurn(async () => {
-      await this.appStorage.setItem(InstallScopedToken.installedKey, 'true');
+      await this.appStorage.setItem(this.installedKey, 'true');
       await this.secure.setItem(this.key, token);
     });
   }
