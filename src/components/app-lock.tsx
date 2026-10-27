@@ -88,6 +88,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const [inForeground, setInForeground] = useState(AppState.currentState !== 'background');
   const [message, setMessage] = useState('');
   const authenticating = useRef(false);
+  const autoPrompted = useRef(false);
 
   useEffect(() => {
     let current = true;
@@ -113,6 +114,9 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       setInForeground(next !== 'background');
       if (next === 'background') {
+        if (!authenticating.current) {
+          autoPrompted.current = false;
+        }
         setLock((previous) => previous.backgrounded(now));
       } else if (next === 'active') {
         setLock((previous) => previous.foregrounded(now));
@@ -163,7 +167,12 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   }, [covered]);
 
   useEffect(() => {
-    if (lock.status === 'locked' && inForeground) {
+    if (lock.status !== 'locked') {
+      autoPrompted.current = false;
+      return;
+    }
+    if (inForeground && !autoPrompted.current) {
+      autoPrompted.current = true;
       void unlock();
     }
   }, [lock.status, inForeground, unlock]);
