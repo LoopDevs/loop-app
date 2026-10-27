@@ -47,42 +47,25 @@ test('fetch reads each stable through its pegged fiat market and skips USDC', as
   assert.equal(rates.usdPrice('XLM.GBPLOOP'), units.parse('1.3378'));
 });
 
-type Quote = { baseCurrency: string; price: string; quoteCurrency: string; retrieved: string; source: string; symbol: string };
-
-function quote(symbol: string, price: string, source: string): Quote {
-  return {
-    baseCurrency: symbol.slice(0, 3),
-    price,
-    quoteCurrency: 'USD',
-    retrieved: '2026-10-27T09:12:37.947885366Z',
-    source,
-    symbol,
-  };
+function quote(symbol: string, price: string, source: string) {
+  return { price, source, symbol };
 }
 
-test('a pair the ctx source does not quote falls back to the unfiltered answer, as the live service returns for GBPUSD', async () => {
+test('a pair the ctx source does not quote stays unpriced without asking other sources', async () => {
   const requested: string[] = [];
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = new URL(String(input));
     requested.push(url.search);
     const symbol = url.searchParams.get('symbol') ?? '';
-    if (symbol === 'GBPUSD') {
-      const quotes = url.searchParams.get('source') === 'ctx' ? [] : [quote('GBPUSD', '1.3316', 'kraken')];
-      return new Response(JSON.stringify(quotes), { status: 200 });
-    }
-    return new Response(JSON.stringify([quote(symbol, '1.1154', 'ctx-average')]), { status: 200 });
+    const quotes = url.searchParams.get('source') === 'ctx' ? [] : [quote(symbol, '1.3316', 'kraken')];
+    return new Response(JSON.stringify(quotes), { status: 200 });
   }) as typeof fetch;
-  const rates = await Rates.fetch(['XLM.GBPLOOP', 'XLM.EURC']);
-  assert.equal(rates.usdPrice('XLM.GBPLOOP'), units.parse('1.3316'));
-  assert.equal(rates.usdPrice('XLM.EURC'), units.parse('1.1154'));
-  assert.deepEqual(requested.sort(), [
-    '?symbol=EURUSD&source=ctx',
-    '?symbol=GBPUSD',
-    '?symbol=GBPUSD&source=ctx',
-  ]);
+  const rates = await Rates.fetch(['XLM.GBPLOOP']);
+  assert.equal(rates.usdPrice('XLM.GBPLOOP'), null);
+  assert.deepEqual(requested, ['?source=ctx&symbol=GBPUSD']);
 });
 
-test('a pair with no quote from any source stays unpriced', async () => {
+test('an empty answer leaves the currency unpriced', async () => {
   globalThis.fetch = (async () => new Response('[]', { status: 200 })) as typeof fetch;
   const rates = await Rates.fetch(['XLM.GBPLOOP']);
   assert.equal(rates.usdPrice('XLM.GBPLOOP'), null);

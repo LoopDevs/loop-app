@@ -4,7 +4,6 @@ import { Deadline } from './deadline.ts';
 
 export class Rates {
   static readonly source = 'https://rates.ctx.com/rates';
-  static readonly preferredQuoteSource = 'ctx';
   static readonly usd = 'USD';
   static readonly one = units.parse('1');
 
@@ -45,21 +44,14 @@ export class Rates {
   private static async fetchUsdPrice(currency: string): Promise<string | null> {
     const market = (Object.hasOwn(stablePeg, currency) && stablePeg[currency as PaymentCurrency]) || currency;
     try {
-      return (
-        (await Rates.fetchQuote(market, Rates.preferredQuoteSource)) ?? (await Rates.fetchQuote(market, null))
-      );
+      const quotes = await Deadline.run(Deadline.requestMs, async (signal) => {
+        const response = await fetch(`${Rates.source}?source=ctx&symbol=${market}${Rates.usd}`, { signal });
+        return response.ok ? ((await response.json()) as unknown) : null;
+      });
+      const price = Array.isArray(quotes) ? (quotes[0] as { price?: unknown } | undefined)?.price : undefined;
+      return typeof price === 'string' ? price : null;
     } catch {
       return null;
     }
-  }
-
-  private static async fetchQuote(market: string, source: string | null): Promise<string | null> {
-    const sourceParam = source === null ? '' : `&source=${source}`;
-    const quotes = await Deadline.run(Deadline.requestMs, async (signal) => {
-      const response = await fetch(`${Rates.source}?symbol=${market}${Rates.usd}${sourceParam}`, { signal });
-      return response.ok ? ((await response.json()) as unknown) : null;
-    });
-    const price = Array.isArray(quotes) ? (quotes[0] as { price?: unknown } | undefined)?.price : undefined;
-    return typeof price === 'string' ? price : null;
   }
 }
