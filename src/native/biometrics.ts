@@ -3,10 +3,8 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import type { AuthenticationResult } from '@/session/app-lock';
 
 export const biometrics = {
-  async isEnrolled(): Promise<boolean> {
-    return (
-      (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync())
-    );
+  async hasScreenLock(): Promise<boolean> {
+    return (await LocalAuthentication.getEnrolledLevelAsync()) !== LocalAuthentication.SecurityLevel.NONE;
   },
 
   async authenticate(promptMessage: string): Promise<AuthenticationResult> {

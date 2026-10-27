@@ -1,15 +1,18 @@
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const enabledKey = 'appLock.enabled';
+import { InstallScopedToken } from '@/session/install-scoped-token';
+import { secureTokenStorage } from '@/session/secure-token-storage';
+
+const enabled = new InstallScopedToken(secureTokenStorage, AsyncStorage, 'appLock.enabled');
 
 export const appLockStore = {
   async readEnabled(): Promise<boolean> {
-    return (await SecureStore.getItemAsync(enabledKey)) === 'true';
+    return (await enabled.read()) === 'true';
   },
   writeEnabled(): Promise<void> {
-    return SecureStore.setItemAsync(enabledKey, 'true');
+    return enabled.write('true');
   },
   clear(): Promise<void> {
-    return SecureStore.deleteItemAsync(enabledKey);
+    return enabled.clear();
   },
 };
