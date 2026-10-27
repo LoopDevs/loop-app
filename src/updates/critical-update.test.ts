@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { criticalIndexOf, fetchedCriticalIndex, isCriticalUpdate, ReloadGate } from './critical-update.ts';
+import { criticalIndexOf, fetchedCriticalIndex, isCriticalUpdate, ReloadGate, reloadsNow } from './critical-update.ts';
 
 const manifestWith = (criticalIndex?: number) => ({
   extra: { expoClient: { extra: criticalIndex === undefined ? {} : { criticalIndex } } },
@@ -29,6 +29,14 @@ test('an update is critical only when its index is higher than the running one',
   assert.equal(isCriticalUpdate(manifestWith(1), {}), true);
   assert.equal(isCriticalUpdate(manifestWith(1), { criticalIndex: 1 }), false);
   assert.equal(isCriticalUpdate(manifestWith(0), { criticalIndex: 1 }), false);
+});
+
+test('a roll back to the embedded build reloads now, a non-critical new update waits for the next launch', () => {
+  const running = { criticalIndex: 1 };
+  assert.equal(reloadsNow({ isNew: false, isRollBackToEmbedded: true }, running), true);
+  assert.equal(reloadsNow({ isNew: true, isRollBackToEmbedded: false, manifest: manifestWith(1) }, running), false);
+  assert.equal(reloadsNow({ isNew: true, isRollBackToEmbedded: false, manifest: manifestWith(2) }, running), true);
+  assert.equal(reloadsNow({ isNew: false, isRollBackToEmbedded: false }, running), false);
 });
 
 test('a client that skipped critical update 1 reloads on update 2', () => {
