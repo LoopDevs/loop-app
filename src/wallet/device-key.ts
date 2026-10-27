@@ -49,12 +49,8 @@ export class DeviceKey {
     return `device.signer.${userId}`;
   }
 
-  static readonly sharedSecretName = 'device.signer.secret';
-  static readonly sharedPublicKeyName = 'device.signer.public';
-
-  async publicKey(): Promise<string | null> {
-    const own = await this.storage.read(this.publicKeyName, false);
-    return own ?? this.storage.read(DeviceKey.sharedPublicKeyName, false);
+  publicKey(): Promise<string | null> {
+    return this.storage.read(this.publicKeyName, false);
   }
 
   async create(): Promise<string> {
@@ -71,12 +67,9 @@ export class DeviceKey {
   }
 
   async sign(digest: Uint8Array): Promise<string> {
-    const ownPublicKey = await this.storage.read(this.publicKeyName, false);
-    const secretName = ownPublicKey ? this.secretName : DeviceKey.sharedSecretName;
-    const publicKeyName = ownPublicKey ? this.publicKeyName : DeviceKey.sharedPublicKeyName;
-    const secret = await this.storage.read(secretName, true);
+    const secret = await this.storage.read(this.secretName, true);
     if (!secret) {
-      await this.storage.remove(publicKeyName);
+      await this.storage.remove(this.publicKeyName);
       throw new MissingDeviceSecret();
     }
     return base64.encode(ed25519.sign(digest, base64.decode(secret)));

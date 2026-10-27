@@ -14,7 +14,7 @@ export const deviceSigner = {
 
   async create(userId: string): Promise<string> {
     keepStorage();
-    const existing = await readOwn(userId);
+    const existing = await read(userId);
     if (existing) {
       return exportPublicKey(existing);
     }
@@ -96,16 +96,9 @@ async function transact<T>(
   });
 }
 
-const sharedKeyName = 'device';
-
-function readOwn(userId: string): Promise<CryptoKeyPair | undefined> {
+function read(userId: string): Promise<CryptoKeyPair | undefined> {
   const keyName = DeviceKey.storageName(userId);
   return transact('readonly', (store) => store.get(keyName));
-}
-
-async function read(userId: string): Promise<CryptoKeyPair | undefined> {
-  const own = await readOwn(userId);
-  return own ?? transact('readonly', (store) => store.get(sharedKeyName));
 }
 
 let storageKept: Promise<boolean> | null = null;
@@ -123,7 +116,7 @@ async function writeIfAbsent(userId: string, keyPair: CryptoKeyPair): Promise<Cr
     await transact('readwrite', (store) => store.add(keyPair, keyName));
     return keyPair;
   } catch (error) {
-    const existing = error instanceof DOMException && error.name === 'ConstraintError' ? await readOwn(userId) : null;
+    const existing = error instanceof DOMException && error.name === 'ConstraintError' ? await read(userId) : null;
     if (!existing) {
       throw error;
     }
