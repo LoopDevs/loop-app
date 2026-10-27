@@ -187,7 +187,10 @@ test('a wrong email code shows the code message', async () => {
 
 test('a social sign-in refusal names the provider', async () => {
   respond = () => json({ error: 'ErrOAuthEmailUnverified' }, 400);
-  await assert.rejects(ctx.signInWithOAuth('google', 'id-token'), /Google hasn't verified the email/);
+  await assert.rejects(
+    ctx.signInWithOAuth('google', { idToken: 'id-token' }),
+    /Google hasn't verified the email/,
+  );
   assert.deepEqual(sent[0].body, { provider: 'google', idToken: 'id-token' });
   assert.equal(sent[0].url, `${apiUrl}/login/oauth`);
 });
