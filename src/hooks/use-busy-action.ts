@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { haptics } from '@/native/haptics';
 
@@ -23,7 +23,22 @@ export function useBusyAction() {
     }
   }, []);
 
-  const run = useCallback((action: () => Promise<void>) => track(action, () => haptics.error()), [track]);
+  const running = useRef(false);
+
+  const run = useCallback(
+    async (action: () => Promise<void>) => {
+      if (running.current) {
+        return;
+      }
+      running.current = true;
+      try {
+        await track(action, () => haptics.error());
+      } finally {
+        running.current = false;
+      }
+    },
+    [track],
+  );
 
   const load = useCallback((action: () => Promise<void>) => track(action, () => undefined), [track]);
 
