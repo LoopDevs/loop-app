@@ -15,7 +15,7 @@ type OnTheWayAccount = Pick<Account, 'wallet' | 'payouts' | 'onTheWay'>;
 
 type CashbackRouting = Parameters<Account['onTheWay']>[0];
 
-export type Coverage ={ kind: 'wallet' } | { kind: 'savings'; fromSavings: bigint } | { kind: 'short' };
+export type Coverage = { kind: 'wallet' } | { kind: 'savings'; fromSavings: bigint } | { kind: 'short' };
 
 export class Holdings {
   static readonly withdrawSlippageBasisPoints = 100n;
@@ -49,7 +49,10 @@ export class Holdings {
 
   static paidElsewhere(account: Pick<Account, 'payouts'>, address: string): boolean {
     return account.payouts.some(
-      (payout) => payout.isInFlight() && payout.address !== undefined && payout.address !== address,
+      (payout) =>
+        (payout.isInFlight() || payout.status === 'complete') &&
+        payout.address !== undefined &&
+        payout.address !== address,
     );
   }
 

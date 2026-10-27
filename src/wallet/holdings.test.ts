@@ -182,14 +182,15 @@ test('a payout to another address adds nothing to the total', () => {
   assert.equal(held.totalIn('USD'), units.parse('4'));
 });
 
-test('an in-flight payout to another wallet is reported as paid elsewhere', () => {
-  assert.equal(Holdings.paidElsewhere(accountOf([], [payout({ address: 'GELSEWHERE' })]), walletAddress), true);
-  assert.equal(Holdings.paidElsewhere(accountOf([], [payout({})]), walletAddress), false);
-  assert.equal(Holdings.paidElsewhere(accountOf([], [payout({ address: undefined })]), walletAddress), false);
-  assert.equal(
-    Holdings.paidElsewhere(accountOf([], [payout({ address: 'GELSEWHERE', status: 'complete' })]), walletAddress),
-    false,
-  );
+test('an in-flight or completed payout to another wallet is reported as paid elsewhere', () => {
+  const paidElsewhere = (overrides: Parameters<typeof payout>[0]) =>
+    Holdings.paidElsewhere(accountOf([], [payout(overrides)]), walletAddress);
+  assert.equal(paidElsewhere({ address: 'GELSEWHERE' }), true);
+  assert.equal(paidElsewhere({ address: 'GELSEWHERE', status: 'complete' }), true);
+  assert.equal(paidElsewhere({}), false);
+  assert.equal(paidElsewhere({ status: 'complete' }), false);
+  assert.equal(paidElsewhere({ address: undefined }), false);
+  assert.equal(paidElsewhere({ address: 'GELSEWHERE', status: 'cancelled' }), false);
 });
 
 test('a ledger balance that does not parse is skipped and the rest still count', () => {

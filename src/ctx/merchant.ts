@@ -2,11 +2,17 @@ import { money } from '../money.ts';
 import { units } from '../stellar/units.ts';
 import { invalidAmountMessage, normalizeAmount } from './amount-input.ts';
 import type { GiftCard, GiftCardInfo, MerchantJson, MerchantRedeemLocation, MerchantRedeemType } from './client.ts';
+import { cashbackState } from './gift-card-status.ts';
 
 const basisPointsPerWhole = 10_000n;
 const hueCount = 360;
 
 type QuotedOrder = Pick<GiftCard, 'status' | 'cardFiatAmount' | 'cardFiatCurrency' | 'userDiscountBasisPoints'>;
+
+type CashbackOrder = Pick<
+  GiftCard,
+  'cashbackAmount' | 'cashbackCurrency' | 'cashbackCredited' | 'cashbackReversed'
+>;
 
 function currencyDigits(currency: string): number {
   try {
@@ -39,6 +45,16 @@ export class CashbackRate {
     const rate = new CashbackRate(basisPoints);
     const amount = rate.on(order.cardFiatAmount, order.cardFiatCurrency, locale);
     return amount && `About ${amount} (${rate.figure(locale)})`;
+  }
+
+  static shownFor(order: QuotedOrder & CashbackOrder, locale?: string): string | null {
+    const state = cashbackState(order);
+    const quoted = CashbackRate.quotedStatuses.includes(order.status) && !order.cashbackReversed;
+    const counts = state === 'pending' || state === 'credited' || (quoted && Number(order.cashbackAmount) > 0);
+    if (counts && order.cashbackAmount && order.cashbackCurrency) {
+      return money.ctx(order.cashbackAmount, order.cashbackCurrency, locale);
+    }
+    return CashbackRate.quotedFor(order, locale);
   }
 
   figure(locale?: string): string {

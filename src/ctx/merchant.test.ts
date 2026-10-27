@@ -76,6 +76,22 @@ test('an order without a quoted rate, a zero rate or a closed order shows no quo
   assert.equal(CashbackRate.quotedFor({ ...order, status: 'expired' }, 'en-US'), null);
 });
 
+test('an order shows the cashback amount CTX set on it while that cashback still counts', () => {
+  const withAmount = { ...order, cashbackAmount: '0.80', cashbackCurrency: 'USD' };
+  assert.equal(CashbackRate.shownFor(withAmount, 'en-US'), '$0.80');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'paid' }, 'en-US'), '$0.80');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'fulfilled' }, 'en-US'), '$0.80');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'fulfilled', cashbackCredited: true }, 'en-US'), '$0.80');
+});
+
+test('a zero, reversed or closed-order cashback amount is not shown as cashback', () => {
+  const withAmount = { ...order, cashbackAmount: '0.80', cashbackCurrency: 'USD' };
+  assert.equal(CashbackRate.shownFor({ ...withAmount, cashbackAmount: '0' }, 'en-US'), 'About $0.75 (3%)');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'fulfilled', cashbackReversed: true }, 'en-US'), null);
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'expired' }, 'en-US'), null);
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'rejected' }, 'en-US'), null);
+});
+
 test('rate label shows up to two decimals', () => {
   assert.equal(new Merchant(json).rateLabel('en-US'), '2.5% cashback');
   assert.equal(new Merchant({ ...json, userDiscount: 1234 }).rateLabel('en-US'), '12.34% cashback');

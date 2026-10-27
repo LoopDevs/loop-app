@@ -13,7 +13,7 @@ const pricedCurrencies = new Set<string>([
   ...offeredCurrencies,
 ]);
 
-const paidElsewhereProblem = 'Some of your cashback is going somewhere other than this balance. Contact support.';
+const paidElsewhereProblem = 'Some of your cashback was paid somewhere other than this balance. Contact support.';
 
 export type HoldingsView = {
   holdings: Holdings;

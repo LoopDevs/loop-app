@@ -115,10 +115,10 @@ const pendingTopUps = new PendingWithdrawals(AsyncStorage);
 const inFlightPayments = new InFlightPayments();
 const oneTapBuy = new OneTapBuy();
 const noRates = new Rates(new Map());
-const purchaseTermsKey = 'loop.purchaseTermsAccepted';
+const purchaseTermsKey = (userId: string) => `loop.purchaseTermsAccepted.${userId}`;
 const purchaseTerms = [
   "Once your gift card is delivered, you can't cancel or return it, except where the law gives you that right. If a card is faulty or never arrives, contact support and we will put it right.",
-  'Cashback is added to your balance once your gift card is delivered.',
+  'Cashback is credited to your Loop account once your gift card is delivered.',
   "Each gift card is subject to the brand's own terms, including where it can be used and any expiry date.",
 ];
 
@@ -135,16 +135,25 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const [confirmPrice, setConfirmPrice] = useState<bigint | null>(null);
   const [spent, setSpent] = useState(0n);
   const [cardRates, setCardRates] = useState<Rates | null>(null);
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsAcceptedBy, setTermsAcceptedBy] = useState<string | null>(null);
   const [showingTerms, setShowingTerms] = useState(false);
   const { view, refresh } = useHoldings(wallet);
   const toast = useToast();
 
   useEffect(() => {
-    AsyncStorage.getItem(purchaseTermsKey)
-      .then((accepted) => setTermsAccepted(accepted === 'yes'))
-      .catch(() => setTermsAccepted(false));
-  }, []);
+    let current = true;
+    const userId = wallet.userId;
+    AsyncStorage.getItem(purchaseTermsKey(userId))
+      .catch(() => null)
+      .then((accepted) => {
+        if (current && accepted === 'yes') {
+          setTermsAcceptedBy(userId);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [wallet.userId]);
 
   const currencies = offeredTokens.map((token) => token.currency);
   const stable = view?.stable ?? Rates.usd;
@@ -373,12 +382,9 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         return { state: recorded, resumed: true };
       }
       if (topUpPrice !== null) {
-        const current = await ctx.giftCard(giftCard.id);
-        if (current.status === 'expired') {
-          return { state: { kind: 'priceExpired' }, resumed: false };
-        }
-        if (OneTapBuy.paymentStarted(current, false)) {
-          return { state: { kind: 'confirming', txId: current.paymentCryptoTxId }, resumed: true };
+        const settled = OneTapBuy.beforeTopUp(await ctx.giftCard(giftCard.id));
+        if (settled) {
+          return settled;
         }
         const stopped = await topUpFromSavings(giftCard, topUpPrice);
         if (stopped) {
@@ -446,6 +452,9 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         if (view.celebrate) {
           haptics.success();
         }
+        if (view.notice) {
+          setMessage(view.notice);
+        }
         if (follow && mounted.current) {
           void followOrder(shownOrder, shownSent);
         }
@@ -507,7 +516,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   };
 
   const startBuy = () => {
-    if (termsAccepted) {
+    if (termsAcceptedBy === wallet.userId) {
       buy();
       return;
     }
@@ -515,9 +524,10 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   };
 
   const agreeAndBuy = () => {
-    setTermsAccepted(true);
+    const userId = wallet.userId;
+    setTermsAcceptedBy(userId);
     setShowingTerms(false);
-    AsyncStorage.setItem(purchaseTermsKey, 'yes').catch(() => setTermsAccepted(false));
+    AsyncStorage.setItem(purchaseTermsKey(userId), 'yes').catch(() => setTermsAcceptedBy(null));
     buy();
   };
 
@@ -541,7 +551,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const tryAgain = () => {
     rollBack();
-    buy();
+    startBuy();
   };
 
   const finish = () => {
@@ -654,7 +664,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           disabled={!canBuy}
         />
       )}
-      {message !== '' && <Notice message={message} actionLabel="Try again" onAction={buy} disabled={!canBuy} />}
+      {message !== '' && <Notice message={message} actionLabel="Try again" onAction={startBuy} disabled={!canBuy} />}
     </PurchaseCard>
   );
 }
@@ -817,13 +827,6 @@ type OrderViewProps = {
   onDone: () => void;
 };
 
-function orderCashback(order: GiftCard): string | null {
-  if (order.cashbackAmount && order.cashbackCurrency) {
-    return money.ctx(order.cashbackAmount, order.cashbackCurrency);
-  }
-  return CashbackRate.quotedFor(order);
-}
-
 function OrderView({
   merchant,
   cardAmount,
@@ -837,7 +840,7 @@ function OrderView({
   onDone,
 }: OrderViewProps) {
   const theme = useTheme();
-  const cashback = order ? orderCashback(order) : null;
+  const cashback = order ? CashbackRate.shownFor(order) : null;
   const sentUnconfirmed = payment.kind === 'confirming';
   const outcome = order ? outcomeText(order, sentUnconfirmed) : null;
   const ready = order?.status === 'fulfilled';
