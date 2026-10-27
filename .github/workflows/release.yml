@@ -52,6 +52,17 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Check the EAS project id and the update signing certificate
+        run: |
+          if ! jq -e '.expo.extra.eas.projectId | type == "string" and length > 0' app.json > /dev/null; then
+            echo "::error::app.json has no expo.extra.eas.projectId, so builds would ship without an update URL. Run eas init and commit the project id."
+            exit 1
+          fi
+          if [ ! -s certs/certificate.pem ]; then
+            echo "::error::certs/certificate.pem is missing, so builds would accept unsigned updates. Commit the certificate that pairs with EXPO_UPDATES_PRIVATE_KEY."
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -74,7 +85,7 @@ jobs:
               status=1
             fi
             case "$CHANNEL" in
-              production) required="EXPO_PUBLIC_SENTRY_DSN EXPO_PUBLIC_APPLE_SIGN_IN EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID" ;;
+              production) required="EXPO_PUBLIC_SENTRY_DSN SENTRY_ORG SENTRY_PROJECT EXPO_PUBLIC_APPLE_SIGN_IN EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID" ;;
               *) required="" ;;
             esac
             for key in $required; do
@@ -86,14 +97,32 @@ jobs:
             exit $status
         run: npx --yes "$EAS_CLI" env:exec "$CHANNEL" "$CHECK_EAS_ENV" --non-interactive
 
-      - name: Publish the OTA update
+      - name: Publish the signed OTA update
         if: inputs.kind == 'update'
+        env:
+          LOOP_CRITICAL_INDEX: ${{ vars.LOOP_CRITICAL_INDEX }}
+          EXPO_UPDATES_PRIVATE_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
         run: |
+          if [ -z "$LOOP_CRITICAL_INDEX" ] || [ -z "$EXPO_UPDATES_PRIVATE_KEY" ]; then
+            echo "::error::The $CHANNEL environment needs the LOOP_CRITICAL_INDEX variable and the EXPO_UPDATES_PRIVATE_KEY secret."
+            exit 1
+          fi
+          key_path="$RUNNER_TEMP/expo-updates-private-key.pem"
+          (umask 077 && printf '%s\n' "$EXPO_UPDATES_PRIVATE_KEY" > "$key_path")
           npx --yes "$EAS_CLI" update \
             --channel "$CHANNEL" \
             --environment "$CHANNEL" \
             --message "${MESSAGE:-$(git log -1 --format=%s)}" \
+            --private-key-path "$key_path" \
             --non-interactive
+
+      - name: Upload the update source maps to Sentry
+        if: inputs.kind == 'update' && inputs.channel == 'production'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: npx sentry-expo-upload-sourcemaps dist
 
       - name: Start the store build
         if: inputs.kind == 'build'
