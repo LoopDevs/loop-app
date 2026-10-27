@@ -1,9 +1,12 @@
+import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/form';
 import { Wordmark } from '@/components/wordmark';
+import { loopLinks } from '@/constants/loop-links';
 import { FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -47,6 +50,18 @@ export function MessageScreen({ title, detail, message, children }: MessageScree
         </View>
       </SafeAreaView>
     </View>
+  );
+}
+
+export function ContactSupportButton({ subject }: { subject: string }) {
+  return (
+    <Button
+      label="Email support"
+      variant="quiet"
+      onPress={() => {
+        void Linking.openURL(loopLinks.supportMail(subject));
+      }}
+    />
   );
 }
 

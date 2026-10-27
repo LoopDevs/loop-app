@@ -8,7 +8,18 @@ import {
   giftCardStatusLabel,
   isHiddenFromHistory,
   outcomeText,
+  pollDelayMs,
 } from './gift-card-status.ts';
+
+test('order polling starts at 3s, doubles every 10 polls and stops growing at 30s', () => {
+  assert.equal(pollDelayMs(0), 3000);
+  assert.equal(pollDelayMs(9), 3000);
+  assert.equal(pollDelayMs(10), 6000);
+  assert.equal(pollDelayMs(20), 12000);
+  assert.equal(pollDelayMs(30), 24000);
+  assert.equal(pollDelayMs(40), 30000);
+  assert.equal(pollDelayMs(500), 30000);
+});
 
 test('every gift card status has a plain label', () => {
   assert.equal(giftCardStatusLabel('unpaid'), 'Waiting for payment');

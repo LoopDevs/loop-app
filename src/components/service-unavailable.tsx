@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 import { Button } from '@/components/form';
-import { MessageScreen } from '@/components/message-screen';
+import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
 import { ctx, CtxError } from '@/ctx/client';
 import {
   blockingServiceState,
@@ -39,6 +39,7 @@ export function ServiceUnavailable({ state, onRecovered }: Props) {
   return (
     <MessageScreen title={serviceStateMessages[state]} message={message}>
       <Button label="Try again" variant="primary" onPress={tryAgain} disabled={busy} />
+      <ContactSupportButton subject="Loop unavailable" />
     </MessageScreen>
   );
 }

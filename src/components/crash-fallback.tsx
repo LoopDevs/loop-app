@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { Button } from '@/components/form';
-import { MessageScreen } from '@/components/message-screen';
+import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
 import { StaleBuild } from '@/ops/stale-build';
 
 export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () => void }) {
@@ -18,6 +18,7 @@ export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () 
       title="Something went wrong"
       detail="A payment already sent is not lost. Check Wallet for its status.">
       <Button label="Try again" variant="primary" onPress={retry} />
+      <ContactSupportButton subject="Loop app error" />
     </MessageScreen>
   );
 }

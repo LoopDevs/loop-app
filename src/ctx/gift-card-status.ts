@@ -3,6 +3,11 @@ import type { GiftCard } from '@/ctx/client';
 export type CashbackState = 'none' | 'pending' | 'credited' | 'reversed';
 
 export const pollIntervalMs = 3000;
+const maxPollIntervalMs = 30000;
+
+export function pollDelayMs(polls: number): number {
+  return Math.min(maxPollIntervalMs, pollIntervalMs * 2 ** Math.floor(polls / 10));
+}
 export const settledStatuses: GiftCard['status'][] = ['fulfilled', 'rejected', 'refunded', 'expired'];
 export const unpaidStatuses: GiftCard['status'][] = ['unpaid'];
 
