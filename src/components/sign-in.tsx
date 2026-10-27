@@ -318,11 +318,11 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
 
   const signInWith = (provider: SocialProvider) =>
     run(async () => {
-      const idToken = await socialSignIn.idToken(provider);
-      if (!idToken) {
+      const credential = await socialSignIn.credential(provider);
+      if (!credential) {
         return;
       }
-      await ctx.signInWithOAuth(provider, idToken);
+      await ctx.signInWithOAuth(provider, credential);
       await continueToWallet();
     });
 

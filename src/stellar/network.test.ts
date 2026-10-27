@@ -9,6 +9,14 @@ test('the dollar issuer is the one behind the dollar token contract', () => {
   assert.equal(new Asset('USDC', network.usdcIssuer).contractId(network.passphrase), network.usdc);
 });
 
+test('the network lists distinct https RPC endpoints to fail over between', () => {
+  assert.ok(network.rpcUrls.length >= 2);
+  assert.equal(new Set(network.rpcUrls).size, network.rpcUrls.length);
+  for (const url of network.rpcUrls) {
+    assert.equal(new URL(url).protocol, 'https:');
+  }
+});
+
 test('offered tokens are the network tokens on the offered list', () => {
   assert.deepEqual(
     offeredTokens.map((token) => token.currency),

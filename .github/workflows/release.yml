@@ -86,6 +86,7 @@ jobs:
             fi
             case "$CHANNEL" in
               production) required="EXPO_PUBLIC_SENTRY_DSN SENTRY_ORG SENTRY_PROJECT EXPO_PUBLIC_APPLE_SIGN_IN EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID" ;;
+              preview) required="EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID" ;;
               *) required="" ;;
             esac
             for key in $required; do

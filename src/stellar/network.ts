@@ -27,7 +27,7 @@ export type Token = {
 export const onlyPaymentCurrency: PaymentCurrency | null = null;
 
 export type StellarNetwork = {
-  rpcUrl: string;
+  rpcUrls: string[];
   passphrase: string;
   friendbotUrl: string | null;
   factory: string;
@@ -43,7 +43,7 @@ export type StellarNetwork = {
 
 const networks: Record<StellarNetworkName, StellarNetwork> = {
   testnet: {
-    rpcUrl: 'https://soroban-testnet.stellar.org',
+    rpcUrls: ['https://soroban-testnet.stellar.org', 'https://rpc.ankr.com/stellar_testnet_soroban'],
     passphrase: Networks.TESTNET,
     friendbotUrl: 'https://friendbot.stellar.org',
     factory: 'CCNMXHVK6ODB6GY3Z3ZU5K3RFN5NJ6AQLTVGXUNWTCFVHLACIR2BLLHZ',
@@ -62,7 +62,7 @@ const networks: Record<StellarNetworkName, StellarNetwork> = {
     usdcVault: 'CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN',
   },
   mainnet: {
-    rpcUrl: 'https://mainnet.sorobanrpc.com',
+    rpcUrls: ['https://mainnet.sorobanrpc.com', 'https://soroban-rpc.mainnet.stellar.gateway.fm'],
     passphrase: Networks.PUBLIC,
     friendbotUrl: null,
     factory: 'CCBDANQFVTH3AX3IN7KOWPHAGS44MRWBM6JTPEP3MJFY4MATSD4M2G5S',
