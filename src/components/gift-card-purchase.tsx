@@ -33,7 +33,6 @@ import { paymentLock } from '@/ctx/payment-lock';
 import { PaymentSender, type SendOutcome } from '@/ctx/payment-sender';
 import {
   canPay,
-  landingClosed,
   sentTransactionOutcome,
   type PaymentState,
   type PayRejection,
@@ -80,13 +79,13 @@ async function sentPaymentFailure(
       : null;
   }
   const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
-  if (expiryLedger === undefined || !token || !landingClosed(await soroban.latestLedger(), expiryLedger)) {
+  if (expiryLedger === undefined || !token) {
     return null;
   }
-  if (await wallet.paymentLanded(token, await signedTransfer(giftCard), expiryLedger)) {
-    return null;
+  if (await wallet.paymentMissing(token, await signedTransfer(giftCard), expiryLedger)) {
+    return { kind: 'failed' };
   }
-  return { kind: 'failed' };
+  return null;
 }
 
 async function signedTransfer(giftCard: GiftCard): Promise<SignedTransfer | null> {
