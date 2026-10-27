@@ -55,3 +55,6 @@ example
 
 # audit reports and recipe
 /docs/audit/
+
+# design-tool state
+/.impeccable/
