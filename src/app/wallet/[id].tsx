@@ -49,7 +49,7 @@ export default function GiftCardScreen() {
   const [attempt, setAttempt] = useState(0);
   const readSession = useSessionOwner();
   const { onScroll } = useScrimScroll();
-  const { openSignIn } = useSignIn();
+  const { openSignIn, signedIn } = useSignIn();
   const { wide } = usePageLayout();
   useOnSignIn(() => {
     setGiftCard(null);
@@ -117,6 +117,8 @@ export default function GiftCardScreen() {
     setAttempt((count) => count + 1);
   };
 
+  const shownGiftCard = signedIn === false ? null : giftCard;
+
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
@@ -124,9 +126,9 @@ export default function GiftCardScreen() {
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.content}>
-        {(!giftCard || message !== '') && (
+        {(!shownGiftCard || message !== '') && (
           <View style={[styles.body, styles.status, wide && styles.wideStatus]}>
-            {!giftCard && !message && <OrderDetailSkeleton />}
+            {!shownGiftCard && !message && <OrderDetailSkeleton />}
             {message !== '' &&
               (message === signInMessage ? (
                 <View style={styles.section}>
@@ -138,7 +140,7 @@ export default function GiftCardScreen() {
               ))}
           </View>
         )}
-        {giftCard && <GiftCardSummary giftCard={giftCard} wide={wide} />}
+        {shownGiftCard && <GiftCardSummary giftCard={shownGiftCard} wide={wide} />}
         <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
