@@ -7,8 +7,10 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CountryMenu } from '@/components/country-menu';
 import { SignInButton, useSignIn } from '@/components/sign-in';
@@ -20,6 +22,16 @@ import { PageLayout } from '@/hooks/page-layout';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useMarket } from '@/hooks/use-market';
 import { useTheme } from '@/hooks/use-theme';
+
+type TabIcon = Exclude<SymbolViewProps['name'], string>;
+
+const tabIcons = {
+  home: { ios: 'house.fill', android: 'home', web: 'home' },
+  shop: { ios: 'bag.fill', android: 'shopping_bag', web: 'shopping_bag' },
+  savings: { ios: 'leaf', android: 'savings', web: 'savings' },
+  wallet: { ios: 'wallet.pass', android: 'account_balance_wallet', web: 'account_balance_wallet' },
+  profile: { ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' },
+} satisfies Record<string, TabIcon>;
 
 export default function AppTabs() {
   const { wide } = usePageLayout();
@@ -39,19 +51,19 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="home" href="/" resetOnFocus asChild>
-            <TabButton>Home</TabButton>
+            <TabButton icon={tabIcons.home}>Home</TabButton>
           </TabTrigger>
           <TabTrigger name="shop" href="/shop" resetOnFocus asChild>
-            <TabButton>Shop</TabButton>
+            <TabButton icon={tabIcons.shop}>Shop</TabButton>
           </TabTrigger>
           <TabTrigger name="savings" href="/savings" resetOnFocus asChild>
-            <TabButton>Savings</TabButton>
+            <TabButton icon={tabIcons.savings}>Savings</TabButton>
           </TabTrigger>
           <TabTrigger name="wallet" href="/wallet" resetOnFocus asChild>
-            <TabButton>Wallet</TabButton>
+            <TabButton icon={tabIcons.wallet}>Wallet</TabButton>
           </TabTrigger>
           <TabTrigger name="profile" href="/profile" resetOnFocus asChild>
-            <TabButton>Profile</TabButton>
+            <TabButton icon={tabIcons.profile}>Profile</TabButton>
           </TabTrigger>
           <TabTrigger name="site" href="/about" style={styles.hiddenTab} />
         </CustomTabList>
@@ -61,24 +73,28 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: Omit<TabTriggerSlotProps, 'ref'>) {
+type TabButtonProps = Omit<TabTriggerSlotProps, 'ref'> & { icon: TabIcon };
+
+export function TabButton({ children, icon, isFocused, ...props }: TabButtonProps) {
   const { wide } = usePageLayout();
   const theme = useTheme();
   const currentPage = isFocused ? ({ 'aria-current': 'page' } as object) : {};
+  const color = isFocused ? (wide ? theme.text : theme.accent) : theme.textSecondary;
   return (
     <Pressable
       {...props}
       {...currentPage}
       style={({ pressed }) => [
         styles.tabButton,
-        !wide && styles.tabButtonNarrow,
+        wide ? styles.tabButtonWide : styles.tabButtonNarrow,
         wide && isFocused && { backgroundColor: theme.backgroundSelected },
         !isFocused && pressed && { backgroundColor: theme.backgroundSubtle },
       ]}>
+      {wide ? null : <SymbolView name={icon} size={24} tintColor={color} />}
       <Text
         style={[
-          styles.tabLabel,
-          { color: isFocused ? (wide ? theme.text : theme.accent) : theme.textSecondary },
+          wide ? styles.tabLabel : styles.tabLabelNarrow,
+          { color },
           isFocused && styles.tabLabelFocused,
         ]}>
         {children}
@@ -89,12 +105,20 @@ export function TabButton({ children, isFocused, ...props }: Omit<TabTriggerSlot
 
 export function CustomTabList(props: TabListProps) {
   const { wide, gutter } = usePageLayout();
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
   if (!wide) {
     return (
       <View
         {...props}
-        style={[styles.bottomBar, { backgroundColor: theme.chrome, borderTopColor: theme.border }]}>
+        style={[
+          styles.bottomBar,
+          {
+            backgroundColor: theme.chrome,
+            borderTopColor: theme.border,
+            paddingBottom: insets.bottom + Spacing.one,
+          },
+        ]}>
         {props.children}
       </View>
     );
@@ -199,29 +223,42 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   bottomBar: {
+    position: 'sticky',
+    bottom: 0,
+    zIndex: 10,
     flexDirection: 'row',
     borderTopWidth: 1,
     paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.two,
+    paddingTop: Spacing.one,
     gap: Spacing.one,
   },
   tabButton: {
-    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
     transitionProperty: 'background-color',
     transitionDuration: `${Motion.feedback}ms`,
   },
+  tabButtonWide: {
+    minHeight: 44,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+  },
   tabButtonNarrow: {
     flex: 1,
-    paddingHorizontal: Spacing.one,
+    minHeight: 52,
+    gap: Spacing.half,
+    paddingVertical: Spacing.one,
+    borderRadius: Radius.medium,
   },
   tabLabel: {
     fontFamily: FontFamily.medium,
     fontSize: 14,
     lineHeight: 20,
+  },
+  tabLabelNarrow: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    lineHeight: 14,
   },
   tabLabelFocused: {
     fontFamily: FontFamily.semibold,
