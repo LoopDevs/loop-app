@@ -416,8 +416,8 @@ class CtxClient {
     return result;
   }
 
-  deployWallet(body: DeployWalletIn): Promise<WalletLink> {
-    return this.userRequest('POST', '/wallets/deploy', body);
+  deployWallet(userId: string, body: DeployWalletIn): Promise<WalletLink> {
+    return this.requestAs(userId, 'POST', '/wallets/deploy', body);
   }
 
   buildTransaction(walletId: string, intent: SmartWalletIntent): Promise<BuiltTransaction> {
@@ -444,8 +444,11 @@ class CtxClient {
   }
 
   private async userRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const accessToken = await this.auth.requireAccessToken();
-    return this.auth.sessionRequest<T>(method, `/users/${this.userIdFrom(accessToken)}${path}`, body);
+    return this.requestAs<T>(await this.userId(), method, path, body);
+  }
+
+  private requestAs<T>(userId: string, method: string, path: string, body?: unknown): Promise<T> {
+    return this.auth.sessionRequest<T>(method, `/users/${userId}${path}`, body);
   }
 
   private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {

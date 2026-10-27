@@ -1,6 +1,7 @@
 import { xdr } from '@stellar/stellar-sdk';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 import {
   ctx,
@@ -12,6 +13,8 @@ import {
 import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
+import type { TokenStorage } from '@/session/install-scoped-token';
+import { secureTokenStorage } from '@/session/secure-token-storage';
 import { network, type Token } from '@/stellar/network';
 import { holdCriticalReload } from '@/updates/update-checker';
 import { i128, soroban } from '@/stellar/soroban';
@@ -58,6 +61,11 @@ export class SmartWallet {
   ) {}
 
   private static readonly creation = new WalletCreation<SmartWallet>();
+  private static readonly pinStorage: TokenStorage = Platform.OS === 'web' ? AsyncStorage : secureTokenStorage;
+
+  private static pinFor(userId: string): WalletPin {
+    return new WalletPin(SmartWallet.pinStorage, userId, () => ctx.userId());
+  }
 
   static async load(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
@@ -65,7 +73,7 @@ export class SmartWallet {
     if ((await ctx.userId()) !== userId) {
       return SmartWallet.load();
     }
-    const pin = new WalletPin(AsyncStorage, userId);
+    const pin = SmartWallet.pinFor(userId);
     const [links, pinned] = await Promise.all([ctx.wallets(), pin.read()]);
     const link = WalletPin.choose(links, pinned);
     if (!link) {
@@ -73,11 +81,8 @@ export class SmartWallet {
     }
     const wallet = new SmartWallet(link.id, link.address, userId);
     const checked = await wallet.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
-    if (checked.thisDevice === 'unlinked') {
+    if (!(await pin.admits(pinned, wallet.address, checked))) {
       throw new UnlinkedDevice(wallet);
-    }
-    if (!pinned) {
-      await pin.write({ address: wallet.address, passkeyPublicKey: base64.encode(checked.passkeyPublicKey) });
     }
     return wallet;
   }
@@ -98,18 +103,28 @@ export class SmartWallet {
       return;
     }
     const userId = await ctx.userId();
+    const pin = SmartWallet.pinFor(userId);
     const devicePublicKey = await deviceSigner.create(userId);
     await holdCriticalReload(async () => {
-      const created = await passkey.create(label);
+      const created = await pin.passkeyForSetup(
+        () => passkey.create(label),
+        (challenge) => passkey.sign(challenge),
+      );
       SmartWallet.creation.start(
         userId,
-        holdCriticalReload(() => SmartWallet.deploy(userId, devicePublicKey, created)),
+        holdCriticalReload(() => SmartWallet.deploy(pin, userId, devicePublicKey, created)),
       );
     });
   }
 
-  private static async deploy(userId: string, devicePublicKey: string, created: Passkey): Promise<SmartWallet> {
-    const link = await ctx.deployWallet({
+  private static async deploy(
+    pin: WalletPin,
+    userId: string,
+    devicePublicKey: string,
+    created: Passkey,
+  ): Promise<SmartWallet> {
+    await pin.requireCurrentUser();
+    const link = await ctx.deployWallet(userId, {
       credentialId: created.credentialId,
       passkeyPublicKey: base64.encode(created.publicKey),
       devicePublicKey,
@@ -118,7 +133,7 @@ export class SmartWallet {
     if ((await wallet.verify(created.publicKey)).thisDevice !== 'linked') {
       throw new Error('The new wallet does not hold this device key');
     }
-    await new WalletPin(AsyncStorage, userId).write({
+    await pin.write({
       address: wallet.address,
       passkeyPublicKey: base64.encode(created.publicKey),
     });
@@ -141,16 +156,16 @@ export class SmartWallet {
   }
 
   async addThisDevice(signal?: AbortSignal): Promise<void> {
-    const pin = new WalletPin(AsyncStorage, this.userId);
+    const pin = SmartWallet.pinFor(this.userId);
     const pinned = await pin.read();
     const checked = await this.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
-    const { passkeyPublicKey } = checked;
-    if (checked.thisDevice === 'linked') {
-      await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
-      return;
-    }
-    await holdCriticalReload(() => this.deviceLink().add(this.address, passkeyPublicKey, signal));
-    await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
+    await pin.confirmThisDevice(
+      pinned,
+      this.address,
+      checked,
+      () => holdCriticalReload(() => this.deviceLink().add(this.address, checked.passkeyPublicKey, signal)),
+      (challenge) => passkey.sign(challenge),
+    );
   }
 
   async balances(): Promise<Balances> {
