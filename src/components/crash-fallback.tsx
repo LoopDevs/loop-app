@@ -16,7 +16,7 @@ export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () 
   return (
     <MessageScreen
       title="Something went wrong"
-      detail="A payment already sent is not lost. Check Orders for its status.">
+      detail="A payment already sent is not lost. Check Wallet for its status.">
       <Button label="Try again" variant="primary" onPress={retry} />
     </MessageScreen>
   );

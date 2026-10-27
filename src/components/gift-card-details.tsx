@@ -98,10 +98,14 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
-    await Clipboard.setStringAsync(value, {
+    const copiedToClipboard = await Clipboard.setStringAsync(value, {
       android: { isSensitive: true },
       ios: { localOnly: true, expiresAt: new Date(Date.now() + clipboardLifetimeMs) },
     });
+    if (!copiedToClipboard) {
+      toast(`${label} not copied. Select it and copy it instead.`);
+      return;
+    }
     haptics.tap();
     setCopied(true);
     setTimeout(() => setCopied(false), copiedResetMs);
