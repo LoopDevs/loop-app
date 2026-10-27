@@ -6,7 +6,6 @@
   "build": {
     "base": {
       "env": {
-        "EXPO_PUBLIC_CTX_CLIENT_ID": "loopapp",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },

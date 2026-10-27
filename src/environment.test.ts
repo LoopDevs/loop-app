@@ -18,6 +18,11 @@ describe('LoopEnvironment.resolve', () => {
     assert.equal(environment.stellarNetwork, 'mainnet');
   });
 
+  it('carries the CTX client id in both environments', () => {
+    assert.equal(LoopEnvironment.resolve('staging').ctxClientId, 'loopapp');
+    assert.equal(LoopEnvironment.resolve('production').ctxClientId, 'loopapp');
+  });
+
   it('rejects a missing value', () => {
     assert.throws(() => LoopEnvironment.resolve(undefined), /EXPO_PUBLIC_LOOP_ENV must be staging \| production, got nothing/);
   });
