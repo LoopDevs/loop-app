@@ -15,6 +15,8 @@ test('dotted and whole amounts pass through trimmed', () => {
 
 test('thousands separators and other text are refused', () => {
   assert.equal(normalizeAmount('1,000.50'), null);
+  assert.equal(normalizeAmount('1,000'), null);
+  assert.equal(normalizeAmount('25,500'), null);
   assert.equal(normalizeAmount('1,000,50'), null);
   assert.equal(normalizeAmount('abc'), null);
   assert.equal(normalizeAmount(''), null);
