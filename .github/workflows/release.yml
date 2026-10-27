@@ -54,6 +54,13 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Check the EAS project id
+        run: |
+          if ! jq -e '.expo.extra.eas.projectId | type == "string" and length > 0' app.json > /dev/null; then
+            echo "::error::app.json has no expo.extra.eas.projectId, so builds would ship without an update URL. Run eas init and commit the project id."
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -71,6 +78,12 @@ jobs:
         env:
           SAME_LOOP_ENV: test "$EXPO_PUBLIC_LOOP_ENV" = "$EXPECTED_LOOP_ENV"
         run: npx --yes "$EAS_CLI" env:exec "$CHANNEL" "$SAME_LOOP_ENV" --non-interactive
+
+      - name: Check the production EAS environment has the Sentry settings
+        if: inputs.channel == 'production'
+        env:
+          HAS_SENTRY: test -n "$EXPO_PUBLIC_SENTRY_DSN" && test -n "$SENTRY_ORG" && test -n "$SENTRY_PROJECT"
+        run: npx --yes "$EAS_CLI" env:exec production "$HAS_SENTRY" --non-interactive
 
       - name: Publish the signed OTA update
         if: inputs.kind == 'update'
