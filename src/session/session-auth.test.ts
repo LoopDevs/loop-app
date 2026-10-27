@@ -245,3 +245,29 @@ test('a rotation runs inside the store lock', async () => {
 
   assert.deepEqual(rotatedWhileLocked, [true]);
 });
+
+test('a 401 after another tab rotates the session retries with the token that tab stored', async () => {
+  const store = new MemoryStore(null);
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return store.refreshToken === 'r1'
+        ? { accessToken: 'a2', refreshToken: 'r2' }
+        : { accessToken: 'a4', refreshToken: 'r4' };
+    }
+    if (token === 'a2') {
+      store.refreshToken = 'r3';
+    }
+    if (token === 'a4') {
+      return { ok: true };
+    }
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, store);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  await auth.sessionRequest('GET', '/me');
+
+  assert.equal(ctx.refreshes(), 2);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1', 'a2', 'a4']);
+  assert.equal(store.refreshToken, 'r4');
+});
