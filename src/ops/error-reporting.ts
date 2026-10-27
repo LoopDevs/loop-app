@@ -16,8 +16,9 @@ export const errorReporting = {
       dsn,
       environment: loopEnvironment.name,
       sendDefaultPii: false,
-      tracesSampleRate: 0,
+      tracePropagationTargets: [],
       enableNetworkBreadcrumbs: false,
+      integrations: [Sentry.breadcrumbsIntegration({ fetch: false, xhr: false })],
       beforeSend: (event) => SentryScrubber.scrubEvent(event),
       beforeBreadcrumb: (breadcrumb) => SentryScrubber.scrubBreadcrumb(breadcrumb),
     });
