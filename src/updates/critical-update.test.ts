@@ -44,6 +44,35 @@ test('a reload requested with nothing held runs at once', () => {
   assert.equal(reloads, 1);
 });
 
+test('a task held after the reload fires is refused without running', async () => {
+  const gate = new ReloadGate();
+  gate.request(() => {});
+  let ran = false;
+  await assert.rejects(
+    gate.hold(async () => {
+      ran = true;
+    }),
+    /updating/,
+  );
+  assert.equal(ran, false);
+});
+
+test('a failed reload reopens the gate for held tasks', async () => {
+  const gate = new ReloadGate();
+  gate.request(() => Promise.reject(new Error('reload failed')));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(await gate.hold(async () => 'sent'), 'sent');
+});
+
+test('a reload that throws at once also reopens the gate', async () => {
+  const gate = new ReloadGate();
+  gate.request(() => {
+    throw new Error('reload failed');
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(await gate.hold(async () => 'sent'), 'sent');
+});
+
 test('a reload requested while a task runs waits until the task returns', async () => {
   const gate = new ReloadGate();
   let reloads = 0;

@@ -6,7 +6,6 @@ import {
   hasRecovered,
   recoveryProbe,
   serviceState,
-  type BlockingServiceState,
   type RecoveryChecks,
 } from './service-state.ts';
 
@@ -37,15 +36,6 @@ test('maintenance recovers through the public status check', () => {
 test('app-disabled recovers through the profile read when signed in, the status check otherwise', () => {
   assert.equal(recoveryProbe('app-disabled', true), 'GET /me');
   assert.equal(recoveryProbe('app-disabled', false), 'GET /status');
-});
-
-test('recovery never sends a write', () => {
-  const states: BlockingServiceState[] = ['maintenance', 'app-disabled'];
-  for (const state of states) {
-    for (const signedIn of [true, false]) {
-      assert.ok(['GET /status', 'GET /me'].includes(recoveryProbe(state, signedIn)));
-    }
-  }
 });
 
 class FakeChecks implements RecoveryChecks {

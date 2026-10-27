@@ -14,9 +14,13 @@ export function isCriticalUpdate(manifest: unknown, runningExtra: unknown): bool
 
 export class ReloadGate {
   private running = 0;
-  private pending: (() => void) | null = null;
+  private pending: (() => void | Promise<void>) | null = null;
+  private reloading = false;
 
   async hold<T>(task: () => Promise<T>): Promise<T> {
+    if (this.reloading) {
+      throw new Error('Loop is updating. Try again in a moment.');
+    }
     this.running += 1;
     try {
       return await task();
@@ -26,7 +30,7 @@ export class ReloadGate {
     }
   }
 
-  request(reload: () => void): void {
+  request(reload: () => void | Promise<void>): void {
     this.pending = reload;
     this.flush();
   }
@@ -37,6 +41,9 @@ export class ReloadGate {
     }
     const reload = this.pending;
     this.pending = null;
-    reload();
+    this.reloading = true;
+    new Promise<void>((resolve) => resolve(reload())).catch(() => {
+      this.reloading = false;
+    });
   }
 }
