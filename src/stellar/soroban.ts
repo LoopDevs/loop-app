@@ -25,6 +25,11 @@ class Soroban {
     return sequence;
   }
 
+  async retention(): Promise<{ oldestLedger: number; latestLedger: number }> {
+    const { oldestLedger, latestLedger } = await this.server.getHealth();
+    return { oldestLedger, latestLedger };
+  }
+
   async read(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<unknown> {
     const transaction = new TransactionBuilder(new Account(simulationSource, '0'), {
       fee: BASE_FEE,

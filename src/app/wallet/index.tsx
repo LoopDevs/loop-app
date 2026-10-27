@@ -45,7 +45,7 @@ import {
   unpaidStatuses,
 } from "@/ctx/gift-card-status";
 import { useAppRefresh } from "@/hooks/use-app-refresh";
-import { sentPayments } from "@/hooks/use-sent-payment";
+import { PaymentCheck } from "@/hooks/use-sent-payment";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useSessionOwner } from "@/hooks/use-session-owner";
 import { useTheme } from "@/hooks/use-theme";
@@ -64,6 +64,9 @@ export default function WalletScreen() {
   const wideScrollRef = useRef<ScrollViewInstance>(null);
   useScrollToTopOnFocus(wideScrollRef);
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
+  const [sentPaymentIds, setSentPaymentIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -83,6 +86,7 @@ export default function WalletScreen() {
         const { userId, changed } = await readSession();
         if (changed || !userId) {
           setGiftCards([]);
+          setSentPaymentIds(new Set());
           setPage(0);
           setPages(0);
           loadedPages.current = 0;
@@ -98,6 +102,8 @@ export default function WalletScreen() {
         let next = first;
         let pageCount = 0;
         const shownResult: GiftCard[] = [];
+        const sentIds: string[] = [];
+        const paymentCheck = new PaymentCheck();
         for (;;) {
           const { result, pagination } = await ctx.giftCards({
             notStatus: unpaidStatuses,
@@ -105,15 +111,17 @@ export default function WalletScreen() {
             page: next,
           });
           const sent = await Promise.all(
-            result.map((giftCard) =>
-              sentPayments.get(giftCard.paymentId).catch(() => null),
-            ),
+            result.map((giftCard) => paymentCheck.sent(giftCard)),
           );
           shownResult.push(
             ...result.filter(
-              (giftCard, index) =>
-                !isHiddenFromHistory(giftCard, sent[index] !== null),
+              (giftCard, index) => !isHiddenFromHistory(giftCard, sent[index]),
             ),
+          );
+          sentIds.push(
+            ...result
+              .filter((_, index) => sent[index])
+              .map((giftCard) => giftCard.paymentId),
           );
           pageCount = pagination.pages;
           if (shownResult.length > 0 || next >= pageCount) {
@@ -123,6 +131,9 @@ export default function WalletScreen() {
         }
         setGiftCards((shown) =>
           first === 1 ? shownResult : [...shown, ...shownResult],
+        );
+        setSentPaymentIds(
+          (ids) => new Set(first === 1 ? sentIds : [...ids, ...sentIds]),
         );
         setPage(next);
         setPages(pageCount);
@@ -225,7 +236,11 @@ export default function WalletScreen() {
             >
               {giftCardsTitle}
               {giftCards.length > 0 ? (
-                <OrdersTable giftCards={giftCards} onOpen={openOrder} />
+                <OrdersTable
+                  giftCards={giftCards}
+                  sentPaymentIds={sentPaymentIds}
+                  onOpen={openOrder}
+                />
               ) : (
                 <View style={styles.wideEmpty}>{emptyState}</View>
               )}
@@ -289,7 +304,11 @@ export default function WalletScreen() {
             }
             style={styles.body}
           >
-            <OrderRow giftCard={item} onPress={() => openOrder(item)} />
+            <OrderRow
+              giftCard={item}
+              sent={sentPaymentIds.has(item.paymentId)}
+              onPress={() => openOrder(item)}
+            />
           </Animated.View>
         )}
       />
@@ -300,9 +319,11 @@ export default function WalletScreen() {
 
 function OrdersTable({
   giftCards,
+  sentPaymentIds,
   onOpen,
 }: {
   giftCards: GiftCard[];
+  sentPaymentIds: ReadonlySet<string>;
   onOpen: (giftCard: GiftCard) => void;
 }) {
   const theme = useTheme();
@@ -355,6 +376,7 @@ function OrdersTable({
         <OrderTableRow
           key={giftCard.id}
           giftCard={giftCard}
+          sent={sentPaymentIds.has(giftCard.paymentId)}
           last={index === giftCards.length - 1}
           onPress={() => onOpen(giftCard)}
         />
@@ -365,16 +387,18 @@ function OrdersTable({
 
 function OrderTableRow({
   giftCard,
+  sent,
   last,
   onPress,
 }: {
   giftCard: GiftCard;
+  sent: boolean;
   last: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
-  const outcome = outcomeText(giftCard);
+  const outcome = outcomeText(giftCard, sent);
   const amount = money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency);
   const status = giftCardStatusLabel(giftCard.status);
   const tone = statusTone(giftCard.status);
@@ -455,13 +479,15 @@ function WalletHelp() {
 
 function OrderRow({
   giftCard,
+  sent,
   onPress,
 }: {
   giftCard: GiftCard;
+  sent: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const outcome = outcomeText(giftCard);
+  const outcome = outcomeText(giftCard, sent);
   const amount = money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency);
   const status = giftCardStatusLabel(giftCard.status);
   return (

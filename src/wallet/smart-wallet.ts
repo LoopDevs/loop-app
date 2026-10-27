@@ -205,6 +205,19 @@ export class SmartWallet {
     return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
   }
 
+  async orderPaid(giftCard: GiftCard): Promise<boolean> {
+    const { paymentCryptoAmount, paymentCryptoAddress, paymentUrlExpiration } = giftCard;
+    const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
+    if (!token || !paymentCryptoAmount || !paymentCryptoAddress || !paymentUrlExpiration) {
+      return false;
+    }
+    const muxedId = SponsoredCall.muxedIdOf(paymentCryptoAddress);
+    const amount = units.parse(paymentCryptoAmount);
+    const expected: SignedTransfer = muxedId === undefined ? { amount } : { amount, muxedId };
+    const span = { from: Date.parse(giftCard.created), to: Date.parse(paymentUrlExpiration) };
+    return new PaymentSearch(soroban, this.address, network.payee).landedDuring(token.contract, expected, span, Date.now());
+  }
+
   async transactionLanded(hash: string): Promise<boolean> {
     return (await soroban.transaction(hash)).status === 'SUCCESS';
   }
