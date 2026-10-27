@@ -30,7 +30,7 @@ test('an order in another currency does not match', () => {
   assert.equal(request.matches({ ...card, cardFiatCurrency: 'CAD' }), false);
 });
 
-test('require passes a matching order through and refuses a mismatch', () => {
-  assert.equal(request.require(card), card);
-  assert.throws(() => request.require({ ...card, merchantId: 'm-2' }), /didn't match/);
+test('a lowercase requested currency matches the uppercase order', () => {
+  const lowercase = new OrderRequest({ ...request.asked, fiatCurrency: 'usd' });
+  assert.equal(lowercase.matches(card), true);
 });

@@ -4,8 +4,6 @@ import type { GiftCard, GiftCardOrderIn } from './client.ts';
 export type OrderedCard = Pick<GiftCard, 'merchantId' | 'cardFiatAmount' | 'cardFiatCurrency'>;
 
 export class OrderRequest {
-  static readonly mismatchMessage = "That order didn't match what you asked for, so we didn't pay it. Try again.";
-
   readonly asked: GiftCardOrderIn;
 
   constructor(asked: GiftCardOrderIn) {
@@ -20,12 +18,5 @@ export class OrderRequest {
       amount !== null &&
       amount === units.parseTruncated(this.asked.fiatAmount)
     );
-  }
-
-  require<T extends OrderedCard>(card: T): T {
-    if (!this.matches(card)) {
-      throw new Error(OrderRequest.mismatchMessage);
-    }
-    return card;
   }
 }

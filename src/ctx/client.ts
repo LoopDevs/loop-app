@@ -348,7 +348,11 @@ class CtxClient {
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
     const card: GiftCard = await this.auth.sessionRequest('POST', '/gift-cards', body);
-    return new OrderRequest(order).require(card);
+    if (!new OrderRequest(order).matches(card)) {
+      errorReporting.reportMessage('CTX order does not match the request');
+      throw new Error('CTX order does not match the request');
+    }
+    return card;
   }
 
   giftCard(id: string): Promise<GiftCard> {
