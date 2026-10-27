@@ -49,7 +49,7 @@ export default function SettingsScreen() {
   const { wide } = usePageLayout();
   const { busy, message, run, load } = useBusyAction();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const { profile, setProfile, applyCountryChoice } = useProfile();
+  const { profile, setProfile, startProfileRead, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
   const [chosenSection, setChosenSection] =
     useState<SettingsSection>("account");
@@ -76,12 +76,13 @@ export default function SettingsScreen() {
         if (!userId) {
           return;
         }
+        const commitProfile = startProfileRead();
         const loaded = await ctx.me();
         if (profileUserId.current === userId) {
-          setProfile(loaded);
+          commitProfile(loaded);
         }
       }),
-    [load, setProfile],
+    [load, setProfile, startProfileRead],
   );
 
   useFocusEffect(
