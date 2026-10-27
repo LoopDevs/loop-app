@@ -271,8 +271,7 @@ class CtxClient {
     if (!(await this.isSignedIn())) {
       return false;
     }
-    const profile = await this.me().catch(() => null);
-    return profile?.isFor(email) ?? false;
+    return (await this.me()).isFor(email);
   }
 
   async signOut(): Promise<void> {

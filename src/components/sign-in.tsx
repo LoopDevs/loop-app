@@ -216,18 +216,19 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
-  const [resendBlocked, setResendBlocked] = useState(false);
+  const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
+  const resendBlocked = codeSentAt !== null;
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
 
   useEffect(() => {
-    if (!resendBlocked) {
+    if (codeSentAt === null) {
       return;
     }
-    const timer = setTimeout(() => setResendBlocked(false), resendCooldownMs);
+    const timer = setTimeout(() => setCodeSentAt(null), resendCooldownMs);
     return () => clearTimeout(timer);
-  }, [resendBlocked]);
+  }, [codeSentAt]);
 
   const finish = () => {
     haptics.success();
@@ -286,7 +287,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const requestCode = () =>
     run(async () => {
       await ctx.requestCode(email.trim());
-      setResendBlocked(true);
+      setCodeSentAt(Date.now());
       setStep('code');
     });
 
@@ -304,7 +305,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const resendCode = () =>
     run(async () => {
       await ctx.requestCode(email.trim());
-      setResendBlocked(true);
+      setCodeSentAt(Date.now());
       toast('Code sent');
     });
 
