@@ -39,3 +39,25 @@ test('a successful signature is returned without a report', async () => {
   assert.equal(await reportingSigningFailure('passkey', report, () => Promise.resolve('signed')), 'signed');
   assert.deepEqual(reports, []);
 });
+
+test('a dismissed browser passkey prompt is rethrown without a report', async () => {
+  for (const signer of ['passkey create', 'passkey sign']) {
+    const { reports, report } = recorder();
+    const dismissed = new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError');
+    await assert.rejects(
+      reportingSigningFailure(signer, report, () => Promise.reject(dismissed)),
+      dismissed,
+    );
+    assert.deepEqual(reports, []);
+  }
+});
+
+test('a browser passkey error other than a dismissal is still reported', async () => {
+  const { reports, report } = recorder();
+  const failure = new DOMException('The authenticator is not usable.', 'InvalidStateError');
+  await assert.rejects(
+    reportingSigningFailure('passkey', report, () => Promise.reject(failure)),
+    failure,
+  );
+  assert.deepEqual(reports, [{ error: failure, context: 'Signing with passkey' }]);
+});
