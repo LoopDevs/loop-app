@@ -41,6 +41,30 @@ test('a token written after a fresh-install read is kept', async () => {
   assert.equal(await token.read(), 'abc');
 });
 
+test('a sign-in write during a slow fresh-install read keeps the new token', async () => {
+  const secure = memoryStorage();
+  const appStorage = memoryStorage();
+  let releaseRead = () => {};
+  const slowAppStorage: TokenStorage = {
+    ...appStorage,
+    async getItem(key) {
+      const value = await appStorage.getItem(key);
+      await new Promise<void>((resolve) => {
+        releaseRead = resolve;
+      });
+      return value;
+    },
+  };
+  const token = new InstallScopedToken(secure, slowAppStorage, 'refresh');
+  const read = token.read();
+  const write = token.write('abc');
+  await new Promise((resolve) => setImmediate(resolve));
+  releaseRead();
+  assert.equal(await read, null);
+  await write;
+  assert.equal(secure.values.get('refresh'), 'abc');
+});
+
 test('clear removes the token', async () => {
   const token = new InstallScopedToken(memoryStorage(), memoryStorage(), 'refresh');
   await token.write('abc');
