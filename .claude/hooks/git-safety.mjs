@@ -76,7 +76,8 @@ const SPECS = {
   stash: { valueShort: 'm', valueLong: ['message', 'pathspec-from-file'] },
 };
 
-const GIT_VALUE_GLOBALS = new Set(['--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env']);
+const GIT_VALUE_GLOBALS = new Set(['--git-dir', '--work-tree', '--namespace', '--super-prefix']);
+const HOOKS_PATH_KEY = /^core\.hookspath$/i;
 
 class Options {
   constructor() {
@@ -171,6 +172,15 @@ export class GitProbe {
     return this.git(dir, ['diff', '--cached', '--quiet']).status === 1;
   }
 
+  knowsRef(dir, name) {
+    const commit = this.git(dir, ['rev-parse', '--verify', '--quiet', `${name}^{commit}`]);
+    if (commit.status === 0) {
+      return true;
+    }
+    const remote = this.git(dir, ['for-each-ref', '--count=1', '--format=%(refname)', `refs/remotes/*/${name}`]);
+    return remote.status === 0 && remote.stdout.trim() !== '';
+  }
+
   alias(dir, name) {
     const result = this.git(dir, ['config', '--get', `alias.${name}`]);
     return result.status === 0 ? result.stdout.trim() : '';
@@ -255,6 +265,9 @@ export class GitPolicy {
       return;
     }
     const parsed = ShellScript.parse(source);
+    if (parsed.unterminated) {
+      this.ask('this command has an unclosed quote or bracket, so it cannot be inspected');
+    }
     for (const words of parsed.commands) {
       this.command(words, depth);
     }
@@ -290,7 +303,8 @@ export class GitPolicy {
     for (const [name, value] of assignments) {
       const disabled = /^(?:HUSKY|LEFTHOOK)$/.test(name) && value === '0';
       const skipped = /^(?:HUSKY_SKIP_HOOKS|SKIP_SIMPLE_GIT_HOOKS)$/.test(name) && value !== '' && value !== '0';
-      if (disabled || skipped) {
+      const configured = /^GIT_CONFIG_KEY_[0-9]+$/.test(name) ? HOOKS_PATH_KEY.test(value) : name === 'GIT_CONFIG_PARAMETERS' && /core\.hookspath/i.test(value);
+      if (disabled || skipped || configured) {
         this.deny('bypassing git hooks is never allowed');
       }
     }
@@ -325,11 +339,16 @@ export class GitPolicy {
       } else if (flag === '-c') {
         const [key, value = ''] = (args.shift() ?? '').split(/=(.*)/s);
         config.set(key.toLowerCase(), value);
+      } else if (flag === '--config-env' || flag.startsWith('--config-env=')) {
+        const pair = flag.includes('=') ? flag.slice(flag.indexOf('=') + 1) : (args.shift() ?? '');
+        if (HOOKS_PATH_KEY.test(pair.split('=')[0])) {
+          this.deny('bypassing git hooks is never allowed');
+        }
       } else if (GIT_VALUE_GLOBALS.has(flag)) {
         args.shift();
       }
     }
-    if ([...config.keys()].some((key) => key === 'core.hookspath')) {
+    if ([...config.keys()].some((key) => HOOKS_PATH_KEY.test(key))) {
       this.deny('bypassing git hooks is never allowed');
     }
     let sub = args.shift();
@@ -375,12 +394,15 @@ export class GitPolicy {
         if (options.hasShort('d') || options.hasShort('D') || options.hasLong('delete', 3)) {
           this.ask('this deletes a branch');
         }
+        if (options.hasShort('f') || options.hasShort('M') || options.hasLong('force', 3)) {
+          this.ask('this overwrites or renames a branch');
+        }
         break;
       case 'clean':
         this.clean(options);
         break;
       case 'checkout':
-        this.checkout(options);
+        this.checkout(options, dir);
         break;
       case 'switch':
         this.switchBranch(options);
@@ -411,7 +433,7 @@ export class GitPolicy {
         }
         break;
       case 'config':
-        if (options.positionals.some((arg) => arg.toLowerCase() === 'core.hookspath')) {
+        if (options.positionals.some((arg) => HOOKS_PATH_KEY.test(arg))) {
           this.deny('bypassing git hooks is never allowed');
         }
         break;
@@ -446,23 +468,27 @@ export class GitPolicy {
     }
   }
 
-  checkout(options) {
+  checkout(options, dir) {
+    const creates = options.hasShort('b') || options.hasShort('B') || options.hasLong('orphan');
+    const lone = !creates && !options.hasSeparator && options.positionals.length === 1 ? options.positionals[0] : '';
+    const isPath = lone !== '' && lone !== '-' && !this.probe.knowsRef(dir, lone);
     const discards =
+      isPath ||
       options.hasShort('f') ||
       options.hasShort('p') ||
       options.hasLong('force', 3) ||
       options.hasLong('patch', 3) ||
       (options.hasSeparator && options.rest.length > 0) ||
       options.positionals.includes('.') ||
-      (options.positionals.length >= 2 && !options.hasShort('b') && !options.hasShort('B') && !options.hasLong('orphan'));
+      (options.positionals.length >= 2 && !creates);
     if (discards) {
       this.ask('this discards uncommitted changes');
     }
     const created = options.shortValues.get('b') ?? options.shortValues.get('B') ?? options.longs.get('orphan');
     if (typeof created === 'string') {
       this.branches = new Set([created]);
-    } else if (!options.hasSeparator && options.positionals.length === 1) {
-      this.addBranch(options.positionals[0]);
+    } else if (lone !== '' && !isPath) {
+      this.addBranch(lone);
     }
   }
 
@@ -503,10 +529,11 @@ export class GitPolicy {
     const forced =
       options.hasShort('f') ||
       options.hasLong('force') ||
-      options.hasLong('force-with-lease', 8) ||
-      options.hasLong('force-if-includes', 8) ||
+      options.hasLong('force-with-lease', 7) ||
+      options.hasLong('force-if-includes', 7) ||
       options.hasLong('mirror', 3);
-    const refspecs = options.longs.has('repo') ? options.positionals : options.positionals.slice(1);
+    const operands = options.paths;
+    const refspecs = options.longs.has('repo') ? operands : operands.slice(1);
     if (forced || refspecs.some((refspec) => refspec.startsWith('+'))) {
       this.ask('force push rewrites remote history');
     }
@@ -573,6 +600,10 @@ export class GitPolicy {
     if (writes && GITHUB_WRITE_ENDPOINT.test(endpoint)) {
       this.ask('this changes branches or merges directly on GitHub');
     }
+    const graphqlWrites = options.hasLong('input') || args.some((arg) => /mutation|query=@/i.test(arg));
+    if (endpoint === 'graphql' && graphqlWrites) {
+      this.ask('this may change branches or merges directly on GitHub through graphql');
+    }
   }
 }
 
@@ -601,7 +632,7 @@ function respond(result, mode) {
     );
     return 0;
   }
-  process.stderr.write(`Blocked: ${reason}.\nThis needs the user's explicit yes. Explain what it does and ask the user to run it themselves.\n`);
+  process.stderr.write(`Blocked: ${reason}.\nThis needs the user's explicit yes and cannot be approved from here. Explain what it does and ask the user to run it themselves (the ! prefix runs a command in the session).\n`);
   return 2;
 }
 

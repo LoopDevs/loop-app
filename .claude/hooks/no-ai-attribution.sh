@@ -5,8 +5,9 @@ input=$(cat)
 jq -e 'type == "object"' >/dev/null 2>&1 <<<"$input" || { echo "Blocked: no-ai-attribution hook needs jq and a JSON object on stdin." >&2; exit 2; }
 tool=$(jq -r '.tool_name // ""' <<<"$input")
 cwd=$(jq -r '.cwd // "."' <<<"$input")
-tools='claude|anthropic|chatgpt|gpt|copilot|gemini|codex|cursor|\bai\b'
-pattern="co[ _-]?authored[ _-]?by|claude[ _-]?session|claude\.ai/(code|chat|share)|noreply@anthropic\.com|assisted[ _-]?by|(generated|written|authored|created|drafted|produced|assisted|signed-off|reviewed|tested|suggested)[ _-]?(with|by|using)[^[:cntrl:]]{0,40}($tools)|with the help of[^[:cntrl:]]{0,20}($tools)|ai[ _-](generated|assisted|authored|written)|🤖"
+tools='(^|[^[:alnum:]])(claude|anthropic|chatgpt|openai|copilot|gemini|codex|gpt-?[0-9]+|ai)([^[:alnum:]]|$)'
+verbs='generated|written|authored|created|drafted|produced|assisted|signed-off|reviewed|tested|suggested|made|built|powered|crafted|reported|(co-?)?developed|co-?created|co-?written'
+pattern="co[ _-]?authored[ _-]?by|claude[ _-]?session|claude\.ai/(code|chat|share)|noreply@anthropic\.com|assisted[ _-]?by|($verbs)[ _-]?(with|by|using)[^[:cntrl:]]{0,20}($tools)|with the help of[^[:cntrl:]]{0,20}($tools)|ai[ _-](generated|assisted|authored|written)|🤖"
 
 block() {
   echo "Blocked: AI attribution ($1). Commits, PRs, issues, docs and code never credit Claude or AI. Remove it and retry." >&2

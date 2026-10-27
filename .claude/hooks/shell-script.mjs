@@ -30,13 +30,14 @@ export class ShellScript {
     this.inWord = false;
     this.skipNextWord = false;
     this.pendingHeredocs = [];
+    this.unterminated = false;
     this.index = 0;
   }
 
   static parse(source) {
     const script = new ShellScript(source);
     script.run();
-    return { commands: script.commands, nested: script.nested };
+    return { commands: script.commands, nested: script.nested, unterminated: script.unterminated };
   }
 
   static unwrap(words) {
@@ -89,6 +90,7 @@ export class ShellScript {
 
   static substitutions(text) {
     const found = [];
+    let unterminated = false;
     let i = 0;
     while (i < text.length) {
       const ch = text[i];
@@ -96,27 +98,77 @@ export class ShellScript {
         i += 2;
       } else if (ch === '$' && text[i + 1] === '(') {
         const end = ShellScript.closingParen(text, i + 2);
+        unterminated ||= end >= text.length;
         found.push(text.slice(i + 2, end));
         i = end + 1;
       } else if (ch === '`') {
         const end = ShellScript.closingBacktick(text, i + 1);
+        unterminated ||= end >= text.length;
         found.push(text.slice(i + 1, end));
         i = end + 1;
       } else {
         i += 1;
       }
     }
-    return found;
+    return { found, unterminated };
+  }
+
+  static heredocAt(text, index) {
+    const rest = text.slice(index);
+    const match = HEREDOC.exec(rest);
+    if (!match) {
+      return null;
+    }
+    return {
+      length: match[0].length,
+      delimiter: match[2] ?? match[3] ?? match[4],
+      stripTabs: match[1] === '-',
+      expands: match[2] === undefined && match[3] === undefined && !rest.startsWith('<<\\'),
+    };
+  }
+
+  static heredocBody(text, start, heredoc) {
+    const lines = [];
+    let index = start;
+    while (index < text.length) {
+      const end = text.indexOf('\n', index);
+      const stop = end === -1 ? text.length : end;
+      const line = text.slice(index, stop);
+      index = Math.min(stop + 1, text.length);
+      const candidate = heredoc.stripTabs ? line.replace(/^\t+/, '') : line;
+      if (candidate === heredoc.delimiter) {
+        break;
+      }
+      lines.push(line);
+    }
+    return { body: lines.join('\n'), next: index };
   }
 
   static closingParen(text, start) {
     let depth = 1;
     let i = start;
+    const heredocs = [];
     while (i < text.length) {
       const ch = text[i];
       if (ch === '\\') {
         i += 2;
         continue;
+      }
+      if (ch === '\n' && heredocs.length > 0) {
+        i += 1;
+        for (const heredoc of heredocs) {
+          i = ShellScript.heredocBody(text, i, heredoc).next;
+        }
+        heredocs.length = 0;
+        continue;
+      }
+      if (ch === '<' && text[i + 1] === '<' && text[i - 1] !== '<') {
+        const heredoc = ShellScript.heredocAt(text, i);
+        if (heredoc) {
+          heredocs.push(heredoc);
+          i += heredoc.length;
+          continue;
+        }
       }
       if (ch === "'") {
         const end = text.indexOf("'", i + 1);
@@ -258,6 +310,7 @@ export class ShellScript {
 
   singleQuoted() {
     const end = this.source.indexOf("'", this.index + 1);
+    this.unterminated ||= end === -1;
     const stop = end === -1 ? this.source.length : end;
     this.append(this.source.slice(this.index + 1, stop));
     this.index = stop + 1;
@@ -275,6 +328,7 @@ export class ShellScript {
         i += 1;
       }
     }
+    this.unterminated ||= i >= this.source.length;
     this.append(text);
     this.index = i + 1;
   }
@@ -282,13 +336,15 @@ export class ShellScript {
   doubleQuoted() {
     const end = ShellScript.closingDoubleQuote(this.source, this.index + 1);
     const raw = this.source.slice(this.index + 1, end);
-    this.nested.push(...ShellScript.substitutions(raw));
+    this.nested.push(...ShellScript.substitutions(raw).found);
     this.append(ShellScript.unescapeDoubleQuoted(raw));
+    this.unterminated ||= end >= this.source.length;
     this.index = end + 1;
   }
 
   dollarParen(start) {
     const end = ShellScript.closingParen(this.source, start);
+    this.unterminated ||= end >= this.source.length;
     this.nested.push(this.source.slice(start, end));
     this.append('$()');
     this.index = end + 1;
@@ -296,6 +352,7 @@ export class ShellScript {
 
   backtick() {
     const end = ShellScript.closingBacktick(this.source, this.index + 1);
+    this.unterminated ||= end >= this.source.length;
     this.nested.push(this.source.slice(this.index + 1, end));
     this.append('$()');
     this.index = end + 1;
@@ -310,15 +367,11 @@ export class ShellScript {
 
   redirect() {
     const rest = this.source.slice(this.index);
-    const heredoc = HEREDOC.exec(rest);
+    const heredoc = ShellScript.heredocAt(this.source, this.index);
     if (heredoc) {
       this.endWord();
-      this.pendingHeredocs.push({
-        delimiter: heredoc[2] ?? heredoc[3] ?? heredoc[4],
-        stripTabs: heredoc[1] === '-',
-        expands: heredoc[2] === undefined && heredoc[3] === undefined && !rest.startsWith('<<\\'),
-      });
-      this.index += heredoc[0].length;
+      this.pendingHeredocs.push(heredoc);
+      this.index += heredoc.length;
       return;
     }
     const operator = /^(?:&>>?|[<>]+&?[0-9]*-?)/.exec(rest)[0];
@@ -334,20 +387,12 @@ export class ShellScript {
 
   readHeredocBodies() {
     for (const heredoc of this.pendingHeredocs) {
-      const body = [];
-      while (this.index < this.source.length) {
-        const end = this.source.indexOf('\n', this.index);
-        const stop = end === -1 ? this.source.length : end;
-        const line = this.source.slice(this.index, stop);
-        this.index = Math.min(stop + 1, this.source.length);
-        const candidate = heredoc.stripTabs ? line.replace(/^\t+/, '') : line;
-        if (candidate === heredoc.delimiter) {
-          break;
-        }
-        body.push(line);
-      }
+      const { body, next } = ShellScript.heredocBody(this.source, this.index, heredoc);
+      this.index = next;
       if (heredoc.expands) {
-        this.nested.push(...ShellScript.substitutions(body.join('\n')));
+        const { found, unterminated } = ShellScript.substitutions(body);
+        this.nested.push(...found);
+        this.unterminated ||= unterminated;
       }
     }
     this.pendingHeredocs = [];

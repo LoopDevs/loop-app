@@ -23,13 +23,24 @@ added=$(grep -vxF -f <(printf '%s\n' "$old" | grep -v '^$' || true) <<<"$new" ||
 
 if [[ $style == slash ]]; then
   allowed='//[[:space:]]*(@ts-|eslint-|prettier-ignore|biome-ignore|istanbul )|/// <reference|/\*[[:space:]]*(eslint|global |@vite|webpack|istanbul )|^[[:space:]]*"use (client|server|strict)"'
-  found='(^|[[:space:];{}(),])//|(^|[[:space:];{}(),])/\*|^[[:space:]]*\*([[:space:]]|/|$)|\*/[[:space:]]*\}?[[:space:]]*$'
+  found='(^|[^:])//|/\*|^[[:space:]]*\*([[:space:]]|/|$)|\*/[[:space:]]*\}?[[:space:]]*$'
 else
   allowed='^#!|^[[:space:]]*#[[:space:]]*(shellcheck|type: ignore|noqa|pragma|-\*-)'
-  found='^[[:space:]]*#|[[:space:]]#[[:space:]]'
+  found='(^|[[:space:]])#'
 fi
 
-hit=$(grep -E "$found" <<<"$added" | grep -vE "$allowed" | head -3 || true)
+hit=$(
+  FOUND="$found" ALLOWED="$allowed" awk '
+    {
+      code = $0
+      gsub(/\\./, "", code)
+      gsub(/\047[^\047]*\047/, "", code)
+      gsub(/"[^"]*"/, "", code)
+      gsub(/`[^`]*`/, "", code)
+      if (code ~ ENVIRON["FOUND"] && $0 !~ ENVIRON["ALLOWED"]) print $0
+    }
+  ' <<<"$added" | head -3 || true
+)
 if [[ -n $hit ]]; then
   {
     echo "Blocked: this edit adds code comments to $path. CLAUDE.md forbids comments in code."
