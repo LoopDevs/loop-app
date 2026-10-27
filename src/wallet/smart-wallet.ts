@@ -25,7 +25,7 @@ import { DeviceLink } from '@/wallet/device-link';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey, type Passkey } from '@/wallet/passkey';
-import { PaymentSearch } from '@/wallet/payment-search';
+import { PaymentSearch, type OrderPayment } from '@/wallet/payment-search';
 import { Savings } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
@@ -218,6 +218,10 @@ export class SmartWallet {
 
   paymentLanded(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
     return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
+  }
+
+  orderPaid(giftCard: GiftCard): Promise<OrderPayment> {
+    return new PaymentSearch(soroban, this.address, network.payee).orderPaid(giftCard, Date.now());
   }
 
   async transactionLanded(hash: string): Promise<boolean> {

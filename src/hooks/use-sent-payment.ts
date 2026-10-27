@@ -1,30 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 
-import { SentPayments, type SentPayment } from '@/ctx/sent-payments';
+import type { GiftCard } from '@/ctx/client';
+import { SentPayments } from '@/ctx/sent-payments';
+import { PaymentCheck, type OrderPayment } from '@/wallet/payment-search';
+import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 export const sentPayments = new SentPayments(AsyncStorage);
 
-export function useSentPayment(paymentId: string): SentPayment | null | undefined {
-  const [sent, setSent] = useState<{ paymentId: string; record: SentPayment | null } | null>(null);
+export function paymentCheck(): PaymentCheck {
+  return new PaymentCheck(sentPayments, () =>
+    SmartWallet.load().catch((error: unknown) => {
+      if (error instanceof UnlinkedDevice) {
+        return error.wallet;
+      }
+      throw error;
+    }),
+  );
+}
+
+export function usePaymentSent(giftCard: GiftCard): OrderPayment | undefined {
+  const [checked, setChecked] = useState<{ paymentId: string; payment: OrderPayment } | null>(null);
   useEffect(() => {
     let active = true;
-    sentPayments.get(paymentId).then(
-      (record) => {
+    paymentCheck()
+      .sent(giftCard)
+      .then((payment) => {
         if (active) {
-          setSent({ paymentId, record });
+          setChecked({ paymentId: giftCard.paymentId, payment });
         }
-      },
-      (error: unknown) => {
-        console.warn('Reading the sent payment failed', error);
-        if (active) {
-          setSent({ paymentId, record: null });
-        }
-      },
-    );
+      });
     return () => {
       active = false;
     };
-  }, [paymentId]);
-  return sent?.paymentId === paymentId ? sent.record : undefined;
+  }, [giftCard]);
+  return checked?.paymentId === giftCard.paymentId ? checked.payment : undefined;
 }

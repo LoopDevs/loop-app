@@ -7,6 +7,7 @@ import {
   cashbackStateLabel,
   giftCardStatusLabel,
   isHiddenFromHistory,
+  needsPaymentSearch,
   outcomeText,
   pollDelayMs,
 } from './gift-card-status.ts';
@@ -186,7 +187,18 @@ test('a card CTX marks paid is never described as not charged or possibly charge
   }
 });
 
-test('an expired order this device sent a payment for is shown in history', () => {
+test('only an expired order CTX did not record as charged needs a search for its payment', () => {
+  assert.equal(needsPaymentSearch(card({ status: 'expired', paymentStatus: 'expired' })), true);
+  assert.equal(needsPaymentSearch(card({ status: 'expired', paymentStatus: 'paid' })), false);
+  assert.equal(
+    needsPaymentSearch(card({ status: 'expired', paymentStatus: 'expired', paymentCryptoTxId: txId })),
+    false,
+  );
+  assert.equal(needsPaymentSearch(card({ status: 'unpaid', paymentStatus: 'unpaid' })), false);
+  assert.equal(needsPaymentSearch(card({ status: 'fulfilled' })), false);
+});
+
+test('an expired order with a sent payment is shown in history', () => {
   assert.equal(isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'expired' }), true), false);
   assert.equal(isHiddenFromHistory(card({ status: 'unpaid', paymentStatus: 'unpaid' }), true), true);
 });

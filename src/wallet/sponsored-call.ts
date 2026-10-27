@@ -163,7 +163,7 @@ export class SponsoredCall {
     return address;
   }
 
-  private static muxedIdOf(address: string): bigint | undefined {
+  static muxedIdOf(address: string): bigint | undefined {
     if (!StrKey.isValidMed25519PublicKey(address)) {
       return undefined;
     }

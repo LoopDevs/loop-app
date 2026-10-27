@@ -68,6 +68,7 @@ export default function HomeScreen() {
   const [giftCardsRefreshKey, setGiftCardsRefreshKey] = useState(0);
   const [search, setSearch] = useState('');
   const walletLoadStarted = useRef(false);
+  const walletLoadFailed = useRef(false);
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
@@ -93,6 +94,7 @@ export default function HomeScreen() {
 
   const loadWallet = useCallback(async () => {
     walletLoadStarted.current = true;
+    walletLoadFailed.current = false;
     try {
       const loaded = await SmartWallet.load();
       await Promise.all([showWallet(loaded), loaded && Platform.OS !== 'web' ? openActiveOrder() : undefined]);
@@ -103,6 +105,7 @@ export default function HomeScreen() {
         return;
       }
       walletLoadStarted.current = false;
+      walletLoadFailed.current = true;
       setScreen('no-wallet');
       throw error;
     }
@@ -126,6 +129,7 @@ export default function HomeScreen() {
         return;
       }
       walletLoadStarted.current = false;
+      walletLoadFailed.current = false;
       setWallet(null);
       setScreen('signed-out');
       check();
@@ -166,12 +170,35 @@ export default function HomeScreen() {
     }
   }, [wallet, refresh, setMessage]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshBalances();
-    }, [refreshBalances]),
-  );
-  useAppRefresh(refreshBalances);
+  const retryWalletLoad = useCallback(async () => {
+    if (!walletLoadFailed.current || walletLoadStarted.current) {
+      return;
+    }
+    try {
+      const signedIn = await ctx.isSignedIn();
+      if (!signedIn || walletLoadStarted.current) {
+        return;
+      }
+      setScreen('loading');
+      await loadWallet();
+      setMessage('');
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }, [loadWallet, setMessage]);
+
+  const refreshLoaded = useCallback(() => {
+    retryWalletLoad();
+    refreshBalances();
+  }, [retryWalletLoad, refreshBalances]);
+
+  const refreshHome = useCallback(() => {
+    readSession();
+    refreshLoaded();
+  }, [readSession, refreshLoaded]);
+
+  useFocusEffect(refreshLoaded);
+  useAppRefresh(refreshHome);
 
   const pullToRefresh = async () => {
     setRefreshing(true);

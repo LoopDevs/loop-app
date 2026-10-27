@@ -13,7 +13,7 @@ import {
 
 import { Deadline } from '@/ctx/deadline';
 import { network } from '@/stellar/network';
-import { TransferEvents, type LedgerRange } from '@/stellar/transfer-events';
+import { TransferEvents, type LedgerRange, type TransferEvent } from '@/stellar/transfer-events';
 
 const simulationSource = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
@@ -23,6 +23,11 @@ class Soroban {
   async latestLedger(): Promise<number> {
     const { sequence } = await this.server.getLatestLedger();
     return sequence;
+  }
+
+  async retention(): Promise<{ oldestLedger: number; latestLedger: number }> {
+    const { oldestLedger, latestLedger } = await this.server.getHealth();
+    return { oldestLedger, latestLedger };
   }
 
   async read(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<unknown> {
@@ -54,9 +59,13 @@ class Soroban {
     from: string,
     to: string,
     ledgers: LedgerRange,
-  ): Promise<unknown[]> {
+  ): Promise<TransferEvent[]> {
     const { events } = await this.server.getEvents(TransferEvents.request(contractId, from, to, ledgers));
-    return events.map((event) => scValToNative(event.value));
+    return events.map((event) => ({
+      value: scValToNative(event.value),
+      txHash: event.txHash,
+      closedAt: Date.parse(event.ledgerClosedAt),
+    }));
   }
 
   async wasmHash(contractId: string): Promise<string> {

@@ -5,6 +5,12 @@ export type LedgerRange = {
   endLedger: number;
 };
 
+export type TransferEvent = {
+  value: unknown;
+  txHash: string;
+  closedAt: number;
+};
+
 export class TransferEvents {
   static request(contractId: string, from: string, to: string, ledgers: LedgerRange): rpc.Api.GetEventsRequest {
     const topics = [
