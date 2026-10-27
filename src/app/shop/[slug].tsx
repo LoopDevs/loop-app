@@ -20,9 +20,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx } from '@/ctx/client';
 import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
+import type { Profile } from '@/ctx/profile';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -45,8 +47,8 @@ export default function MerchantScreen() {
   const { busy, message, load: track } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const [userCountry, setUserCountry] = useState<string | undefined>(undefined);
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
@@ -66,21 +68,15 @@ export default function MerchantScreen() {
         const walletLoad = readSession().then(async ({ userId, changed }) => {
           if (changed) {
             setWallet(null);
-            setUserCountry(undefined);
+            setProfile(null);
             setSignedIn(null);
           }
           const isSignedIn = userId !== null;
-          const [loadedWallet, country] = isSignedIn
-            ? await Promise.all([
-                SmartWallet.load().catch(SmartWallet.unlessUnlinked),
-                ctx
-                  .me()
-                  .then((profile) => profile.country)
-                  .catch(() => undefined),
-              ])
-            : [null, undefined];
+          const [loadedWallet, loadedProfile] = isSignedIn
+            ? await Promise.all([SmartWallet.load().catch(SmartWallet.unlessUnlinked), ctx.me()])
+            : [null, null];
           setWallet((current) => (loadedWallet?.sameAs(current) ? current : loadedWallet));
-          setUserCountry(country);
+          setProfile(loadedProfile);
           setSignedIn(isSignedIn);
         });
         await Promise.all([merchantLoad, walletLoad]);
@@ -117,7 +113,10 @@ export default function MerchantScreen() {
   const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and earn ${merchant.rateLabel()}` : '';
   const cardStyle = [styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
-  const buyCard = wallet && !merchant.isSoldIn(userCountry) ? (
+  const payCopy = BankPayment.accepts(merchant.currency)
+    ? 'Pay from your UK bank account or your Loop wallet.'
+    : 'Pay with XLM, USDC or EURC.';
+  const buyCard = wallet && profile && !merchant.isSoldIn(profile.country) ? (
     <View style={cardStyle}>
       <ThemedText type="heading">Not sold in your country</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
@@ -126,8 +125,8 @@ export default function MerchantScreen() {
       </ThemedText>
       <Button label="Open Settings" variant="secondary" onPress={() => router.navigate('/profile/settings')} />
     </View>
-  ) : wallet ? (
-    <GiftCardPurchase merchant={merchant} wallet={wallet} />
+  ) : wallet && profile ? (
+    <GiftCardPurchase merchant={merchant} wallet={wallet} profile={profile} onProfile={setProfile} />
   ) : signedIn === null ? (
     retry ? null : <BuySkeleton />
   ) : signedIn ? (
@@ -142,7 +141,7 @@ export default function MerchantScreen() {
     <View style={cardStyle}>
       <ThemedText type="heading">Buy a {merchant.name} gift card</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Sign in to choose an amount{earnLine}. Pay with XLM, USDC or EURC.
+        Sign in to choose an amount{earnLine}. {payCopy}
       </ThemedText>
       <Button
         label="Sign in to buy"

@@ -24,6 +24,7 @@ import {
   ScrollEndInset,
   Spacing,
 } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, type GiftCard } from '@/ctx/client';
 import {
   cashbackState,
@@ -173,9 +174,14 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const outcome = payment === undefined ? null : outcomeText(giftCard, payment.kind !== 'notSent');
   const sentTxId = payment?.kind === 'sent' ? payment.txId : undefined;
   const processing = giftCard.status === 'paid';
-  const paid = wasCharged(giftCard)
-    ? amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency)
-    : null;
+  const byBank = BankPayment.isBank(giftCard);
+  const paid = byBank
+    ? BankPayment.charged(giftCard)
+      ? amountInMoney(giftCard.paymentFiatAmount, giftCard.paymentFiatCurrency)
+      : null
+    : wasCharged(giftCard)
+      ? amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency)
+      : null;
   const cashbackAmount = amountInMoney(giftCard.cashbackAmount, giftCard.cashbackCurrency);
   const quotedCashback = cashback === 'none' ? CashbackRate.quotedFor(giftCard) : null;
   const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
@@ -189,7 +195,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
           borderColor: theme.border,
         },
       ]}>
-      {paid && <SummaryRow label="Paid" value={paid} />}
+      {paid && <SummaryRow label={byBank ? 'Paid by bank' : 'Paid'} value={paid} />}
       {cashback !== 'none' && (
         <SummaryRow
           label={cashbackAmount ? `Cashback, ${cashbackStateLabel(cashback)}` : 'Cashback'}
