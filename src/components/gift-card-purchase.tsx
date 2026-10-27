@@ -2,16 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
+import { dismissBrowser, openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
-import { Button, Notice } from '@/components/form';
+import { Button, Field, Notice } from '@/components/form';
 import { Skeleton } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
+import { BankPayment } from '@/ctx/bank-payment';
 import { BuyPrice, type BuyQuote } from '@/ctx/buy-price';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal';
@@ -55,7 +57,11 @@ import type { SmartWallet } from '@/wallet/smart-wallet';
 type Props = {
   merchant: Merchant;
   wallet: SmartWallet;
+  profile: Profile;
+  onProfile: (profile: Profile) => void;
 };
+
+type PayWith = PaymentCurrency | typeof BankPayment.option;
 
 type SentTransaction = {
   txId?: string;
@@ -116,12 +122,13 @@ const inFlightPayments = new InFlightPayments();
 const oneTapBuy = new OneTapBuy();
 const noRates = new Rates(new Map());
 
-export function GiftCardPurchase({ merchant, wallet }: Props) {
+export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props) {
   const router = useRouter();
   const { busy, message, setMessage, run } = useBusyAction();
   const [amount, setAmount] = useState(firstAmount(merchant));
   const [amountError, setAmountError] = useState<string | null>(null);
-  const [chosenCurrency, setChosenCurrency] = useState<PaymentCurrency | null>(null);
+  const [legalName, setLegalName] = useState('');
+  const [chosen, setChosen] = useState<PayWith | null>(null);
   const [refusedCurrencies, setRefusedCurrencies] = useState<ReadonlySet<PaymentCurrency>>(new Set());
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const [order, setOrder] = useState<GiftCard | null>(null);
@@ -134,11 +141,18 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
 
   const currencies = offeredTokens.map((token) => token.currency);
   const stable = view?.stable ?? Rates.usd;
+  const bankOffered = BankPayment.offered(merchant.currency, profile);
+  const chosenCurrency = chosen === BankPayment.option ? null : chosen;
   const currency =
     onlyPaymentCurrency ??
     chosenCurrency ??
     view?.holdings.preferredCurrency(currencies, stable, refusedCurrencies) ??
     null;
+  const payWith: PayWith | null = chosen ?? (bankOffered ? BankPayment.option : currency);
+  const byBank = payWith === BankPayment.option;
+  const bankOrder = order ? BankPayment.isBank(order) : byBank;
+  const legalNameNeeded = byBank && !profile.hasBankIdentity();
+  const legalNameProblem = legalNameNeeded ? Profile.legalNameProblem(legalName) : null;
   const usdPrice = currency ? (view?.holdings.rates ?? noRates).usdPrice(currency) : null;
   const fiatAmount = normalizeAmount(amount);
   const amountProblem = merchant.amountProblem(amount);
@@ -199,6 +213,10 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     let checkingChain = sent !== null;
     let landed = false;
     while (isCurrent()) {
+      if (BankPayment.linkExpired(current, Date.now())) {
+        setPayment({ kind: 'bankExpired' });
+        return;
+      }
       if (sent && checkingChain && OneTapBuy.checksChain(current)) {
         const failure = await sentPaymentFailure(current, live.current.wallet, {
           txId: sent.txId ?? current.paymentCryptoTxId,
@@ -232,6 +250,9 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       setOrder((held) => OneTapBuy.merged(held, fetched));
       if (!landed && current.paymentStatus === 'paid') {
         landed = true;
+        if (BankPayment.isBank(current)) {
+          void dismissBrowser();
+        }
         live.current
           .refresh()
           .then(() => {
@@ -270,6 +291,10 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
             return;
           }
           giftCard = await ctx.giftCard(giftCard.id);
+        }
+        if (giftCard && BankPayment.isBank(giftCard)) {
+          show(BankPayment.resumed(giftCard, Date.now()));
+          return;
         }
         const sent = giftCard ? await sentPayments.get(giftCard.paymentId) : null;
         show(OneTapBuy.resumed(giftCard, sent));
@@ -428,7 +453,7 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         const refusal = onlyPaymentCurrency ? null : currencyRefusalMessage(name, tokenSymbol(payWith));
         if (refusal && refusesCurrency(name)) {
           setRefusedCurrencies((refused) => new Set([...refused, payWith]));
-          setChosenCurrency(null);
+          setChosen(null);
         }
         setMessage(refusal ?? OneTapBuy.notBoughtMessage);
         return;
@@ -436,19 +461,84 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
       await showResult(result);
     });
 
-  const short = shownPrice !== null && balance !== null && shownPrice > balance;
+  const approveAtBank = async (giftCard: GiftCard) => {
+    const link = BankPayment.openLink(giftCard);
+    if (!link) {
+      return;
+    }
+    await openBrowserAsync(link, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
+    const fetched = await ctx.giftCard(giftCard.id).catch(() => null);
+    if (fetched && mounted.current) {
+      setOrder((held) => OneTapBuy.merged(held, fetched));
+    }
+  };
+
+  const createBankOrder = async (cardAmount: string): Promise<GiftCard | null> => {
+    try {
+      const identity = legalNameNeeded ? profile.legalNameUpdate(legalName) : null;
+      if (identity) {
+        onProfile(profile.withUser(await ctx.updateUser(identity)));
+      }
+      return await ctx.orderGiftCard({
+        merchantId: merchant.id,
+        fiatAmount: cardAmount,
+        fiatCurrency: merchant.currency,
+      });
+    } catch (error) {
+      rollBack();
+      haptics.error();
+      const name = error instanceof CtxError ? error.errorName() : undefined;
+      const amountMessage = amountErrorMessage(name, merchant);
+      if (amountMessage) {
+        setAmountError(amountMessage);
+        return null;
+      }
+      setMessage(BankPayment.refusalMessage(name) ?? OneTapBuy.notBoughtMessage);
+      return null;
+    }
+  };
+
+  const buyByBank = (cardAmount: string) =>
+    run(async () => {
+      stopFollowing();
+      setMessage('');
+      setAmountError(null);
+      setConfirmPrice(null);
+      setOrder(null);
+      setDraftAmount(cardAmount);
+      setPayment({ kind: 'sending' });
+      setSpent(0n);
+      const created = await createBankOrder(cardAmount);
+      if (!created || !mounted.current) {
+        return;
+      }
+      setOrder(created);
+      setPayment({ kind: 'bank' });
+      haptics.tap();
+      void followOrder(created, null);
+      if (process.env.EXPO_OS !== 'web') {
+        void approveAtBank(created);
+      }
+    });
+
+  const short = !byBank && shownPrice !== null && balance !== null && shownPrice > balance;
+  const walletReady = currency !== null && view !== null && cardRates !== null && !short;
   const canBuy =
     !busy &&
     !oneTapBuy.busy &&
     fiatAmount !== null &&
     amountProblem === null &&
-    currency !== null &&
-    view !== null &&
-    cardRates !== null &&
-    !short;
+    (byBank ? legalNameProblem === null : walletReady);
 
   const buy = () => {
-    if (!canBuy || !fiatAmount || !currency) {
+    if (!canBuy || !fiatAmount) {
+      return;
+    }
+    if (byBank) {
+      void buyByBank(fiatAmount);
+      return;
+    }
+    if (!currency) {
       return;
     }
     const quote: BuyQuote = { shown: shownPrice, currency, usdPrice };
@@ -503,9 +593,10 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
           order={order}
           payment={payment}
           confirmPrice={confirmPrice}
-          balance={balanceText}
+          balance={bankOrder ? null : balanceText}
           busy={busy}
           onConfirm={payConfirmedPrice}
+          onApprove={approveAtBank}
           onRetry={tryAgain}
           onDone={finish}
         />
@@ -517,6 +608,43 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
   const estimate = merchant.cashbackEstimate(fiatAmount ?? '');
   const range = merchant.rangeLabel();
   const cardLabel = fiatAmount ? merchant.shortAmount(fiatAmount) : null;
+  const bankPrice = fiatAmount ? money.fiat(fiatAmount, merchant.currency) : null;
+  const walletOptions = onlyPaymentCurrency
+    ? offeredTokens.filter((token) => token.currency === onlyPaymentCurrency)
+    : offeredTokens;
+  const payOptions = (
+    <View style={styles.step}>
+      <ThemedText type="heading" accessibilityRole="header">
+        Pay with
+      </ThemedText>
+      <View style={styles.grid} accessibilityRole="radiogroup">
+        {bankOffered && (
+          <View style={styles.token}>
+            <Button
+              label="UK bank account"
+              onPress={() => setChosen(BankPayment.option)}
+              selected={byBank}
+            />
+          </View>
+        )}
+        {walletOptions.map((token) => (
+          <View key={token.currency} style={styles.token}>
+            <Button
+              label={tokenLabel(token, view?.holdings ?? null)}
+              onPress={() => setChosen(token.currency)}
+              selected={!byBank && currency === token.currency}
+              disabled={refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n}
+            />
+          </View>
+        ))}
+      </View>
+      {byBank && (
+        <ThemedText type="small" themeColor="textSecondary">
+          You approve the payment in your banking app. Cashback is paid in pounds.
+        </ThemedText>
+      )}
+    </View>
+  );
   return (
     <PurchaseCard>
       <View style={styles.step}>
@@ -559,30 +687,33 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
         {(amountProblem ?? amountError) && <InlineError text={(amountProblem ?? amountError) as string} />}
       </View>
 
-      {onlyPaymentCurrency === null && (
+      {(onlyPaymentCurrency === null || bankOffered) && payOptions}
+
+      {legalNameNeeded && (
         <View style={styles.step}>
           <ThemedText type="heading" accessibilityRole="header">
-            Pay with
+            Name on your bank account
           </ThemedText>
-          <View style={styles.grid} accessibilityRole="radiogroup">
-            {offeredTokens.map((token) => (
-              <View key={token.currency} style={styles.token}>
-                <Button
-                  label={tokenLabel(token, view?.holdings ?? null)}
-                  onPress={() => setChosenCurrency(token.currency)}
-                  selected={currency === token.currency}
-                  disabled={refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n}
-                />
-              </View>
-            ))}
-          </View>
+          <Field
+            value={legalName}
+            onChangeText={setLegalName}
+            placeholder="First and last name"
+            autoCapitalize="words"
+            autoComplete="name"
+            textContentType="name"
+          />
+          <ThemedText type="small" themeColor="textSecondary">
+            Your bank checks this name when you approve the payment.
+          </ThemedText>
         </View>
       )}
 
       <View style={styles.summary}>
-        {shownPrice !== null && <SummaryRow label="You pay" value={dollars(shownPrice)} />}
+        {byBank
+          ? bankPrice && <SummaryRow label="You pay" value={bankPrice} />
+          : shownPrice !== null && <SummaryRow label="You pay" value={dollars(shownPrice)} />}
         {estimate && <SummaryRow label="Cashback" value={`About ${estimate}`} emphasis />}
-        {balanceText && <SummaryRow label="Your balance" value={balanceText} />}
+        {!byBank && balanceText && <SummaryRow label="Your balance" value={balanceText} />}
       </View>
       {short && <InlineError text={notEnoughMessage} />}
       <Button
@@ -715,9 +846,12 @@ type OrderViewProps = {
   balance: string | null;
   busy: boolean;
   onConfirm: () => void;
+  onApprove: (order: GiftCard) => void;
   onRetry: () => void;
   onDone: () => void;
 };
+
+const bankLinkExpiredMessage = 'The payment link expired before the payment was approved.';
 
 function OrderView({
   merchant,
@@ -728,6 +862,7 @@ function OrderView({
   balance,
   busy,
   onConfirm,
+  onApprove,
   onRetry,
   onDone,
 }: OrderViewProps) {
@@ -737,9 +872,16 @@ function OrderView({
   const ready = order?.status === 'fulfilled';
   const submitted = order?.status === 'paid' || payment.kind === 'confirming';
   const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
+  const bankLink = order && payment.kind === 'bank' ? BankPayment.openLink(order) : null;
+  const bankLinkExpired = order?.status === 'unpaid' && payment.kind === 'bankExpired';
   const paymentFailed = order?.status === 'unpaid' && payment.kind === 'failed';
-  const failed = paymentFailed || outcome !== null;
+  const failed = paymentFailed || bankLinkExpired || outcome !== null;
   const canRetry = paymentFailed && !needsSupport(payment);
+  const headline = submitted
+    ? 'Your gift card is on its way'
+    : bankLink
+      ? 'Approve the payment in your banking app'
+      : 'Buying your gift card…';
   return (
     <PurchaseCard>
       <View style={styles.orderHead}>
@@ -747,9 +889,7 @@ function OrderView({
           {merchant.name} gift card
         </ThemedText>
         <ThemedText type="subtitle">{merchant.shortAmount(cardAmount)}</ThemedText>
-        {!ready && !failed && confirmPrice === null && (
-          <ThemedText type="smallBold">{submitted ? 'Your gift card is on its way' : 'Buying your gift card…'}</ThemedText>
-        )}
+        {!ready && !failed && confirmPrice === null && <ThemedText type="smallBold">{headline}</ThemedText>}
       </View>
 
       {balance && (
@@ -793,9 +933,15 @@ function OrderView({
           disabled={busy}
         />
       )}
+      {bankLinkExpired && (
+        <Notice message={bankLinkExpiredMessage} actionLabel="Try again" onAction={onRetry} disabled={busy} />
+      )}
 
       {confirmPrice !== null && (
         <Button label={`Buy for ${dollars(confirmPrice)}`} variant="primary" onPress={onConfirm} disabled={busy} />
+      )}
+      {bankLink && order && (
+        <Button label="Approve at your bank" variant="primary" onPress={() => onApprove(order)} disabled={busy} />
       )}
       {!working && (
         <Button
@@ -863,11 +1009,14 @@ function progressLabel(order: GiftCard | null, payment: PaymentState): string {
   switch (payment.kind) {
     case 'movingSavings':
       return 'Moving money from your savings';
+    case 'bank':
+      return 'Waiting for your bank';
     case 'ready':
     case 'sending':
       return 'Paying';
     case 'confirming':
       return 'Payment sent, confirming';
+    case 'bankExpired':
     case 'failed':
     case 'priceExpired':
     case 'notSent':

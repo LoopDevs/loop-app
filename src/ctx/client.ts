@@ -105,7 +105,7 @@ export type GiftCardOrderIn = {
   merchantId: string;
   fiatAmount: string;
   fiatCurrency: string;
-  cryptoCurrency: PaymentCurrency;
+  cryptoCurrency?: PaymentCurrency;
 };
 
 type GiftCardOrderBody = GiftCardOrderIn & {
@@ -123,9 +123,12 @@ export type GiftCard = {
   paymentId: string;
   paymentStatus: 'unpaid' | 'paid' | 'error' | 'refunded' | 'cancelled' | 'expired';
   paymentMethod: string;
+  paymentFiatAmount?: string;
+  paymentFiatCurrency?: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
   paymentCryptoTxId?: string;
+  paymentUrl?: string;
   paymentUrlExpiration?: string;
   number?: string;
   pin?: string;
@@ -178,6 +181,7 @@ export type OAuthIdentityJson = {
 export type UserJson = {
   id: string;
   email?: string;
+  legalName?: string;
   country?: string;
   stableCurrency?: string;
   cashbackDestination?: CashbackDestination;
@@ -195,7 +199,8 @@ export type MeJson = {
 export type UserUpdate =
   | { country: string }
   | { stableCurrency: string }
-  | { cashbackDestination: CashbackDestination };
+  | { cashbackDestination: CashbackDestination }
+  | { legalName: string };
 
 export type BalanceJson = {
   currency: string;

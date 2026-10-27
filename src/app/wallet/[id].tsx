@@ -23,6 +23,7 @@ import {
   Radius,
   Spacing,
 } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, type GiftCard } from '@/ctx/client';
 import {
   cashbackState,
@@ -162,7 +163,12 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const cashback = cashbackState(giftCard);
   const outcome = outcomeText(giftCard);
   const processing = giftCard.status === 'paid';
-  const paid = amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency);
+  const byBank = BankPayment.isBank(giftCard);
+  const paid = byBank
+    ? BankPayment.charged(giftCard)
+      ? amountInMoney(giftCard.paymentFiatAmount, giftCard.paymentFiatCurrency)
+      : null
+    : amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency);
   const cashbackAmount = amountInMoney(giftCard.cashbackAmount, giftCard.cashbackCurrency);
   const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
 
@@ -175,7 +181,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
           borderColor: theme.border,
         },
       ]}>
-      {paid && <SummaryRow label="Paid" value={paid} />}
+      {paid && <SummaryRow label={byBank ? 'Paid by bank' : 'Paid'} value={paid} />}
       {cashback !== 'none' && (
         <SummaryRow
           label={cashbackAmount ? `Cashback, ${cashbackStateLabel(cashback)}` : 'Cashback'}
