@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loopEnvironment } from '@/environment';
 import { InstallScopedToken } from '@/session/install-scoped-token';
 import { secureTokenStorage } from '@/session/secure-token-storage';
+import { holdCriticalReload } from '@/updates/update-checker';
 
 const refreshToken = new InstallScopedToken(
   secureTokenStorage,
@@ -21,6 +22,6 @@ export const tokenStore = {
     return refreshToken.clear();
   },
   exclusive<T>(task: () => Promise<T>): Promise<T> {
-    return task();
+    return holdCriticalReload(task);
   },
 };
