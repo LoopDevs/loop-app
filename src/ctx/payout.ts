@@ -30,7 +30,15 @@ export type PayoutJson = {
 };
 
 export class Payout {
-  static readonly terminalStatuses: readonly PayoutStatus[] = ['complete', 'rejected', 'cancelled'];
+  static readonly inFlightStatuses: readonly PayoutStatus[] = [
+    'pending-approval',
+    'approved',
+    'held',
+    'pending',
+    'submitted',
+    'queued',
+    'failed',
+  ];
 
   readonly id: string;
   readonly kind: PayoutKind;
@@ -58,12 +66,12 @@ export class Payout {
     this.reversalTransferId = json.reversalTransferId;
   }
 
-  isTerminal(): boolean {
-    return Payout.terminalStatuses.includes(this.status);
-  }
-
   isInFlight(): boolean {
-    return !this.isTerminal() && Boolean(this.reservationTransferId) && !this.reversalTransferId;
+    return (
+      Payout.inFlightStatuses.includes(this.status) &&
+      Boolean(this.reservationTransferId) &&
+      !this.reversalTransferId
+    );
   }
 
   netAmount(): string {

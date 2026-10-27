@@ -12,11 +12,17 @@ const reserved: PayoutJson = {
   reservationTransferId: 't1',
 };
 
-test('a reserved, unreversed payout is in flight until it reaches a terminal status', () => {
+test('a reserved, unreversed payout is in flight until it is complete, rejected or cancelled', () => {
+  const settled: readonly string[] = ['complete', 'rejected', 'cancelled'];
   for (const status of payoutStatuses) {
     const payout = new Payout({ ...reserved, status });
-    assert.equal(payout.isInFlight(), !Payout.terminalStatuses.includes(status), status);
+    assert.equal(payout.isInFlight(), !settled.includes(status), status);
   }
+});
+
+test('a payout with a status the app does not know is not in flight', () => {
+  const payout = new Payout({ ...reserved, status: 'settled' as PayoutJson['status'] });
+  assert.equal(payout.isInFlight(), false);
 });
 
 test('a reversed payout is never in flight', () => {

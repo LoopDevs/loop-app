@@ -132,7 +132,7 @@ export class Holdings {
     const funded = currencies.filter((currency) => !refused.has(currency) && this.spendable(currency) > 0n);
     let best: { currency: PaymentCurrency; value: bigint } | null = null;
     for (const currency of funded) {
-      const value = this.valueIn(this.spendable(currency), currency, stable);
+      const value = this.rankingValue(currency, stable);
       if (value === null) {
         continue;
       }
@@ -147,6 +147,13 @@ export class Holdings {
       funded[0] ??
       null
     );
+  }
+
+  private rankingValue(currency: PaymentCurrency, stable: string): bigint | null {
+    const amount = this.spendable(currency);
+    const value = this.valueIn(amount, currency, stable);
+    const comparableByPeg = stablePeg[currency] !== null && this.rates.usdPrice(currency) !== null;
+    return value ?? (comparableByPeg ? amount : null);
   }
 
   private estimateIn(holding: Holding, stable: string): bigint | null {
