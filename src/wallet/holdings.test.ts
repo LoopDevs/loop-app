@@ -232,6 +232,16 @@ test('with no priced candidate a funded currency is preferred, the stable first,
   assert.equal(unpriced.preferredCurrency(currencies, 'XLM.EURC', new Set(['XLM.USDC', 'XLM.GBPLOOP'])), 'XLM');
 });
 
+test('when the display currency has no rate, a priced stablecoin is ranked by its amount, not passed over for a near-empty stable', () => {
+  const held = holdings({ 'XLM.EURC': '100', 'XLM.GBPLOOP': '0.01' }, { rates: Rates.fromPrices({ 'XLM.EURC': '1.1' }) });
+  assert.equal(held.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set()), 'XLM.EURC');
+});
+
+test('a stablecoin without its own rate is not ranked by its amount, because it cannot pass the price check', () => {
+  const held = holdings({ 'XLM.EURC': '100', 'XLM.GBPLOOP': '0.01' }, { rates: Rates.fromPrices({ 'XLM.GBPLOOP': '1.3' }) });
+  assert.equal(held.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set()), 'XLM.GBPLOOP');
+});
+
 test('an unfunded stable is never preferred over a funded currency', () => {
   const held = holdings({ 'XLM.USDC': '5' }, { rates: Rates.fromPrices({}) });
   assert.equal(held.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set()), 'XLM.USDC');
