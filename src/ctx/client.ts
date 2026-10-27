@@ -15,7 +15,6 @@ import {
   oauthLoginBody,
   signInRefusalMessage,
   type SignInMethod,
-  type SocialCredential,
   type SocialProvider,
 } from '@/session/social-sign-in';
 import { tokenStore } from '@/session/token-store';
@@ -267,10 +266,10 @@ class CtxClient {
     });
   }
 
-  signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
+  signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
     return holdCriticalReload(async () => {
       await this.auth.startSession(
-        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
+        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
       );
     });
   }

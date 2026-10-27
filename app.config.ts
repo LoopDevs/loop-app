@@ -1,10 +1,12 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
-import './src/environment.ts';
-import { googleIosClientId, SocialSignInConfig } from './src/session/social-sign-in.ts';
+import { loopEnvironment } from './src/environment.ts';
+import { SocialSignInConfig } from './src/session/social-sign-in.ts';
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const googleIosUrlScheme = new SocialSignInConfig({ googleIosClientId }).googleIosUrlScheme();
+  const googleIosUrlScheme = new SocialSignInConfig({
+    googleIosClientId: loopEnvironment.googleIosClientId,
+  }).googleIosUrlScheme();
   const plugins: ExpoConfig['plugins'] = [...(config.plugins ?? []), 'expo-apple-authentication'];
   if (googleIosUrlScheme) {
     plugins.push(['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }]);

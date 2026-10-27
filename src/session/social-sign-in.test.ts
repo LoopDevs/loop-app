@@ -4,13 +4,7 @@ import { test } from 'node:test';
 import type { ConfigContext } from 'expo/config';
 
 import appConfig from '../../app.config.ts';
-import {
-  hasErrorCode,
-  newSignInNonce,
-  oauthLoginBody,
-  signInRefusalMessage,
-  SocialSignInConfig,
-} from './social-sign-in.ts';
+import { hasErrorCode, signInRefusalMessage, SocialSignInConfig } from './social-sign-in.ts';
 
 const allIds = new SocialSignInConfig({
   appleSignIn: 'true',
@@ -80,37 +74,22 @@ test('the Google iOS URL scheme is the reversed iOS client id', () => {
   );
 });
 
-test('the OAuth login body carries the sign-in nonce', () => {
-  const nonce = newSignInNonce();
-  assert.deepEqual(oauthLoginBody('apple', { idToken: 'header.payload.signature', nonce }), {
-    provider: 'apple',
-    idToken: 'header.payload.signature',
-    nonce,
-  });
-});
-
-test('the OAuth login body leaves out a missing nonce', () => {
-  const body = oauthLoginBody('google', { idToken: 'header.payload.signature' });
-  assert.deepEqual(body, { provider: 'google', idToken: 'header.payload.signature' });
-  assert.equal('nonce' in body, false);
-});
-
-test('each sign-in nonce is 32 random bytes in hex', () => {
-  const first = newSignInNonce();
-  assert.match(first, /^[0-9a-f]{64}$/);
-  assert.notEqual(newSignInNonce(), first);
-});
-
-test('Apple sign-in hints point Apple accounts to their sign-in method on every platform', () => {
-  for (const platform of ['android', 'web']) {
-    assert.match(allIds.appleAccountHint(platform) ?? '', /Signed up with Apple on an iPhone/);
+test('Android and web point Apple accounts to iPhone whatever the build sets for Apple', () => {
+  for (const appleSignIn of ['true', 'false', undefined]) {
+    const config = new SocialSignInConfig({ appleSignIn });
+    for (const platform of ['android', 'web']) {
+      assert.match(config.appleAccountHint(platform) ?? '', /Signed up with Apple on an iPhone/);
+    }
   }
+});
+
+test('iOS shows the relay address hint only beside the Apple button', () => {
   assert.match(allIds.appleAccountHint('ios') ?? '', /relay address/);
-  assert.equal(new SocialSignInConfig({ appleSignIn: 'false' }).appleAccountHint('web'), null);
+  assert.equal(new SocialSignInConfig({ appleSignIn: 'false' }).appleAccountHint('ios'), null);
 });
 
 test('the app config is the same whatever the social sign-in env', () => {
-  const keys = ['EXPO_PUBLIC_APPLE_SIGN_IN', 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID'];
+  const keys = ['EXPO_PUBLIC_APPLE_SIGN_IN', 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID'];
   const saved = keys.map((key) => process.env[key]);
   const configWith = (value: string | undefined) => {
     for (const key of keys) {

@@ -1,5 +1,3 @@
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
-
 export type SocialProvider = 'apple' | 'google';
 
 export type SignInMethod = 'email' | SocialProvider;
@@ -10,13 +8,9 @@ export type SocialSignInEnv = {
   googleIosClientId?: string;
 };
 
-export type SocialCredential = {
-  idToken: string;
-  nonce?: string;
-};
-
-export type OAuthLoginBody = SocialCredential & {
+export type OAuthLoginBody = {
   provider: SocialProvider;
+  idToken: string;
 };
 
 const providerNames: Record<SocialProvider, string> = {
@@ -25,8 +19,6 @@ const providerNames: Record<SocialProvider, string> = {
 };
 
 const googleClientIdSuffix = '.apps.googleusercontent.com';
-
-export const googleIosClientId = '';
 
 export class SocialSignInConfig {
   readonly appleSignIn: boolean;
@@ -62,22 +54,17 @@ export class SocialSignInConfig {
   }
 
   appleAccountHint(platform: string): string | null {
-    if (!this.appleSignIn) {
-      return null;
+    if (platform !== 'ios') {
+      return 'Signed up with Apple on an iPhone? Sign in with Apple on that iPhone, or enter the email you shared with Apple. If you hid your email, use the relay address shown in Settings on your iPhone.';
     }
-    return platform === 'ios'
+    return this.appleSignIn
       ? 'Signed up with Apple and hid your email? Use the relay address shown in Settings on your iPhone.'
-      : 'Signed up with Apple on an iPhone? Sign in with Apple on that iPhone, or enter the email you shared with Apple. If you hid your email, use the relay address shown in Settings on your iPhone.';
+      : null;
   }
 }
 
-export function newSignInNonce(): string {
-  return bytesToHex(randomBytes(32));
-}
-
-export function oauthLoginBody(provider: SocialProvider, credential: SocialCredential): OAuthLoginBody {
-  const { idToken, nonce } = credential;
-  return nonce ? { provider, idToken, nonce } : { provider, idToken };
+export function oauthLoginBody(provider: SocialProvider, idToken: string): OAuthLoginBody {
+  return { provider, idToken };
 }
 
 export function socialProviderName(provider: SocialProvider): string {

@@ -6,20 +6,18 @@ import {
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Platform } from 'react-native';
 
+import { loopEnvironment } from '@/environment';
 import {
-  googleIosClientId,
   hasErrorCode,
-  newSignInNonce,
   SocialSignInConfig,
   socialProviderName,
-  type SocialCredential,
   type SocialProvider,
 } from '@/session/social-sign-in';
 
 const config = new SocialSignInConfig({
   appleSignIn: process.env.EXPO_PUBLIC_APPLE_SIGN_IN,
   googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  googleIosClientId,
+  googleIosClientId: loopEnvironment.googleIosClientId,
 });
 
 function requireIdToken(provider: SocialProvider, idToken: string | null): string {
@@ -29,14 +27,12 @@ function requireIdToken(provider: SocialProvider, idToken: string | null): strin
   return idToken;
 }
 
-async function appleCredential(): Promise<SocialCredential | null> {
-  const nonce = newSignInNonce();
+async function appleIdToken(): Promise<string | null> {
   try {
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL],
-      nonce,
     });
-    return { idToken: requireIdToken('apple', credential.identityToken), nonce };
+    return requireIdToken('apple', credential.identityToken);
   } catch (error) {
     if (hasErrorCode(error, 'ERR_REQUEST_CANCELED')) {
       return null;
@@ -45,7 +41,7 @@ async function appleCredential(): Promise<SocialCredential | null> {
   }
 }
 
-async function googleCredential(): Promise<SocialCredential | null> {
+async function googleIdToken(): Promise<string | null> {
   GoogleSignin.configure({
     webClientId: config.googleWebClientId,
     iosClientId: config.googleIosClientId || undefined,
@@ -57,7 +53,7 @@ async function googleCredential(): Promise<SocialCredential | null> {
     if (isCancelledResponse(response)) {
       return null;
     }
-    return { idToken: requireIdToken('google', response.data.idToken) };
+    return requireIdToken('google', response.data.idToken);
   } catch (error) {
     if (hasErrorCode(error, statusCodes.SIGN_IN_CANCELLED)) {
       return null;
@@ -75,7 +71,7 @@ export const socialSignIn = {
     return config.appleAccountHint(Platform.OS);
   },
 
-  credential(provider: SocialProvider): Promise<SocialCredential | null> {
-    return provider === 'apple' ? appleCredential() : googleCredential();
+  idToken(provider: SocialProvider): Promise<string | null> {
+    return provider === 'apple' ? appleIdToken() : googleIdToken();
   },
 };
