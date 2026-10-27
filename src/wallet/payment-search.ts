@@ -1,8 +1,8 @@
 import type { GiftCard } from '../ctx/client.ts';
 import { needsPaymentSearch } from '../ctx/gift-card-status.ts';
-import { transferLanded, transferMatches, type SignedTransfer } from '../ctx/payment-state.ts';
+import { landingClosed, transferLanded, transferMatches, type SignedTransfer } from '../ctx/payment-state.ts';
 import { network } from '../stellar/network.ts';
-import type { LedgerRange, TransferEvent } from '../stellar/transfer-events.ts';
+import type { LedgerRange, TransferSearchResult } from '../stellar/transfer-events.ts';
 import { units } from '../stellar/units.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 
@@ -12,7 +12,7 @@ export type LedgerRetention = {
 };
 
 export type TransferSource = {
-  transfers(contractId: string, from: string, to: string, ledgers: LedgerRange): Promise<TransferEvent[]>;
+  transfers(contractId: string, from: string, to: string, ledgers: LedgerRange): Promise<TransferSearchResult>;
   retention(): Promise<LedgerRetention>;
 };
 
@@ -76,7 +76,10 @@ export class PaymentSearch {
     if (!(startLedger < endLedger)) {
       return null;
     }
-    return { ledgers: { startLedger, endLedger }, complete: neededStart >= searchableLedger };
+    return {
+      ledgers: { startLedger, endLedger },
+      complete: neededStart >= searchableLedger,
+    };
   }
 
   static landedWithin(closedAt: number, span: TimeSpan): boolean {
@@ -95,15 +98,26 @@ export class PaymentSearch {
     return {
       contract: token.contract,
       expected: muxedId === undefined ? { amount } : { amount, muxedId },
-      span: { from: Date.parse(giftCard.created), to: Date.parse(paymentUrlExpiration) },
+      span: {
+        from: Date.parse(giftCard.created),
+        to: Date.parse(paymentUrlExpiration),
+      },
     };
   }
 
-  async landed(contractId: string, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
-    const transfers = await this.source.transfers(contractId, this.from, this.to, PaymentSearch.ledgers(expiryLedger));
-    return transferLanded(
-      transfers.map((transfer) => transfer.value),
-      expected,
+  async missing(contractId: string, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
+    const { transfers, latestLedger } = await this.source.transfers(
+      contractId,
+      this.from,
+      this.to,
+      PaymentSearch.ledgers(expiryLedger),
+    );
+    return (
+      landingClosed(latestLedger, expiryLedger) &&
+      !transferLanded(
+        transfers.map((transfer) => transfer.value),
+        expected,
+      )
     );
   }
 
@@ -116,7 +130,7 @@ export class PaymentSearch {
     if (!search) {
       return { kind: 'unknown' };
     }
-    const transfers = await this.source.transfers(order.contract, this.from, this.to, search.ledgers);
+    const { transfers } = await this.source.transfers(order.contract, this.from, this.to, search.ledgers);
     const payment = transfers.find(
       (transfer) =>
         PaymentSearch.landedWithin(transfer.closedAt, order.span) && transferMatches(transfer.value, order.expected),
