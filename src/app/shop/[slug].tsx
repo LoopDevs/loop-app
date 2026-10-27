@@ -40,7 +40,7 @@ export default function MerchantScreen() {
   const router = useRouter();
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const { busy, message, run } = useBusyAction();
+  const { busy, message, load: track } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
@@ -52,7 +52,7 @@ export default function MerchantScreen() {
 
   const load = useCallback(
     () =>
-      run(async () => {
+      track(async () => {
         if (loadedSlug.current !== slug) {
           loadedSlug.current = slug;
           setMerchant(cachedMerchant(slug));
@@ -66,7 +66,7 @@ export default function MerchantScreen() {
         });
         await Promise.all([merchantLoad, walletLoad]);
       }),
-    [run, slug],
+    [track, slug],
   );
 
   useFocusEffect(

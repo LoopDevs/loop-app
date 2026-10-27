@@ -9,7 +9,7 @@ import { haptics } from '@/native/haptics';
 
 type FieldProps = React.ComponentProps<typeof TextInput>;
 
-export function Field(props: FieldProps) {
+export function Field({ style, onFocus, onBlur, ...props }: FieldProps) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
   const focusBorder = { borderColor: theme.text, borderWidth: 2 };
@@ -20,8 +20,15 @@ export function Field(props: FieldProps) {
       autoCorrect={false}
       placeholderTextColor={theme.textSecondary}
       selectionColor={theme.accent}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      {...props}
+      onFocus={(event) => {
+        setFocused(true);
+        onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setFocused(false);
+        onBlur?.(event);
+      }}
       style={[
         styles.field,
         {
@@ -29,9 +36,9 @@ export function Field(props: FieldProps) {
           backgroundColor: theme.backgroundElement,
           borderColor: theme.borderStrong,
         },
+        style,
         focused && focusBorder,
       ]}
-      {...props}
     />
   );
 }

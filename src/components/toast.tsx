@@ -1,11 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { AccessibilityInfo, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOut, useReducedMotion } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomTabInset,FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-const toastLifetimeMs = 2500;
+const toastMinLifetimeMs = 2500;
+const toastMaxLifetimeMs = 7000;
+const toastMsPerCharacter = 70;
+
+export function toastLifetimeMs(text: string): number {
+  return Math.min(toastMaxLifetimeMs, Math.max(toastMinLifetimeMs, text.length * toastMsPerCharacter));
+}
 
 type Toast = {
   id: number;
@@ -22,6 +29,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null);
   const reduceMotion = useReducedMotion();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   const show = useCallback((text: string) => {
     setToast((current) => ({ id: (current?.id ?? 0) + 1, text }));
@@ -32,7 +40,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     if (!toast) {
       return;
     }
-    const timer = setTimeout(() => setToast(null), toastLifetimeMs);
+    const timer = setTimeout(() => setToast(null), toastLifetimeMs(toast.text));
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -41,7 +49,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <View
         pointerEvents="none"
-        style={styles.host}
+        style={[styles.host, { bottom: BottomTabInset + Spacing.four + insets.bottom }]}
         accessibilityLiveRegion={Platform.OS === 'web' ? 'polite' : 'none'}>
         {toast && (
           <Animated.View
@@ -64,7 +72,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: Spacing.three,
     right: Spacing.three,
-    bottom: BottomTabInset + Spacing.four,
     alignItems: 'center',
   },
   toast: {
