@@ -1,6 +1,6 @@
 import type { AccountJson, BuiltTransaction, GiftCard, SponsoredResult, WalletLink } from './client.ts';
 import { CtxError } from './ctx-error.ts';
-import { payoutStatuses } from './payout.ts';
+import { Payout } from './payout.ts';
 
 export class UnexpectedResponse extends Error {
   readonly detail: string;
@@ -29,7 +29,6 @@ export class CtxResponse {
     'cancelled',
     'expired',
   ];
-  static readonly payoutKinds: readonly string[] = ['wallet', 'savings'];
 
   private readonly shape: string;
   private readonly json: Record<string, unknown>;
@@ -87,19 +86,33 @@ export class CtxResponse {
     return value as SponsoredResult;
   }
 
-  static account(value: unknown): AccountJson {
+  static account(value: unknown, skipped: (detail: string) => void): AccountJson {
     const account = new CtxResponse('account', value);
     account.nullableList('wallet', (balance) => {
       new CtxResponse('account balance', balance).strings('currency', 'amount');
     });
     account.nullableList('payouts', (payout) => {
       new CtxResponse('payout', payout)
-        .strings('id', 'currency', 'amount')
-        .oneOf('status', payoutStatuses)
-        .optionalOneOf('kind', CtxResponse.payoutKinds)
-        .optionalStrings('address', 'sentAmount', 'txHash', 'retryAt', 'reservationTransferId', 'reversalTransferId');
+        .strings('id', 'currency', 'amount', 'status')
+        .optionalStrings(
+          'kind',
+          'address',
+          'sentAmount',
+          'txHash',
+          'retryAt',
+          'reservationTransferId',
+          'reversalTransferId',
+        );
     });
-    return value as AccountJson;
+    const json = value as AccountJson;
+    const payouts = json.payouts?.filter((payout) => {
+      if (Payout.isKnown(payout)) {
+        return true;
+      }
+      skipped(`CTX payout has an unknown status "${payout.status}" or kind "${payout.kind}"`);
+      return false;
+    });
+    return { ...json, payouts: payouts ?? null };
   }
 
   static listOf<T>(shape: string, value: unknown, item: (value: unknown) => T): T[] {
@@ -134,10 +147,6 @@ export class CtxResponse {
 
   private oneOf(name: string, allowed: readonly string[]): this {
     return this.check([name], (value) => typeof value === 'string' && allowed.includes(value));
-  }
-
-  private optionalOneOf(name: string, allowed: readonly string[]): this {
-    return this.check([name], (value) => value === undefined || (typeof value === 'string' && allowed.includes(value)));
   }
 
   private nullableList(name: string, item: (value: unknown) => void): this {

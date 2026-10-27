@@ -12,7 +12,7 @@ import {
   UnansweredWithdrawal,
   type ChainTransaction,
   type PendingWithdrawal,
-  type SentWithdrawal,
+  type SignedWithdrawal,
   type TopUpChain,
 } from './savings-top-up.ts';
 import type { Balances } from './smart-wallet.ts';
@@ -33,7 +33,7 @@ type FakeVault = {
   refusals?: Refusal[];
 };
 
-type Refusal = { value: string; status: number; landed?: boolean };
+type Refusal = { value: string; status: number | 'network'; landed?: boolean };
 
 const firstLedger = 1_000;
 const ledgerMs = 5_000;
@@ -95,20 +95,27 @@ class FakeChain implements TopUpChain {
     return (shares * this.value) / this.shares;
   }
 
-  async withdraw(shares: bigint): Promise<SentWithdrawal> {
+  async signWithdrawal(shares: bigint): Promise<SignedWithdrawal> {
     this.withdrawn.push(shares);
     const expiryLedger = this.ledger() + signatureLedgers;
     const refusal = this.refusals.shift();
-    if (refusal) {
-      if (refusal.landed) {
-        this.wallet += Holdings.floorOf(await this.valueOf(shares));
-      }
-      this.value = units.parse(refusal.value);
-      UnansweredWithdrawal.rethrow(new CtxError(refusal.status, '{"error":"simulation failed"}'), expiryLedger);
-    }
     const hash = `HASH-${this.withdrawn.length}`;
-    this.sent.set(hash, shares);
-    return { ...(this.withdrawal ?? { hash, status: 'pending' }), expiryLedger };
+    return {
+      expiryLedger,
+      sponsor: async () => {
+        if (refusal) {
+          if (refusal.landed) {
+            this.wallet += Holdings.floorOf(await this.valueOf(shares));
+          }
+          this.value = units.parse(refusal.value);
+          throw refusal.status === 'network'
+            ? new TypeError('Network request failed')
+            : new CtxError(refusal.status, '{"error":"simulation failed"}');
+        }
+        this.sent.set(hash, shares);
+        return this.withdrawal ?? { hash, status: 'pending' };
+      },
+    };
   }
 
   async transaction(hash: string): Promise<ChainTransaction> {
@@ -282,6 +289,20 @@ test('a withdrawal whose sponsor call goes unanswered is kept as moving until it
   const window = new PriceWindow(chain.clock + 600_000);
   assert.deepEqual(await topUp.run(price, window, unanswered), { kind: 'covered' });
   assert.equal(chain.withdrawn.length, 2);
+});
+
+test('a withdrawal whose sponsor call fails on the network is kept as moving', async () => {
+  const chain = new FakeChain({
+    wallet: '0',
+    shares: '50',
+    value: '50',
+    refusals: [{ value: '50', status: 'network' }],
+  });
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), {
+    kind: 'stillMoving',
+    withdrawal: { hash: '', expiryLedger: firstLedger + signatureLedgers },
+  });
+  assert.equal(chain.withdrawn.length, 1);
 });
 
 test('an unanswered withdrawal that landed covers the retry without a second withdrawal', async () => {

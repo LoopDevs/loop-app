@@ -5,7 +5,7 @@ import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
 import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
-import { OrderRequest } from '@/ctx/order-request';
+import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { OrderWake } from '@/ctx/order-wake';
 import { Deadline } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
@@ -231,6 +231,7 @@ export type SponsoredResult = {
 class CtxClient {
   private readonly auth = new SessionAuth(this.send.bind(this), tokenStore);
   private serviceStateListener: ServiceStateListener | null = null;
+  private readonly orderKeys = new OrderKeys(() => bytesToHex(randomBytes(16)));
 
   constructor(
     private readonly baseUrl: string,
@@ -314,7 +315,10 @@ class CtxClient {
   }
 
   async account(): Promise<Account> {
-    return new Account(this.checked(CtxResponse.account, await this.userRequest('GET', '/account')));
+    const json = await this.userRequest('GET', '/account');
+    return new Account(
+      this.checked((value) => CtxResponse.account(value, (detail) => errorReporting.reportMessage(detail)), json),
+    );
   }
 
   async merchants({ country, name, ids, category, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
@@ -358,7 +362,7 @@ class CtxClient {
 
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
-    const idempotencyKey = bytesToHex(randomBytes(16));
+    const idempotencyKey = this.orderKeys.keyFor(order);
     const card = this.checked(
       CtxResponse.giftCard,
       await this.auth.sessionRequest('POST', '/gift-cards', body, true, { 'Idempotency-Key': idempotencyKey }),
@@ -367,6 +371,7 @@ class CtxClient {
       errorReporting.reportMessage('CTX order does not match the request');
       throw new Error('CTX order does not match the request');
     }
+    this.orderKeys.settle(idempotencyKey);
     return card;
   }
 

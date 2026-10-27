@@ -74,13 +74,35 @@ test('a wallet link needs its id, address and sponsored flag', () => {
   assert.throws(() => CtxResponse.walletLink({ ...link, address: undefined }), unexpected(/address/));
 });
 
+const payout = { id: 'po-1', status: 'pending', currency: 'USDC', amount: '1.00', kind: 'savings' };
+const account = { wallet: [{ currency: 'USDC', amount: '1.00' }], payouts: [payout] };
+const unreported = (detail: string) => assert.fail(detail);
+
 test('an account checks each balance and payout and accepts empty lists', () => {
-  const payout = { id: 'po-1', status: 'pending', currency: 'USDC', amount: '1.00', kind: 'savings' };
-  const account = { wallet: [{ currency: 'USDC', amount: '1.00' }], payouts: [payout] };
-  assert.equal(CtxResponse.account(account), account);
-  assert.deepEqual(CtxResponse.account({ wallet: null, payouts: null }), { wallet: null, payouts: null });
-  assert.throws(() => CtxResponse.account({ ...account, wallet: [{ currency: 'USDC', amount: 1 }] }), unexpected(/amount/));
-  assert.throws(() => CtxResponse.account({ ...account, payouts: [{ ...payout, status: 'lost' }] }), unexpected(/status/));
-  assert.throws(() => CtxResponse.account({ ...account, payouts: [{ ...payout, kind: 'card' }] }), unexpected(/kind/));
-  assert.throws(() => CtxResponse.account({ ...account, payouts: {} }), unexpected(/payouts/));
+  assert.deepEqual(CtxResponse.account(account, unreported), account);
+  assert.deepEqual(CtxResponse.account({ wallet: null, payouts: null }, unreported), { wallet: null, payouts: null });
+  assert.throws(
+    () => CtxResponse.account({ ...account, wallet: [{ currency: 'USDC', amount: 1 }] }, unreported),
+    unexpected(/amount/),
+  );
+  assert.throws(
+    () => CtxResponse.account({ ...account, payouts: [{ ...payout, amount: 1 }] }, unreported),
+    unexpected(/amount/),
+  );
+  assert.throws(() => CtxResponse.account({ ...account, payouts: [{ ...payout, status: 7 }] }, unreported), unexpected(/status/));
+  assert.throws(() => CtxResponse.account({ ...account, payouts: {} }, unreported), unexpected(/payouts/));
+});
+
+test('a payout with an unknown status or kind is skipped and reported, keeping the rest of the account', () => {
+  const reported: string[] = [];
+  const unknown = [
+    { ...payout, id: 'po-2', status: 'lost' },
+    { ...payout, id: 'po-3', kind: 'card' },
+  ];
+  const checked = CtxResponse.account({ ...account, payouts: [payout, ...unknown] }, (detail) => reported.push(detail));
+  assert.deepEqual(checked, account);
+  assert.deepEqual(reported, [
+    'CTX payout has an unknown status "lost" or kind "savings"',
+    'CTX payout has an unknown status "pending" or kind "card"',
+  ]);
 });

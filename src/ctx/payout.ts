@@ -13,7 +13,9 @@ export const payoutStatuses = [
 
 export type PayoutStatus = (typeof payoutStatuses)[number];
 
-export type PayoutKind = 'wallet' | 'savings';
+export const payoutKinds = ['wallet', 'savings'] as const;
+
+export type PayoutKind = (typeof payoutKinds)[number];
 
 export type PayoutJson = {
   id: string;
@@ -64,6 +66,12 @@ export class Payout {
     this.retryAt = json.retryAt;
     this.reservationTransferId = json.reservationTransferId;
     this.reversalTransferId = json.reversalTransferId;
+  }
+
+  static isKnown(json: { status: string; kind?: string }): boolean {
+    const statuses: readonly string[] = payoutStatuses;
+    const kinds: readonly string[] = payoutKinds;
+    return statuses.includes(json.status) && (json.kind === undefined || kinds.includes(json.kind));
   }
 
   isInFlight(): boolean {

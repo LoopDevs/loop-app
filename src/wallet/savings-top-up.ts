@@ -14,6 +14,11 @@ export type PendingWithdrawal = {
 
 export type SentWithdrawal = SponsoredResult & { expiryLedger: number };
 
+export type SignedWithdrawal = {
+  expiryLedger: number;
+  sponsor(): Promise<SponsoredResult>;
+};
+
 export type ChainTransaction = {
   status: string;
   latestLedger: number;
@@ -22,7 +27,7 @@ export type ChainTransaction = {
 export type TopUpChain = {
   balances(): Promise<Balances>;
   valueOf(shares: bigint): Promise<bigint>;
-  withdraw(shares: bigint): Promise<SentWithdrawal>;
+  signWithdrawal(shares: bigint): Promise<SignedWithdrawal>;
   transaction(hash: string): Promise<ChainTransaction>;
   latestLedger(): Promise<number>;
   sleep(ms: number): Promise<void>;
@@ -85,6 +90,13 @@ export class SavingsTopUp {
       return 'failed';
     }
     return chainOutcome(transaction.status);
+  }
+
+  static async send(signed: SignedWithdrawal): Promise<SentWithdrawal> {
+    const result = await signed
+      .sponsor()
+      .catch((error: unknown) => UnansweredWithdrawal.rethrow(error, signed.expiryLedger));
+    return { ...result, expiryLedger: signed.expiryLedger };
   }
 
   static refusedWithdrawal(error: unknown): SentWithdrawal {
@@ -191,7 +203,7 @@ export class SavingsTopUp {
       }
       let result: SentWithdrawal;
       try {
-        result = await this.chain.withdraw(shares);
+        result = await SavingsTopUp.send(await this.chain.signWithdrawal(shares));
       } catch (error) {
         if (error instanceof UnansweredWithdrawal) {
           return { kind: 'stillMoving', withdrawal: { hash: '', expiryLedger: error.expiryLedger } };
