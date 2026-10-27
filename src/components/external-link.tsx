@@ -28,6 +28,8 @@ export const externalUrl = {
     }
     await openBrowserAsync(url, {
       presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+      useProxyActivity: false,
+      showInRecents: false,
     });
   },
 };
