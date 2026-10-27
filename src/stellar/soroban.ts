@@ -81,11 +81,14 @@ export class Soroban {
     from: string,
     to: string,
     ledgers: LedgerRange,
-  ): Promise<unknown[]> {
-    const { events } = await this.call((server) =>
+  ): Promise<{ transfers: unknown[]; latestLedger: number }> {
+    const { events, latestLedger } = await this.call((server) =>
       server.getEvents(TransferEvents.request(contractId, from, to, ledgers)),
     );
-    return events.map((event) => scValToNative(event.value));
+    return {
+      transfers: events.map((event) => scValToNative(event.value)),
+      latestLedger,
+    };
   }
 
   async wasmHash(contractId: string): Promise<string> {

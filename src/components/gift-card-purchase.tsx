@@ -81,10 +81,10 @@ async function sentPaymentFailure(
   if (expiryLedger === undefined || !token || !landingClosed(await soroban.latestLedger(), expiryLedger)) {
     return null;
   }
-  if (await wallet.paymentLanded(token, await signedTransfer(giftCard), expiryLedger)) {
-    return null;
+  if (await wallet.paymentMissing(token, await signedTransfer(giftCard), expiryLedger)) {
+    return { kind: 'failed' };
   }
-  return { kind: 'failed' };
+  return null;
 }
 
 async function signedTransfer(giftCard: GiftCard): Promise<SignedTransfer | null> {

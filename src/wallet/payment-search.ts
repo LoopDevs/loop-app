@@ -1,9 +1,14 @@
-import { transferLanded, type SignedTransfer } from '../ctx/payment-state.ts';
+import { landingClosed, transferLanded, type SignedTransfer } from '../ctx/payment-state.ts';
 import type { LedgerRange } from '../stellar/transfer-events.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 
+export type TransferSearchResult = {
+  transfers: unknown[];
+  latestLedger: number;
+};
+
 export type TransferSource = {
-  transfers(contractId: string, from: string, to: string, ledgers: LedgerRange): Promise<unknown[]>;
+  transfers(contractId: string, from: string, to: string, ledgers: LedgerRange): Promise<TransferSearchResult>;
 };
 
 export class PaymentSearch {
@@ -24,8 +29,13 @@ export class PaymentSearch {
     };
   }
 
-  async landed(contractId: string, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
-    const transfers = await this.source.transfers(contractId, this.from, this.to, PaymentSearch.ledgers(expiryLedger));
-    return transferLanded(transfers, expected);
+  async missing(contractId: string, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
+    const { transfers, latestLedger } = await this.source.transfers(
+      contractId,
+      this.from,
+      this.to,
+      PaymentSearch.ledgers(expiryLedger),
+    );
+    return landingClosed(latestLedger, expiryLedger) && !transferLanded(transfers, expected);
   }
 }
