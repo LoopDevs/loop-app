@@ -85,9 +85,9 @@ export function cashbackState(card: GiftCard): CashbackState {
 export function cashbackStateLabel(state: CashbackState): string {
   switch (state) {
     case 'pending':
-      return 'on the way';
+      return 'pending';
     case 'credited':
-      return 'paid';
+      return 'on the way';
     case 'reversed':
       return 'reversed';
     case 'none':
