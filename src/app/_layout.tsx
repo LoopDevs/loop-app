@@ -2,7 +2,7 @@ import 'react-native-get-random-values';
 
 import { ErrorBoundary } from '@sentry/react-native';
 import { useFonts } from 'expo-font';
-import { DefaultTheme, ThemeProvider } from 'expo-router';
+import { ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -15,7 +15,7 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceUnavailable } from '@/components/service-unavailable';
 import { SignInProvider } from '@/components/sign-in';
 import { ToastProvider } from '@/components/toast';
-import { FontAssets } from '@/constants/theme';
+import { FontAssets, NavigationTheme } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { BlockingServiceState } from '@/ctx/service-state';
 import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
@@ -44,7 +44,7 @@ export default function TabLayout() {
     return null;
   }
   return (
-    <ThemeProvider value={DefaultTheme}>
+    <ThemeProvider value={NavigationTheme}>
       <StatusBar style="dark" />
       <ErrorBoundary fallback={({ error, resetError }) => <CrashFallback error={error} onRetry={resetError} />}>
         <AppLockProvider>

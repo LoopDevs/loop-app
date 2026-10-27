@@ -1,5 +1,6 @@
 import '@/global.css';
 
+import { DefaultTheme } from 'expo-router';
 import { Platform } from 'react-native';
 import { Easing } from 'react-native-reanimated';
 
@@ -29,6 +30,18 @@ export const Colors = {
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light;
+
+export const NavigationTheme: typeof DefaultTheme = {
+  ...DefaultTheme,
+  colors: {
+    primary: Colors.light.accent,
+    background: Colors.light.background,
+    card: Colors.light.background,
+    text: Colors.light.text,
+    border: Colors.light.border,
+    notification: Colors.light.danger,
+  },
+};
 
 export const FontFamily = {
   regular: 'FiraSans-Regular',
