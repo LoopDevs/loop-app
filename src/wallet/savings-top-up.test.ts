@@ -317,6 +317,17 @@ test('a pending withdrawal still unconfirmed stops before any new withdrawal', a
   assert.deepEqual(chain.withdrawn, []);
 });
 
+test('a pending withdrawal does not hold up a payment the wallet already covers', async () => {
+  const chain = new FakeChain({ wallet: '20', shares: '50', value: '50', statuses: ['NOT_FOUND'] });
+  const pending = chain.pendingSent('11');
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow, pending), {
+    kind: 'covered',
+    withdrawal: pending,
+  });
+  assert.equal(chain.polled, 0);
+  assert.deepEqual(chain.withdrawn, []);
+});
+
 test('a withdrawal not found once its signature has expired counts as failed', () => {
   const pending = { hash: 'OLD', expiryLedger: 1_060 };
   assert.equal(SavingsTopUp.outcomeOf({ status: 'NOT_FOUND', latestLedger: 1_060 }, pending), 'pending');

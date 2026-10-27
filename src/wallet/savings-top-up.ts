@@ -29,7 +29,7 @@ export type TopUpChain = {
 };
 
 export type TopUpOutcome =
-  | { kind: 'covered' }
+  | { kind: 'covered'; withdrawal?: PendingWithdrawal }
   | { kind: 'priceClosing' }
   | { kind: 'notEnough' }
   | { kind: 'withdrawFailed' }
@@ -104,10 +104,16 @@ export class SavingsTopUp {
   }
 
   async run(price: bigint, window: PriceWindow | null, pending?: PendingWithdrawal): Promise<TopUpOutcome> {
-    if (pending && (await this.confirm(pending)) === 'pending') {
-      return { kind: 'stillMoving', withdrawal: pending };
+    let balances = await this.chain.balances();
+    if (SavingsTopUp.inWallet(balances) >= price) {
+      return pending ? { kind: 'covered', withdrawal: pending } : { kind: 'covered' };
     }
-    const balances = await this.chain.balances();
+    if (pending) {
+      if ((await this.confirm(pending)) === 'pending') {
+        return { kind: 'stillMoving', withdrawal: pending };
+      }
+      balances = await this.chain.balances();
+    }
     const before = SavingsTopUp.inWallet(balances);
     if (before >= price) {
       return { kind: 'covered' };

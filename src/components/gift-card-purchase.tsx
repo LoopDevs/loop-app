@@ -327,8 +327,9 @@ export function GiftCardPurchase({ merchant, wallet }: Props) {
     } finally {
       refresh().catch((error: unknown) => setMessage(errorMessage(error)));
     }
-    if (outcome.kind === 'stillMoving') {
-      await pendingTopUps.set(wallet.address, outcome.withdrawal);
+    const unconfirmed = outcome.kind === 'stillMoving' || outcome.kind === 'covered' ? outcome.withdrawal : undefined;
+    if (unconfirmed) {
+      await pendingTopUps.set(wallet.address, unconfirmed);
     } else {
       await pendingTopUps.delete(wallet.address);
     }
