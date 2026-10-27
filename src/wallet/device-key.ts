@@ -15,6 +15,21 @@ export class MissingDeviceSecret extends Error {
   }
 }
 
+export class IdentityNotConfirmed extends Error {
+  private static readonly declinedMessages = [/User canceled the operation/, /User canceled the authentication/];
+
+  constructor() {
+    super('Couldn’t confirm it’s you. Try again.');
+  }
+
+  static from(error: unknown): unknown {
+    const message = error instanceof Error ? error.message : String(error);
+    return IdentityNotConfirmed.declinedMessages.some((pattern) => pattern.test(message))
+      ? new IdentityNotConfirmed()
+      : error;
+  }
+}
+
 export class DeviceKey {
   readonly secretName: string;
   readonly publicKeyName: string;
