@@ -148,7 +148,9 @@ export default function HomeScreen() {
   const createWallet = () =>
     run(async () => {
       const profile = await ctx.me();
-      showWallet(await SmartWallet.create(profile.passkeyLabel()));
+      await SmartWallet.create(profile.passkeyLabel());
+      setScreen('loading');
+      await loadWallet();
     });
 
   const refreshBalances = useCallback(async () => {
@@ -259,6 +261,13 @@ export default function HomeScreen() {
               onOpen={openMerchant}
               onSeeAll={openShop}
             />
+          )}
+
+          {screen === 'loading' && sessionRead && (
+            <View style={styles.section}>
+              <SectionHeading title="Your Loop" />
+              <BalanceCard view={null} />
+            </View>
           )}
 
           {screen === 'wallet' && wallet && (
