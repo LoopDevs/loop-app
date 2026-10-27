@@ -317,11 +317,11 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
 
   const signInWith = (provider: SocialProvider) =>
     run(async () => {
-      const idToken = await socialSignIn.idToken(provider);
-      if (!idToken) {
+      const credential = await socialSignIn.credential(provider);
+      if (!credential) {
         return;
       }
-      await ctx.signInWithOAuth(provider, idToken);
+      await ctx.signInWithOAuth(provider, credential);
       await continueToWallet();
     });
 
@@ -338,7 +338,12 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
               {reason || 'Buy gift cards and earn cashback on every one.'}
             </ThemedText>
           </View>
-          <SocialSignInButtons providers={socialSignIn.providers()} disabled={busy} onPress={signInWith} />
+          <SocialSignInButtons
+            providers={socialSignIn.providers()}
+            appleAccountHint={socialSignIn.appleAccountHint()}
+            disabled={busy}
+            onPress={signInWith}
+          />
           <Field
             value={email}
             onChangeText={setEmail}

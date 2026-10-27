@@ -1,3 +1,5 @@
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+
 export type SocialProvider = 'apple' | 'google';
 
 export type SignInMethod = 'email' | SocialProvider;
@@ -8,9 +10,13 @@ export type SocialSignInEnv = {
   googleIosClientId?: string;
 };
 
-export type OAuthLoginBody = {
-  provider: SocialProvider;
+export type SocialCredential = {
   idToken: string;
+  nonce?: string;
+};
+
+export type OAuthLoginBody = SocialCredential & {
+  provider: SocialProvider;
 };
 
 const providerNames: Record<SocialProvider, string> = {
@@ -19,6 +25,8 @@ const providerNames: Record<SocialProvider, string> = {
 };
 
 const googleClientIdSuffix = '.apps.googleusercontent.com';
+
+export const googleIosClientId = '';
 
 export class SocialSignInConfig {
   readonly appleSignIn: boolean;
@@ -52,10 +60,24 @@ export class SocialSignInConfig {
     const prefix = this.googleIosClientId.slice(0, -googleClientIdSuffix.length);
     return prefix ? `com.googleusercontent.apps.${prefix}` : null;
   }
+
+  appleAccountHint(platform: string): string | null {
+    if (!this.appleSignIn) {
+      return null;
+    }
+    return platform === 'ios'
+      ? 'Signed up with Apple and hid your email? Use the relay address shown in Settings on your iPhone.'
+      : 'Signed up with Apple on an iPhone? Sign in with Apple on that iPhone, or enter the email you shared with Apple. If you hid your email, use the relay address shown in Settings on your iPhone.';
+  }
 }
 
-export function oauthLoginBody(provider: SocialProvider, idToken: string): OAuthLoginBody {
-  return { provider, idToken };
+export function newSignInNonce(): string {
+  return bytesToHex(randomBytes(32));
+}
+
+export function oauthLoginBody(provider: SocialProvider, credential: SocialCredential): OAuthLoginBody {
+  const { idToken, nonce } = credential;
+  return nonce ? { provider, idToken, nonce } : { provider, idToken };
 }
 
 export function socialProviderName(provider: SocialProvider): string {
