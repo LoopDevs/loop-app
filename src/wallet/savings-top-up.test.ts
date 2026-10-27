@@ -9,9 +9,10 @@ import { units } from '../stellar/units.ts';
 import { Holdings } from './holdings.ts';
 import {
   SavingsTopUp,
+  UnansweredWithdrawal,
   type ChainTransaction,
   type PendingWithdrawal,
-  type SentWithdrawal,
+  type SignedWithdrawal,
   type TopUpChain,
 } from './savings-top-up.ts';
 import type { Balances } from './smart-wallet.ts';
@@ -29,8 +30,10 @@ type FakeVault = {
   statuses?: Status[];
   statusesOf?: Record<string, Status[]>;
   landed?: (shares: bigint, value: bigint) => bigint;
-  refusals?: { value: string; status: number }[];
+  refusals?: Refusal[];
 };
+
+type Refusal = { value: string; status: number | 'network'; landed?: boolean };
 
 const firstLedger = 1_000;
 const ledgerMs = 5_000;
@@ -51,7 +54,7 @@ class FakeChain implements TopUpChain {
   readonly statuses: Status[];
   readonly statusesOf: Record<string, Status[]>;
   readonly landed: (shares: bigint, value: bigint) => bigint;
-  readonly refusals: { value: string; status: number }[];
+  readonly refusals: Refusal[];
 
   constructor(vault: FakeVault) {
     this.wallet = units.parse(vault.wallet);
@@ -64,13 +67,17 @@ class FakeChain implements TopUpChain {
     this.refusals = [...(vault.refusals ?? [])];
   }
 
-  latestLedger(): number {
+  ledger(): number {
     return firstLedger + Math.floor((this.clock - start) / ledgerMs);
+  }
+
+  async latestLedger(): Promise<number> {
+    return this.ledger();
   }
 
   pendingSent(shares: string, hash = 'OLD'): PendingWithdrawal {
     this.sent.set(hash, units.parse(shares));
-    return { hash, expiryLedger: this.latestLedger() + signatureLedgers };
+    return { hash, expiryLedger: this.ledger() + signatureLedgers };
   }
 
   async balances(): Promise<Balances> {
@@ -88,17 +95,27 @@ class FakeChain implements TopUpChain {
     return (shares * this.value) / this.shares;
   }
 
-  async withdraw(shares: bigint): Promise<SentWithdrawal> {
+  async signWithdrawal(shares: bigint): Promise<SignedWithdrawal> {
     this.withdrawn.push(shares);
+    const expiryLedger = this.ledger() + signatureLedgers;
     const refusal = this.refusals.shift();
-    if (refusal) {
-      this.value = units.parse(refusal.value);
-      throw new CtxError(refusal.status, '{"error":"simulation failed"}');
-    }
     const hash = `HASH-${this.withdrawn.length}`;
-    this.sent.set(hash, shares);
-    const expiryLedger = this.latestLedger() + signatureLedgers;
-    return { ...(this.withdrawal ?? { hash, status: 'pending' }), expiryLedger };
+    return {
+      expiryLedger,
+      sponsor: async () => {
+        if (refusal) {
+          if (refusal.landed) {
+            this.wallet += Holdings.floorOf(await this.valueOf(shares));
+          }
+          this.value = units.parse(refusal.value);
+          throw refusal.status === 'network'
+            ? new TypeError('Network request failed')
+            : new CtxError(refusal.status, '{"error":"simulation failed"}');
+        }
+        this.sent.set(hash, shares);
+        return this.withdrawal ?? { hash, status: 'pending' };
+      },
+    };
   }
 
   async transaction(hash: string): Promise<ChainTransaction> {
@@ -112,7 +129,7 @@ class FakeChain implements TopUpChain {
       const shares = this.sent.get(hash) ?? 0n;
       this.wallet += this.landed(shares, await this.valueOf(shares));
     }
-    return { status, latestLedger: this.latestLedger() };
+    return { status, latestLedger: this.ledger() };
   }
 
   async sleep(ms: number): Promise<void> {
@@ -252,15 +269,68 @@ test('a withdrawal refused at the sponsor twice reports a failed withdrawal', as
   assert.equal(chain.withdrawn.length, 2);
 });
 
-test('a withdrawal whose sponsor call errors without a refusal is not rebuilt', async () => {
+test('a withdrawal whose sponsor call goes unanswered is kept as moving until its signature expires', async () => {
   const chain = new FakeChain({
     wallet: '0',
     shares: '50',
     value: '50',
     refusals: [{ value: '50', status: 504 }],
   });
-  await assert.rejects(new SavingsTopUp(chain).run(price, openWindow), CtxError);
+  const topUp = new SavingsTopUp(chain);
+  const first = await topUp.run(price, openWindow);
+  const unanswered = { hash: '', expiryLedger: firstLedger + signatureLedgers };
+  assert.deepEqual(first, { kind: 'stillMoving', withdrawal: unanswered });
   assert.equal(chain.withdrawn.length, 1);
+
+  assert.deepEqual(await topUp.run(price, openWindow, unanswered), { kind: 'stillMoving', withdrawal: unanswered });
+  assert.equal(chain.withdrawn.length, 1);
+
+  chain.clock = start + (signatureLedgers + 1) * ledgerMs;
+  const window = new PriceWindow(chain.clock + 600_000);
+  assert.deepEqual(await topUp.run(price, window, unanswered), { kind: 'covered' });
+  assert.equal(chain.withdrawn.length, 2);
+});
+
+test('a withdrawal whose sponsor call fails on the network is kept as moving', async () => {
+  const chain = new FakeChain({
+    wallet: '0',
+    shares: '50',
+    value: '50',
+    refusals: [{ value: '50', status: 'network' }],
+  });
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), {
+    kind: 'stillMoving',
+    withdrawal: { hash: '', expiryLedger: firstLedger + signatureLedgers },
+  });
+  assert.equal(chain.withdrawn.length, 1);
+});
+
+test('an unanswered withdrawal that landed covers the retry without a second withdrawal', async () => {
+  const chain = new FakeChain({
+    wallet: '0',
+    shares: '50',
+    value: '50',
+    refusals: [{ value: '50', status: 504, landed: true }],
+  });
+  const topUp = new SavingsTopUp(chain);
+  const first = await topUp.run(price, openWindow);
+  assert.equal(first.kind, 'stillMoving');
+  assert.deepEqual(await topUp.run(price, openWindow, first.kind === 'stillMoving' ? first.withdrawal : undefined), {
+    kind: 'covered',
+    withdrawal: { hash: '', expiryLedger: firstLedger + signatureLedgers },
+  });
+  assert.equal(chain.withdrawn.length, 1);
+});
+
+test('only a 4xx sponsor answer counts as a refusal, anything else leaves the withdrawal unanswered', () => {
+  const refused = new CtxError(400, '{"error":"simulation failed"}');
+  assert.throws(() => UnansweredWithdrawal.rethrow(refused, 1_060), (error) => error === refused);
+  for (const error of [new CtxError(502, ''), new TypeError('Network request failed'), new Error('timeout')]) {
+    assert.throws(
+      () => UnansweredWithdrawal.rethrow(error, 1_060),
+      (thrown) => thrown instanceof UnansweredWithdrawal && thrown.expiryLedger === 1_060 && thrown.cause === error,
+    );
+  }
 });
 
 test('a withdrawal that reached the chain and failed is not rebuilt', async () => {

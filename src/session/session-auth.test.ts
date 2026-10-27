@@ -7,6 +7,7 @@ import { SessionAuth, type RefreshTokenStore, type Send, type SendOptions } from
 type Call = {
   path: string;
   token: string | undefined;
+  idempotencyKey?: string;
 };
 
 type Route = (call: Call) => Promise<unknown>;
@@ -20,7 +21,11 @@ class FakeCtx {
   }
 
   send: Send = <T>(_method: string, path: string, _body?: unknown, options?: SendOptions): Promise<T> => {
-    const call = { path, token: options?.headers?.Authorization?.replace('Bearer ', '') };
+    const call = {
+      path,
+      token: options?.headers?.Authorization?.replace('Bearer ', ''),
+      idempotencyKey: options?.headers?.['Idempotency-Key'],
+    };
     this.calls.push(call);
     return this.route(call) as Promise<T>;
   };
@@ -88,6 +93,30 @@ test('a call made during sign-in waits for and uses the new tokens', async () =>
   assert.deepEqual(ctx.tokensFor('/me'), ['a-new']);
   assert.equal(ctx.refreshes(), 0);
   assert.equal(store.refreshToken, 'r-new');
+});
+
+test('a request retried after a refresh keeps its idempotency key', async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    if (token === 'a2') {
+      return { ok: true };
+    }
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null));
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  await auth.sessionRequest('POST', '/gift-cards', {}, true, { 'Idempotency-Key': 'order-1' });
+
+  assert.deepEqual(
+    ctx.calls.filter((call) => call.path === '/gift-cards').map((call) => [call.token, call.idempotencyKey]),
+    [
+      ['a1', 'order-1'],
+      ['a2', 'order-1'],
+    ],
+  );
 });
 
 test('a late 401 after a refresh retries with the new token without rotating again', async () => {
