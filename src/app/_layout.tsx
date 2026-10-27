@@ -10,7 +10,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppLockProvider } from '@/components/app-lock';
 import AppTabs from '@/components/app-tabs';
-import { CrashFallback } from '@/components/crash-fallback';
+import { CrashFallback, ScreenCrash } from '@/components/crash-fallback';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceUnavailable } from '@/components/service-unavailable';
 import { SignInProvider } from '@/components/sign-in';
@@ -22,7 +22,12 @@ import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
 import { MarketProvider } from '@/hooks/use-market';
 import { useAppSwitcherProtection } from '@/native/screen-privacy';
 import { errorReporting } from '@/ops/error-reporting';
+import { markLaunchFailed } from '@/updates/update-checker';
 import { useUpdateChecks } from '@/updates/use-update-checks';
+
+export const unstable_settings = {
+  screenErrorBoundary: ScreenCrash,
+};
 
 errorReporting.init();
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -46,7 +51,9 @@ export default function TabLayout() {
   return (
     <ThemeProvider value={NavigationTheme}>
       <StatusBar style="dark" />
-      <ErrorBoundary fallback={({ error, resetError }) => <CrashFallback error={error} onRetry={resetError} />}>
+      <ErrorBoundary
+        onError={markLaunchFailed}
+        fallback={({ error, resetError }) => <CrashFallback error={error} onRetry={resetError} />}>
         <AppLockProvider>
           <ToastProvider>
             <MarketProvider>

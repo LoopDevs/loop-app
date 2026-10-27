@@ -7,6 +7,7 @@ import { base64 } from '@/wallet/base64';
 import { PasskeyAssertion } from '@/wallet/passkey-assertion';
 import { PasskeyPublicKey } from '@/wallet/passkey-public-key';
 import { PasskeySite } from '@/wallet/passkey-site';
+import { isUserCancel } from '@/wallet/user-cancel';
 
 function rpId(): string {
   return PasskeySite.forHost(Platform.OS === 'web' ? window.location.hostname : null);
@@ -64,12 +65,4 @@ function passkeySetupError(error: unknown): unknown {
     return error;
   }
   return new Error(help, { cause: error });
-}
-
-function isUserCancel(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  const code = 'code' in error ? String(error.code) : '';
-  return code === 'ERR_USER_CANCELLED' || error.message === 'UserCancelled';
 }

@@ -3,10 +3,12 @@ import * as Updates from 'expo-updates';
 
 import { errorReporting } from '@/ops/error-reporting';
 
-import { ReloadGate, reloadsNow } from './critical-update';
+import { inLaunchRecoveryWindow, ReloadGate, reloadsNow } from './critical-update';
 
 const gate = new ReloadGate();
+const launchedAt = Date.now();
 let checking = false;
+let reportedDisabled = false;
 
 export function holdCriticalReload<T>(task: () => Promise<T>): Promise<T> {
   return gate.hold(task);
@@ -19,8 +21,22 @@ export function runningUpdateId(): string | null {
   return Updates.updateId.slice(0, 8);
 }
 
+export function markLaunchFailed(error: unknown): void {
+  if (runningUpdateId() === null || !inLaunchRecoveryWindow(Date.now() - launchedAt)) {
+    return;
+  }
+  ErrorUtils.getGlobalHandler()(error instanceof Error ? error : new Error(String(error)), true);
+}
+
 export async function checkForUpdate(): Promise<void> {
-  if (__DEV__ || !Updates.isEnabled || checking) {
+  if (__DEV__ || checking) {
+    return;
+  }
+  if (!Updates.isEnabled) {
+    if (!reportedDisabled) {
+      reportedDisabled = true;
+      errorReporting.reportMessage('Updates are disabled in this build');
+    }
     return;
   }
   checking = true;
@@ -40,6 +56,7 @@ export async function checkForUpdate(): Promise<void> {
     }
   } catch (error) {
     console.warn('Update check failed', error);
+    errorReporting.reportErrorOnce(error, 'Update check');
   } finally {
     checking = false;
   }

@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 
+import { errorReporting } from '@/ops/error-reporting';
+
 import { criticalIndexOf, ReloadGate } from './critical-update';
 
 const versionUrl = '/app-version.json';
@@ -14,6 +16,8 @@ export function holdCriticalReload<T>(task: () => Promise<T>): Promise<T> {
 export function runningUpdateId(): string | null {
   return null;
 }
+
+export function markLaunchFailed(): void {}
 
 function alreadyReloadedFor(criticalIndex: string): boolean {
   try {
@@ -50,6 +54,7 @@ export async function checkForUpdate(): Promise<void> {
     }
   } catch (error) {
     console.warn('Update check failed', error);
+    errorReporting.reportErrorOnce(error, 'Update check');
   } finally {
     checking = false;
   }

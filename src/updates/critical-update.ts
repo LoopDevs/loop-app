@@ -57,3 +57,9 @@ export class ReloadGate {
     });
   }
 }
+
+const launchRecoveryWindowMs = 10_000;
+
+export function inLaunchRecoveryWindow(elapsedMs: number): boolean {
+  return elapsedMs < launchRecoveryWindowMs;
+}

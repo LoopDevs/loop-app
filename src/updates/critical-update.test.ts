@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { criticalIndexOf, fetchedCriticalIndex, isCriticalUpdate, ReloadGate, reloadsNow } from './critical-update.ts';
+import {
+  criticalIndexOf,
+  fetchedCriticalIndex,
+  inLaunchRecoveryWindow,
+  isCriticalUpdate,
+  ReloadGate,
+  reloadsNow,
+} from './critical-update.ts';
 
 const manifestWith = (criticalIndex?: number) => ({
   extra: { expoClient: { extra: criticalIndex === undefined ? {} : { criticalIndex } } },
@@ -125,4 +132,10 @@ test('the reload waits for every overlapping task', async () => {
   releaseSecond();
   await second;
   assert.equal(reloads, 1);
+});
+
+test('the launch recovery window closes after ten seconds', () => {
+  assert.equal(inLaunchRecoveryWindow(0), true);
+  assert.equal(inLaunchRecoveryWindow(9_999), true);
+  assert.equal(inLaunchRecoveryWindow(10_000), false);
 });
