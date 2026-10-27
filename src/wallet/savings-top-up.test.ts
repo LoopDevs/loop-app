@@ -324,8 +324,22 @@ test('a pending withdrawal does not hold up a payment the wallet already covers'
     kind: 'covered',
     withdrawal: pending,
   });
-  assert.equal(chain.polled, 0);
+  assert.equal(chain.polled, 1);
+  assert.equal(chain.clock, start);
   assert.deepEqual(chain.withdrawn, []);
+});
+
+test('a landed pending withdrawal is dropped when the wallet already covers the price', async () => {
+  const chain = new FakeChain({ wallet: '20', shares: '50', value: '50' });
+  const pending = chain.pendingSent('11');
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow, pending), { kind: 'covered' });
+  assert.deepEqual(chain.withdrawn, []);
+});
+
+test('a failed pending withdrawal is dropped when the wallet already covers the price', async () => {
+  const chain = new FakeChain({ wallet: '20', shares: '50', value: '50', statuses: ['FAILED'] });
+  const pending = chain.pendingSent('11');
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow, pending), { kind: 'covered' });
 });
 
 test('a withdrawal not found once its signature has expired counts as failed', () => {
