@@ -1,5 +1,7 @@
+import { errorReporting } from '@/ops/error-reporting';
 import { base64 } from '@/wallet/base64';
 import { DeviceKey } from '@/wallet/device-key';
+import { reportingSigningFailure } from '@/wallet/signing-report';
 
 const databaseName = 'loop-device-signer';
 const storeName = 'keys';
@@ -12,35 +14,39 @@ export const deviceSigner = {
     return keyPair ? exportPublicKey(keyPair) : null;
   },
 
-  async create(userId: string): Promise<string> {
-    keepStorage();
-    const existing = await read(userId);
-    if (existing) {
-      return exportPublicKey(existing);
-    }
-    const keyPair = (await crypto.subtle
-      .generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])
-      .catch((error: unknown) => {
-        console.warn('Creating a device key failed', error);
-        throw new Error(unsupportedBrowserMessage);
-      })) as CryptoKeyPair;
-    const stored = await writeIfAbsent(userId, keyPair);
-    return exportPublicKey(stored);
+  create(userId: string): Promise<string> {
+    return reportingSigningFailure('device key', errorReporting.reportError, () => createKey(userId));
   },
 
-  async sign(userId: string, digest: Uint8Array): Promise<string> {
-    const keyPair = await read(userId);
-    if (!keyPair) {
-      throw new Error('No device key in this browser');
-    }
-    const signature = await crypto.subtle.sign(
-      { name: 'Ed25519' },
-      keyPair.privateKey,
-      digest as BufferSource,
-    );
-    return base64.encode(new Uint8Array(signature));
+  sign(userId: string, digest: Uint8Array): Promise<string> {
+    return reportingSigningFailure('device key', errorReporting.reportError, () => signDigest(userId, digest));
   },
 };
+
+async function createKey(userId: string): Promise<string> {
+  keepStorage();
+  const existing = await read(userId);
+  if (existing) {
+    return exportPublicKey(existing);
+  }
+  const keyPair = (await crypto.subtle
+    .generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])
+    .catch((error: unknown) => {
+      console.warn('Creating a device key failed', error);
+      throw new Error(unsupportedBrowserMessage);
+    })) as CryptoKeyPair;
+  const stored = await writeIfAbsent(userId, keyPair);
+  return exportPublicKey(stored);
+}
+
+async function signDigest(userId: string, digest: Uint8Array): Promise<string> {
+  const keyPair = await read(userId);
+  if (!keyPair) {
+    throw new Error('No device key in this browser');
+  }
+  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, keyPair.privateKey, digest as BufferSource);
+  return base64.encode(new Uint8Array(signature));
+}
 
 async function exportPublicKey(keyPair: CryptoKeyPair): Promise<string> {
   return base64.encode(new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey)));

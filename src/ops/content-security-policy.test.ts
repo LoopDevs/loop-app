@@ -31,7 +31,7 @@ test('the build policy lets the app reach only the services of its environment',
 
   assert.equal(
     directive(policy, 'connect-src'),
-    "connect-src 'self' https://staging.spend.ctx.com https://soroban-testnet.stellar.org https://friendbot.stellar.org https://rates.ctx.com https://o1.ingest.us.sentry.io",
+    "connect-src 'self' https://staging.spend.ctx.com https://soroban-testnet.stellar.org https://rpc.ankr.com https://friendbot.stellar.org https://rates.ctx.com https://o1.ingest.us.sentry.io",
   );
 });
 

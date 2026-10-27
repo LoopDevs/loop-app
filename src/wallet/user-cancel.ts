@@ -10,5 +10,10 @@ export function isUserCancel(error: unknown): boolean {
     return false;
   }
   const code = 'code' in error ? String(error.code) : '';
-  return error instanceof UserCancelled || code === 'ERR_USER_CANCELLED' || error.message === 'UserCancelled';
+  return (
+    error instanceof UserCancelled ||
+    code === 'ERR_USER_CANCELLED' ||
+    error.message === 'UserCancelled' ||
+    error.name === 'NotAllowedError'
+  );
 }

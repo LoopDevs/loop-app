@@ -215,8 +215,8 @@ export class SmartWallet {
     };
   }
 
-  paymentLanded(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
-    return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
+  paymentMissing(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
+    return new PaymentSearch(soroban, this.address, network.payee).missing(token.contract, expected, expiryLedger);
   }
 
   orderPaid(giftCard: GiftCard): Promise<OrderPayment> {
