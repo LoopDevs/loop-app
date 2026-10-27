@@ -13,6 +13,7 @@ import { errorReporting } from '@/ops/error-reporting';
 import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
 import {
   oauthLoginBody,
+  type SocialCredential,
   signInRefusalMessage,
   type SignInMethod,
   type SocialProvider,
@@ -267,10 +268,10 @@ class CtxClient {
     });
   }
 
-  signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
+  signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
     return holdCriticalReload(async () => {
       await this.auth.startSession(
-        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
+        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
       );
     });
   }

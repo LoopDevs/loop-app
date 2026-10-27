@@ -1,3 +1,5 @@
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+
 export type SocialProvider = 'apple' | 'google';
 
 export type SignInMethod = 'email' | SocialProvider;
@@ -8,10 +10,18 @@ export type SocialSignInEnv = {
   googleIosClientId?: string;
 };
 
+export type SocialCredential = {
+  idToken: string;
+  nonce?: string;
+};
+
 export type OAuthLoginBody = {
   provider: SocialProvider;
   idToken: string;
+  nonce?: string;
 };
+
+const nonceByteLength = 32;
 
 const providerNames: Record<SocialProvider, string> = {
   apple: 'Apple',
@@ -63,8 +73,16 @@ export class SocialSignInConfig {
   }
 }
 
-export function oauthLoginBody(provider: SocialProvider, idToken: string): OAuthLoginBody {
-  return { provider, idToken };
+export function newSignInNonce(): string {
+  return bytesToHex(randomBytes(nonceByteLength));
+}
+
+export function oauthLoginBody(provider: SocialProvider, credential: SocialCredential): OAuthLoginBody {
+  const body: OAuthLoginBody = { provider, idToken: credential.idToken };
+  if (credential.nonce) {
+    body.nonce = credential.nonce;
+  }
+  return body;
 }
 
 export function socialProviderName(provider: SocialProvider): string {

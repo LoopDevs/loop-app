@@ -9,8 +9,10 @@ import { Platform } from 'react-native';
 import { loopEnvironment } from '@/environment';
 import {
   hasErrorCode,
+  newSignInNonce,
   SocialSignInConfig,
   socialProviderName,
+  type SocialCredential,
   type SocialProvider,
 } from '@/session/social-sign-in';
 
@@ -27,12 +29,14 @@ function requireIdToken(provider: SocialProvider, idToken: string | null): strin
   return idToken;
 }
 
-async function appleIdToken(): Promise<string | null> {
+async function appleCredential(): Promise<SocialCredential | null> {
+  const nonce = newSignInNonce();
   try {
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL],
+      nonce,
     });
-    return requireIdToken('apple', credential.identityToken);
+    return { idToken: requireIdToken('apple', credential.identityToken), nonce };
   } catch (error) {
     if (hasErrorCode(error, 'ERR_REQUEST_CANCELED')) {
       return null;
@@ -41,7 +45,7 @@ async function appleIdToken(): Promise<string | null> {
   }
 }
 
-async function googleIdToken(): Promise<string | null> {
+async function googleCredential(): Promise<SocialCredential | null> {
   GoogleSignin.configure({
     webClientId: config.googleWebClientId,
     iosClientId: config.googleIosClientId || undefined,
@@ -53,7 +57,7 @@ async function googleIdToken(): Promise<string | null> {
     if (isCancelledResponse(response)) {
       return null;
     }
-    return requireIdToken('google', response.data.idToken);
+    return { idToken: requireIdToken('google', response.data.idToken) };
   } catch (error) {
     if (hasErrorCode(error, statusCodes.SIGN_IN_CANCELLED)) {
       return null;
@@ -71,7 +75,7 @@ export const socialSignIn = {
     return config.appleAccountHint(Platform.OS);
   },
 
-  idToken(provider: SocialProvider): Promise<string | null> {
-    return provider === 'apple' ? appleIdToken() : googleIdToken();
+  credential(provider: SocialProvider): Promise<SocialCredential | null> {
+    return provider === 'apple' ? appleCredential() : googleCredential();
   },
 };
