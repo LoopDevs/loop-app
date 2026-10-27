@@ -130,7 +130,7 @@ export class PaymentSearch {
     if (!search) {
       return { kind: 'unknown' };
     }
-    const { transfers } = await this.source.transfers(order.contract, this.from, this.to, search.ledgers);
+    const { transfers, latestLedger } = await this.source.transfers(order.contract, this.from, this.to, search.ledgers);
     const payment = transfers.find(
       (transfer) =>
         PaymentSearch.landedWithin(transfer.closedAt, order.span) && transferMatches(transfer.value, order.expected),
@@ -138,7 +138,8 @@ export class PaymentSearch {
     if (payment) {
       return { kind: 'sent', txId: payment.txHash };
     }
-    return search.complete ? { kind: 'notSent' } : { kind: 'unknown' };
+    const searched = search.complete && latestLedger >= search.ledgers.endLedger - 1;
+    return searched ? { kind: 'notSent' } : { kind: 'unknown' };
   }
 }
 

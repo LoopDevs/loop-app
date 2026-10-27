@@ -128,10 +128,11 @@ const expiredOrder = (fields: Partial<GiftCard> = {}): GiftCard => ({
 const orderPayment = { amount: 25_000_000n, to_muxed_id: 7n };
 
 test('an order payment search looks for the order token, amount and muxed id across the order lifetime', async () => {
-  const transfers = source([event(orderPayment, created + 5_000, 'paid-tx')], {
-    oldestLedger: 100_000,
-    latestLedger: 200_000,
-  });
+  const transfers = source(
+    [event(orderPayment, created + 5_000, 'paid-tx')],
+    { oldestLedger: 100_000, latestLedger: 200_000 },
+    200_000,
+  );
   const payment = await new PaymentSearch(transfers, 'wallet', 'payee').orderPaid(expiredOrder(), checkedAt);
   assert.deepEqual(payment, { kind: 'sent', txId: 'paid-tx' });
   assert.deepEqual(transfers.searches, [
@@ -147,7 +148,7 @@ test('an order payment search looks for the order token, amount and muxed id acr
 test('an order payment search only counts a transfer of the order amount to the order muxed id while the order was open', async () => {
   const held = { oldestLedger: 100_000, latestLedger: 200_000 };
   const search = (transfers: TransferEvent[]) =>
-    new PaymentSearch(source(transfers, held), 'wallet', 'payee').orderPaid(expiredOrder(), checkedAt);
+    new PaymentSearch(source(transfers, held, held.latestLedger), 'wallet', 'payee').orderPaid(expiredOrder(), checkedAt);
   const notSent: OrderPayment = { kind: 'notSent' };
   assert.deepEqual(await search([]), notSent);
   assert.deepEqual(await search([event({ amount: 25_000_000n, to_muxed_id: 8n }, created + 5_000)]), notSent);
@@ -160,7 +161,7 @@ test('an order payment search only counts a transfer of the order amount to the 
 test('an order payment search that cannot cover the order lifetime never says the payment was not sent', async () => {
   const cutShort = { oldestLedger: 199_000, latestLedger: 200_000 };
   assert.deepEqual(
-    await new PaymentSearch(source([], cutShort), 'wallet', 'payee').orderPaid(expiredOrder(), checkedAt),
+    await new PaymentSearch(source([], cutShort, cutShort.latestLedger), 'wallet', 'payee').orderPaid(expiredOrder(), checkedAt),
     { kind: 'unknown' },
   );
   const gone = { oldestLedger: 199_900, latestLedger: 200_000 };
@@ -169,6 +170,14 @@ test('an order payment search that cannot cover the order lifetime never says th
     kind: 'unknown',
   });
   assert.deepEqual(transfers.searches, []);
+});
+
+test('an order payment search never says the payment was not sent from an events view behind the searched ledgers', async () => {
+  const held = { oldestLedger: 100_000, latestLedger: 200_000 };
+  const behind = (latestLedger: number) =>
+    new PaymentSearch(source([], held, latestLedger), 'wallet', 'payee').orderPaid(expiredOrder(), checkedAt);
+  assert.deepEqual(await behind(199_862), { kind: 'unknown' });
+  assert.deepEqual(await behind(199_863), { kind: 'notSent' });
 });
 
 test('an order in a token the wallet does not hold has no payment to search for', async () => {
