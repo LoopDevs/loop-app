@@ -28,6 +28,7 @@ type FakeVault = {
   statuses?: Status[];
   statusesOf?: Record<string, Status[]>;
   landed?: (shares: bigint, value: bigint) => bigint;
+  refusals?: { value: string }[];
 };
 
 const firstLedger = 1_000;
@@ -49,6 +50,7 @@ class FakeChain implements TopUpChain {
   readonly statuses: Status[];
   readonly statusesOf: Record<string, Status[]>;
   readonly landed: (shares: bigint, value: bigint) => bigint;
+  readonly refusals: { value: string }[];
 
   constructor(vault: FakeVault) {
     this.wallet = units.parse(vault.wallet);
@@ -58,6 +60,7 @@ class FakeChain implements TopUpChain {
     this.statuses = vault.statuses ?? ['SUCCESS'];
     this.statusesOf = vault.statusesOf ?? {};
     this.landed = vault.landed ?? ((_, value) => Holdings.floorOf(value));
+    this.refusals = [...(vault.refusals ?? [])];
   }
 
   latestLedger(): number {
@@ -86,6 +89,11 @@ class FakeChain implements TopUpChain {
 
   async withdraw(shares: bigint): Promise<SentWithdrawal> {
     this.withdrawn.push(shares);
+    const refusal = this.refusals.shift();
+    if (refusal) {
+      this.value = units.parse(refusal.value);
+      return { hash: '', status: 'failed', error: 'simulation failed', expiryLedger: this.latestLedger() };
+    }
     const hash = `HASH-${this.withdrawn.length}`;
     this.sent.set(hash, shares);
     const expiryLedger = this.latestLedger() + signatureLedgers;
@@ -214,6 +222,25 @@ test('a withdrawal refused at the sponsor is not followed by a payment or a conf
   });
   assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), { kind: 'withdrawFailed' });
   assert.equal(chain.polled, 0);
+  assert.equal(chain.withdrawn.length, SavingsTopUp.withdrawAttempts);
+});
+
+test('a withdrawal refused at the sponsor after a share value change is rebuilt from fresh balances once', async () => {
+  const chain = new FakeChain({ wallet: '0', shares: '50', value: '50', refusals: [{ value: '45' }] });
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), { kind: 'covered' });
+  assert.equal(chain.withdrawn.length, 2);
+  assert.ok(chain.withdrawn[1] > chain.withdrawn[0]);
+});
+
+test('a withdrawal that reached the chain and failed is not rebuilt', async () => {
+  const chain = new FakeChain({
+    wallet: '0',
+    shares: '50',
+    value: '50',
+    withdrawal: { hash: 'H', status: 'failed', error: 'tx_failed' },
+  });
+  assert.deepEqual(await new SavingsTopUp(chain).run(price, openWindow), { kind: 'withdrawFailed' });
+  assert.equal(chain.withdrawn.length, 1);
 });
 
 test('a withdrawal that fails on chain is not followed by a payment', async () => {

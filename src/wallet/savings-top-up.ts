@@ -43,6 +43,7 @@ export class SavingsTopUp {
   static readonly requiredWindowMs = 90_000;
   static readonly confirmTimeoutMs = 30_000;
   static readonly confirmPollMs = 2_000;
+  static readonly withdrawAttempts = 2;
 
   readonly chain: TopUpChain;
 
@@ -145,18 +146,24 @@ export class SavingsTopUp {
     balances: Balances,
     window: PriceWindow | null,
   ): Promise<{ kind: 'sent'; withdrawal: PendingWithdrawal } | TopUpOutcome> {
-    if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
-      return { kind: 'priceClosing' };
+    let vault = balances;
+    for (let attempt = 1; ; attempt += 1) {
+      if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
+        return { kind: 'priceClosing' };
+      }
+      const shares = await this.sharesCovering(shortfall, vault);
+      if (shares === null) {
+        return { kind: 'notEnough' };
+      }
+      const result = await this.chain.withdraw(shares);
+      if (result.hash && !result.error && result.status !== 'failed') {
+        return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
+      }
+      if (result.hash || attempt >= SavingsTopUp.withdrawAttempts) {
+        return { kind: 'withdrawFailed' };
+      }
+      vault = await this.chain.balances();
     }
-    const shares = await this.sharesCovering(shortfall, balances);
-    if (shares === null) {
-      return { kind: 'notEnough' };
-    }
-    const result = await this.chain.withdraw(shares);
-    if (result.error || result.status === 'failed' || !result.hash) {
-      return { kind: 'withdrawFailed' };
-    }
-    return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
   }
 
   private async confirm(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
