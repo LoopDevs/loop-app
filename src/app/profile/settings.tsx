@@ -34,6 +34,7 @@ import { useBusyAction } from "@/hooks/use-busy-action";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
+import { runningUpdateId } from "@/updates/update-checker";
 
 type SettingsSection = "account" | "help" | "data";
 
@@ -295,6 +296,7 @@ export default function SettingsScreen() {
     </ListGroup>
   );
 
+  const updateId = runningUpdateId();
   const version = (
     <ThemedText
       type="small"
@@ -302,6 +304,7 @@ export default function SettingsScreen() {
       style={!wide && styles.version}
     >
       Version {Constants.expoConfig?.version}
+      {updateId && ` (${updateId})`}
     </ThemedText>
   );
 

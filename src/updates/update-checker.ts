@@ -10,6 +10,13 @@ export function holdCriticalReload<T>(task: () => Promise<T>): Promise<T> {
   return gate.hold(task);
 }
 
+export function runningUpdateId(): string | null {
+  if (!Updates.isEnabled || Updates.isEmbeddedLaunch || !Updates.updateId) {
+    return null;
+  }
+  return Updates.updateId.slice(0, 8);
+}
+
 export async function checkForUpdate(): Promise<void> {
   if (__DEV__ || !Updates.isEnabled || checking) {
     return;
