@@ -16,13 +16,14 @@ export type HoldingsView = {
 };
 
 export function useHoldings(wallet: SmartWallet | null) {
-  const [view, setView] = useState<HoldingsView | null>(null);
+  const [loaded, setLoaded] = useState<{ address: string; view: HoldingsView } | null>(null);
   const latestRequest = useRef(0);
+  const view = wallet && loaded?.address === wallet.address ? loaded.view : null;
 
   const refresh = useCallback(async () => {
     const request = ++latestRequest.current;
     if (!wallet) {
-      setView(null);
+      setLoaded(null);
       return;
     }
     const [balances, account, profile, rates] = await Promise.all([
@@ -36,15 +37,18 @@ export function useHoldings(wallet: SmartWallet | null) {
     }
     const failure = [account, profile].find((result) => result instanceof Error);
     const loadedAccount = account instanceof Error ? null : account;
-    setView({
-      holdings: new Holdings(
-        balances,
-        loadedAccount ? Holdings.onTheWayFrom(loadedAccount, wallet.address) : null,
-        rates,
-      ),
-      account: loadedAccount,
-      stable: profile instanceof Error ? null : shownCurrency(profile.stableCurrency),
-      problem: failure ? `Couldn't load your cashback: ${failure.message}` : '',
+    setLoaded({
+      address: wallet.address,
+      view: {
+        holdings: new Holdings(
+          balances,
+          loadedAccount ? Holdings.onTheWayFrom(loadedAccount, wallet.address) : null,
+          rates,
+        ),
+        account: loadedAccount,
+        stable: profile instanceof Error ? null : shownCurrency(profile.stableCurrency),
+        problem: failure ? `Couldn't load your cashback: ${failure.message}` : '',
+      },
     });
   }, [wallet]);
 

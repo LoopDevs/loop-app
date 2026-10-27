@@ -65,8 +65,12 @@ export default function SettingsScreen() {
           profileUserId.current = userId;
           setProfile(null);
         }
-        if (userId) {
-          setProfile(await ctx.me());
+        if (!userId) {
+          return;
+        }
+        const loaded = await ctx.me();
+        if (profileUserId.current === userId) {
+          setProfile(loaded);
         }
       }),
     [run, setProfile],
@@ -90,6 +94,7 @@ export default function SettingsScreen() {
   const signOut = () =>
     run(async () => {
       await ctx.signOut();
+      profileUserId.current = null;
       setSignedIn(false);
       setProfile(null);
       router.navigate("/");

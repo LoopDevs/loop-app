@@ -198,7 +198,7 @@ export default function ShopScreen() {
     return () => {
       current = false;
     };
-  }, [country]);
+  }, [country, signedIn, profile]);
 
   useEffect(() => {
     if (!country) {
