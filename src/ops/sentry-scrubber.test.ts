@@ -142,3 +142,34 @@ test('event breadcrumbs are scrubbed too', () => {
   assert.ok(!everything.includes(email));
   assert.ok(!everything.includes(jwt));
 });
+
+test('stack frames, mechanism and threads keep only code location fields', () => {
+  const frame = { filename: 'app.js', function: 'pay', lineno: 3, colno: 9, in_app: true, vars: { pin: '1234', email } };
+  const scrubbed = SentryScrubber.scrubEvent(
+    eventWith({
+      exception: {
+        values: [
+          {
+            type: 'Error',
+            value: 'failed',
+            stacktrace: { frames: [frame] },
+            mechanism: { type: 'onerror', handled: false, data: { redeemUrl } },
+          },
+        ],
+      },
+      threads: { values: [{ id: 1, stacktrace: { frames: [frame] } }] },
+      transaction: '/shop/aerie',
+      modules: { 'secret-module': '1.0.0' },
+      fingerprint: [`card ${email}`],
+    }),
+  );
+  const entry = scrubbed.exception?.values?.[0];
+  assert.deepEqual(entry?.stacktrace?.frames, [{ filename: 'app.js', function: 'pay', lineno: 3, colno: 9, in_app: true }]);
+  assert.deepEqual(entry?.mechanism, { type: 'onerror', handled: false });
+  assert.equal(scrubbed.transaction, undefined);
+  assert.equal(scrubbed.modules, undefined);
+  const everything = dump(scrubbed);
+  for (const leaked of [email, redeemUrl, '1234', 'aerie']) {
+    assert.ok(!everything.includes(leaked), `leaked ${leaked}`);
+  }
+});

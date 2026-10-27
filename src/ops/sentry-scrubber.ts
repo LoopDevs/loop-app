@@ -28,6 +28,37 @@ const SAFE_CONTEXT_KEYS = new Set(['app', 'os', 'runtime', 'culture', 'device'])
 
 const SAFE_BREADCRUMB_KEYS = new Set(['method', 'status_code', 'url', 'from', 'to']);
 
+const SAFE_FRAME_KEYS = new Set([
+  'filename',
+  'function',
+  'module',
+  'platform',
+  'lineno',
+  'colno',
+  'abs_path',
+  'context_line',
+  'pre_context',
+  'post_context',
+  'in_app',
+  'instruction_addr',
+  'addr_mode',
+  'debug_id',
+]);
+
+const SAFE_MECHANISM_KEYS = new Set([
+  'type',
+  'handled',
+  'synthetic',
+  'source',
+  'is_exception_group',
+  'exception_id',
+  'parent_id',
+]);
+
+type ExceptionEntry = NonNullable<NonNullable<ErrorEvent['exception']>['values']>[number];
+
+type Stacktrace = NonNullable<ExceptionEntry['stacktrace']>;
+
 const SENSITIVE_FIELDS =
   'access_?token|refresh_?token|id_?token|identity_?token|token|authorization|password|secret|seed|mnemonic|private_?key|pin|number|redeem_?url|barcode_?url|code|otp|email|signature|xdr|transaction';
 
@@ -80,6 +111,8 @@ export class SentryScrubber {
     const scrubbed: ErrorEvent = { ...event };
     delete scrubbed.user;
     delete scrubbed.server_name;
+    delete scrubbed.transaction;
+    delete scrubbed.modules;
     if (typeof scrubbed.message === 'string') {
       scrubbed.message = SentryScrubber.scrubString(scrubbed.message);
     }
@@ -96,8 +129,22 @@ export class SentryScrubber {
         values: scrubbed.exception.values.map((entry) => ({
           ...entry,
           value: entry.value === undefined ? undefined : SentryScrubber.scrubString(entry.value),
+          stacktrace: entry.stacktrace && SentryScrubber.stacktrace(entry.stacktrace),
+          mechanism: entry.mechanism && (SentryScrubber.allowKeys(entry.mechanism, SAFE_MECHANISM_KEYS) as ExceptionEntry['mechanism']),
         })),
       };
+    }
+    if (scrubbed.threads?.values) {
+      scrubbed.threads = {
+        ...scrubbed.threads,
+        values: scrubbed.threads.values.map((thread) => ({
+          ...thread,
+          stacktrace: thread.stacktrace && SentryScrubber.stacktrace(thread.stacktrace),
+        })),
+      };
+    }
+    if (scrubbed.fingerprint) {
+      scrubbed.fingerprint = scrubbed.fingerprint.map((part) => SentryScrubber.scrubString(part));
     }
     if (scrubbed.request) {
       const { method, url } = scrubbed.request;
@@ -135,6 +182,16 @@ export class SentryScrubber {
     return kept;
   }
 
+  private static stacktrace(stacktrace: Stacktrace): Stacktrace {
+    if (!stacktrace.frames) {
+      return stacktrace;
+    }
+    return {
+      ...stacktrace,
+      frames: stacktrace.frames.map((frame) => SentryScrubber.allowKeys(frame, SAFE_FRAME_KEYS)),
+    };
+  }
+
   private static contexts(contexts: Bag): ErrorEvent['contexts'] {
     const kept = SentryScrubber.allowKeys(contexts, SAFE_CONTEXT_KEYS);
     const device = kept.device;
@@ -145,14 +202,14 @@ export class SentryScrubber {
     return kept as ErrorEvent['contexts'];
   }
 
-  private static allowKeys(source: Bag, allowed: Set<string>): Bag {
+  private static allowKeys<T extends object>(source: T, allowed: Set<string>): Partial<T> {
     const kept: Bag = {};
-    for (const key of Object.keys(source)) {
+    for (const [key, value] of Object.entries(source)) {
       if (allowed.has(key)) {
-        kept[key] = source[key];
+        kept[key] = value;
       }
     }
-    return kept;
+    return kept as Partial<T>;
   }
 
   private static stringValues(source: Bag): Bag {
