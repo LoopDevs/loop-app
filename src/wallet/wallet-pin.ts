@@ -8,7 +8,6 @@ export type PinnedWallet = {
 export type WalletPinStorage = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
-  removeItem(key: string): Promise<void>;
 };
 
 type LinkShape = {
@@ -58,9 +57,5 @@ export class WalletPin {
 
   write(pinned: PinnedWallet): Promise<void> {
     return this.storage.setItem(this.key, JSON.stringify(pinned));
-  }
-
-  clear(): Promise<void> {
-    return this.storage.removeItem(this.key);
   }
 }

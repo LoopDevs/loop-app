@@ -58,22 +58,6 @@ test('the secret is stored behind biometrics and the public key is not', async (
   assert.equal(storage.entries.get(key.publicKeyName)?.biometric, false);
 });
 
-test('removing user A key leaves user B and the shared key able to sign', async () => {
-  const storage = new MemoryStorage();
-  const a = new DeviceKey(storage, 'a');
-  const b = new DeviceKey(storage, 'b');
-  await a.create();
-  const bPublicKey = await b.create();
-  storage.entries.set(DeviceKey.sharedPublicKeyName, { value: bPublicKey, biometric: false });
-
-  await a.remove();
-
-  assert.equal(storage.entries.has(a.secretName), false);
-  assert.equal(storage.entries.has(a.publicKeyName), false);
-  assert.equal(await b.publicKey(), bPublicKey);
-  assert.equal(storage.entries.get(DeviceKey.sharedPublicKeyName)?.value, bPublicKey);
-});
-
 test('creating a key for user B never touches user A key', async () => {
   const storage = new MemoryStorage();
   const a = new DeviceKey(storage, 'a');

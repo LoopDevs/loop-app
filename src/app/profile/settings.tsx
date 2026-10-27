@@ -436,17 +436,25 @@ type SpendingAccess = { wallet: SmartWallet; thisDevice: boolean };
 function SpendingDevice() {
   const [access, setAccess] = useState<SpendingAccess | null>(null);
   const [moving, setMoving] = useState(false);
+  const { message, load } = useBusyAction();
 
-  const readAccess = useCallback(async () => {
-    const next = await SmartWallet.load().then(
-      (wallet): SpendingAccess | null => wallet && { wallet, thisDevice: true },
-      (error: unknown) =>
-        error instanceof UnlinkedDevice
-          ? { wallet: error.wallet, thisDevice: false }
-          : null,
-    );
-    setAccess(next);
-  }, []);
+  const readAccess = useCallback(
+    () =>
+      load(async () => {
+        const next = await SmartWallet.load().then(
+          (wallet): SpendingAccess | null =>
+            wallet && { wallet, thisDevice: true },
+          (error: unknown) => {
+            if (error instanceof UnlinkedDevice) {
+              return { wallet: error.wallet, thisDevice: false };
+            }
+            throw error;
+          },
+        );
+        setAccess(next);
+      }),
+    [load],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -454,6 +462,15 @@ function SpendingDevice() {
     }, [readAccess]),
   );
 
+  if (message !== "") {
+    return (
+      <Notice
+        message={`Couldn't check which device can spend your balance. ${message}`}
+        actionLabel="Try again"
+        onAction={readAccess}
+      />
+    );
+  }
   if (!access) {
     return null;
   }

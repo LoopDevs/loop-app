@@ -40,11 +40,6 @@ export const deviceSigner = {
     );
     return base64.encode(new Uint8Array(signature));
   },
-
-  async remove(userId: string): Promise<void> {
-    const keyName = DeviceKey.storageName(userId);
-    await transact('readwrite', (store) => store.delete(keyName));
-  },
 };
 
 async function exportPublicKey(keyPair: CryptoKeyPair): Promise<string> {

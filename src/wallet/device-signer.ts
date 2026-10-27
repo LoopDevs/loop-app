@@ -44,8 +44,4 @@ export const deviceSigner = {
   sign(userId: string, digest: Uint8Array): Promise<string> {
     return new DeviceKey(secureStorage, userId).sign(digest);
   },
-
-  remove(userId: string): Promise<void> {
-    return new DeviceKey(secureStorage, userId).remove();
-  },
 };
