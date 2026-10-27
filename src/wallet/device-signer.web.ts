@@ -3,6 +3,8 @@ import { DeviceKey } from '@/wallet/device-key';
 
 const databaseName = 'loop-device-signer';
 const storeName = 'keys';
+const unsupportedBrowserMessage =
+  "This browser can't set up your wallet. Update it, or use the latest Chrome, Safari or Firefox.";
 
 export const deviceSigner = {
   async publicKey(userId: string): Promise<string | null> {
@@ -16,10 +18,12 @@ export const deviceSigner = {
     if (existing) {
       return exportPublicKey(existing);
     }
-    const keyPair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, false, [
-      'sign',
-      'verify',
-    ])) as CryptoKeyPair;
+    const keyPair = (await crypto.subtle
+      .generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])
+      .catch((error: unknown) => {
+        console.warn('Creating a device key failed', error);
+        throw new Error(unsupportedBrowserMessage);
+      })) as CryptoKeyPair;
     await write(userId, keyPair);
     return exportPublicKey(keyPair);
   },
