@@ -38,7 +38,7 @@ export function useAppRefreshTriggers(): void {
     const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
       const reconnected = connected.current === false && state.isConnected === true;
       connected.current = state.isConnected;
-      if (reconnected) {
+      if (reconnected && foreground.current.shouldRefreshOnReconnect(Date.now())) {
         appRefresh.emit();
       }
     });

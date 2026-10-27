@@ -3,6 +3,15 @@ export class ForegroundRefresh {
 
   private wasBackgrounded = false;
   private lastEmittedAt: number | null = null;
+  private lastReconnectAt: number | null = null;
+
+  shouldRefreshOnReconnect(now: number): boolean {
+    if (this.lastReconnectAt !== null && now - this.lastReconnectAt < ForegroundRefresh.minimumIntervalMs) {
+      return false;
+    }
+    this.lastReconnectAt = now;
+    return true;
+  }
 
   shouldRefresh(next: string, now: number): boolean {
     if (next === 'background') {

@@ -27,3 +27,17 @@ test('a second return inside the minimum interval is skipped', () => {
   refresh.shouldRefresh('background', 400);
   assert.equal(refresh.shouldRefresh('active', 100 + ForegroundRefresh.minimumIntervalMs), true);
 });
+
+test('a flapping connection refreshes once per minimum interval', () => {
+  const refresh = new ForegroundRefresh();
+  assert.equal(refresh.shouldRefreshOnReconnect(0), true);
+  assert.equal(refresh.shouldRefreshOnReconnect(500), false);
+  assert.equal(refresh.shouldRefreshOnReconnect(ForegroundRefresh.minimumIntervalMs), true);
+});
+
+test('a reconnect right after a foreground refresh still refreshes', () => {
+  const refresh = new ForegroundRefresh();
+  refresh.shouldRefresh('background', 0);
+  assert.equal(refresh.shouldRefresh('active', 100), true);
+  assert.equal(refresh.shouldRefreshOnReconnect(200), true);
+});
