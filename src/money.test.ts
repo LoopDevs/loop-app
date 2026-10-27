@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { deviceLocale } from './locale.ts';
 import { dates, money } from './money.ts';
 import { units } from './stellar/units.ts';
 
@@ -49,4 +50,12 @@ test('dates follow the locale and fall back on an invalid date', () => {
   assert.equal(dates.day('2026-03-04T10:00:00Z', 'en-GB'), '4 Mar 2026');
   assert.equal(dates.day('not a date', 'en-GB'), 'not a date');
   assert.equal(dates.time('not a date', 'en-GB'), 'not a date');
+});
+
+test('formatting without a locale uses the device locale', () => {
+  const locale = deviceLocale();
+  assert.equal(money.fiat('1234.5', 'USD'), money.fiat('1234.5', 'USD', locale));
+  assert.equal(money.payment('1234.5678', 'XLM.EURC'), money.payment('1234.5678', 'XLM.EURC', locale));
+  assert.equal(dates.day('2026-03-04T10:00:00Z'), dates.day('2026-03-04T10:00:00Z', locale));
+  assert.equal(dates.time('2026-03-04T10:00:00Z'), dates.time('2026-03-04T10:00:00Z', locale));
 });

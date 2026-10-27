@@ -65,26 +65,13 @@ export const FontAssets =
       }
     : nativeFontAssets;
 
-export const Fonts = Platform.select({
-  ios: {
-    sans: FontFamily.regular,
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: FontFamily.regular,
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
+export const Fonts = {
+  mono: Platform.select({
+    ios: 'ui-monospace',
+    default: 'monospace',
+    web: 'var(--font-mono)',
+  }),
+};
 
 export const Spacing = {
   half: 2,

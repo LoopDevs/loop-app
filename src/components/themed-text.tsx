@@ -1,20 +1,10 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
-import { FontFamily, Fonts, ThemeColor } from '@/constants/theme';
+import { FontFamily, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export type ThemedTextProps = TextProps & {
-  type?:
-    | 'default'
-    | 'title'
-    | 'heading'
-    | 'small'
-    | 'smallBold'
-    | 'caption'
-    | 'subtitle'
-    | 'link'
-    | 'linkPrimary'
-    | 'code';
+type ThemedTextProps = TextProps & {
+  type?: 'default' | 'title' | 'heading' | 'small' | 'smallBold' | 'caption' | 'subtitle' | 'linkPrimary';
   themeColor?: ThemeColor;
 };
 
@@ -70,19 +60,9 @@ const styles = StyleSheet.create({
     lineHeight: 46,
     letterSpacing: -0.8,
   },
-  link: {
-    fontFamily: FontFamily.medium,
-    lineHeight: 24,
-    fontSize: 14,
-  },
   linkPrimary: {
     fontFamily: FontFamily.semibold,
     lineHeight: 24,
     fontSize: 14,
-  },
-  code: {
-    fontFamily: Fonts.mono,
-    fontSize: 13,
-    letterSpacing: 0.5,
   },
 });
