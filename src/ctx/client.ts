@@ -490,6 +490,6 @@ class CtxClient {
 
 export const ctx = new CtxClient(
   loopEnvironment.ctxApiUrl,
-  process.env.EXPO_PUBLIC_CTX_CLIENT_ID ?? '',
+  loopEnvironment.ctxClientId,
   process.env.EXPO_PUBLIC_CATALOG_URL || loopEnvironment.ctxApiUrl,
 );
