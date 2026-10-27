@@ -1,7 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import { errorReporting } from '@/ops/error-reporting';
 import { DeviceKey, IdentityNotConfirmed, type DeviceKeyStorage } from '@/wallet/device-key';
+import { reportingSigningFailure } from '@/wallet/signing-report';
 
 const biometricOptions: SecureStore.SecureStoreOptions = {
   requireAuthentication: true,
@@ -38,10 +40,14 @@ export const deviceSigner = {
     if (!SecureStore.canUseBiometricAuthentication()) {
       throw new Error(biometricsHelp[Platform.OS] ?? biometricsHelp.ios);
     }
-    return new DeviceKey(secureStorage, userId).create();
+    return reportingSigningFailure('device key', errorReporting.reportError, () =>
+      new DeviceKey(secureStorage, userId).create(),
+    );
   },
 
   sign(userId: string, digest: Uint8Array): Promise<string> {
-    return new DeviceKey(secureStorage, userId).sign(digest);
+    return reportingSigningFailure('device key', errorReporting.reportError, () =>
+      new DeviceKey(secureStorage, userId).sign(digest),
+    );
   },
 };

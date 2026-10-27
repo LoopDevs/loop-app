@@ -6,7 +6,7 @@ jq -e 'type == "object"' >/dev/null 2>&1 <<<"$input" || { echo "Blocked: no-code
 path=$(jq -r '.tool_input.file_path // ""' <<<"$input")
 
 case $path in
-  *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.css | *.scss | *.swift | *.kt | *.kts | *.java | *.go | *.m | *.h)
+  *.ts | *.tsx | *.mts | *.cts | *.js | *.jsx | *.mjs | *.cjs | *.css | *.scss | *.swift | *.kt | *.kts | *.java | *.go | *.m | *.h)
     style=slash ;;
   *.sh | *.bash | *.zsh | *.py | *.rb)
     style=hash ;;
@@ -22,14 +22,25 @@ fi
 added=$(grep -vxF -f <(printf '%s\n' "$old" | grep -v '^$' || true) <<<"$new" || true)
 
 if [[ $style == slash ]]; then
-  allowed='//\s*(@ts-|eslint-|prettier-ignore|biome-ignore|istanbul )|/// <reference|/\*\s*(eslint|global |@vite|webpack|istanbul )|^\s*"use (client|server|strict)"'
-  found='^\s*//|[^:]//\s|/\*(\s|\*|$)|^\s*\*(\s|/|$)'
+  allowed='//[[:space:]]*(@ts-|eslint-|prettier-ignore|biome-ignore|istanbul )|/// <reference|/\*[[:space:]]*(eslint|global |@vite|webpack|istanbul )|^[[:space:]]*"use (client|server|strict)"'
+  found='(^|[^:])//|/\*|^[[:space:]]*\*([[:space:]]|/|$)|\*/[[:space:]]*\}?[[:space:]]*$'
 else
-  allowed='^#!|^\s*#\s*(shellcheck|type: ignore|noqa|pragma|-\*-)'
-  found='^\s*#|\s#\s'
+  allowed='^#!|^[[:space:]]*#[[:space:]]*(shellcheck|type: ignore|noqa|pragma|-\*-)'
+  found='(^|[[:space:]])#'
 fi
 
-hit=$(grep -E "$found" <<<"$added" | grep -vE "$allowed" | head -3 || true)
+hit=$(
+  FOUND="$found" ALLOWED="$allowed" awk '
+    {
+      code = $0
+      gsub(/\\./, "", code)
+      gsub(/\047[^\047]*\047/, "", code)
+      gsub(/"[^"]*"/, "", code)
+      gsub(/`[^`]*`/, "", code)
+      if (code ~ ENVIRON["FOUND"] && $0 !~ ENVIRON["ALLOWED"]) print $0
+    }
+  ' <<<"$added" | head -3 || true
+)
 if [[ -n $hit ]]; then
   {
     echo "Blocked: this edit adds code comments to $path. CLAUDE.md forbids comments in code."

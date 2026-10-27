@@ -4,7 +4,13 @@ import { test } from 'node:test';
 import type { ConfigContext } from 'expo/config';
 
 import appConfig from '../../app.config.ts';
-import { hasErrorCode, signInRefusalMessage, SocialSignInConfig } from './social-sign-in.ts';
+import {
+  hasErrorCode,
+  newSignInNonce,
+  oauthLoginBody,
+  signInRefusalMessage,
+  SocialSignInConfig,
+} from './social-sign-in.ts';
 
 const allIds = new SocialSignInConfig({
   appleSignIn: 'true',
@@ -156,4 +162,25 @@ test('error codes match as strings', () => {
   assert.equal(hasErrorCode({ code: 12501 }, '12501'), true);
   assert.equal(hasErrorCode(new Error('x'), 'ERR_REQUEST_CANCELED'), false);
   assert.equal(hasErrorCode(null, 'ERR_REQUEST_CANCELED'), false);
+});
+
+test('oauthLoginBody carries the nonce the provider was given', () => {
+  const nonce = newSignInNonce();
+  assert.deepEqual(oauthLoginBody('apple', { idToken: 'token', nonce }), {
+    provider: 'apple',
+    idToken: 'token',
+    nonce,
+  });
+});
+
+test('oauthLoginBody omits the nonce when the provider took none', () => {
+  assert.deepEqual(oauthLoginBody('google', { idToken: 'token' }), { provider: 'google', idToken: 'token' });
+});
+
+test('newSignInNonce is 64 hex characters and differs on every call', () => {
+  const nonces = new Set(Array.from({ length: 50 }, () => newSignInNonce()));
+  assert.equal(nonces.size, 50);
+  for (const nonce of nonces) {
+    assert.match(nonce, /^[0-9a-f]{64}$/);
+  }
 });

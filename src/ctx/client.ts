@@ -1,6 +1,7 @@
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
+import { signInReportMessage } from '@/ctx/sign-in-report';
 import { OrderRequest } from '@/ctx/order-request';
 import { OrderWake } from '@/ctx/order-wake';
 import { Deadline } from '@/ctx/deadline';
@@ -13,6 +14,7 @@ import { errorReporting } from '@/ops/error-reporting';
 import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
 import {
   oauthLoginBody,
+  type SocialCredential,
   signInRefusalMessage,
   type SignInMethod,
   type SocialProvider,
@@ -267,10 +269,10 @@ class CtxClient {
     });
   }
 
-  signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
+  signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
     return holdCriticalReload(async () => {
       await this.auth.startSession(
-        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
+        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
       );
     });
   }
@@ -457,6 +459,10 @@ class CtxClient {
       return await this.send<T>('POST', path, body);
     } catch (error) {
       const refusal = error instanceof CtxError ? signInRefusalMessage(method, error.errorName()) : null;
+      const unexpected = error instanceof CtxError ? signInReportMessage(method, error) : null;
+      if (unexpected) {
+        errorReporting.reportMessage(unexpected);
+      }
       throw refusal ? new Error(refusal, { cause: error }) : error;
     }
   }
