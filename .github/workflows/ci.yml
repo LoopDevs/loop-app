@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [post-hackathon, main]
+  push:
+    branches: [post-hackathon, main]
+  schedule:
+    - cron: '17 6 * * 1'
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Write expo-env.d.ts
+        run: echo '/// <reference types="expo/types" />' > expo-env.d.ts
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Dependency advisories
+        run: npm audit --audit-level=high
