@@ -12,23 +12,25 @@
 
 ## Git
 
-Flow: feature branch → staging → main.
+Flow: feature branch → `post-hackathon`, through a pull request. `main` and
+`staging` are frozen; don't branch from them or target them.
 
 - Commit, push and merge when the user asks. Keep it fast: no test runs
   before committing or pushing. CI handles that.
 - Use Conventional Commits (`feat:`, `fix:`, `chore:` ...).
-- Always pull the branch you're on (feature, staging or main) before
+- Always pull the branch you're on (feature or `post-hackathon`) before
   pushing, so remote changes are included. Do the same for the target
   branch before merging into it. If the pull brings conflicts, handle them
   as below.
 - NEVER add a `Co-Authored-By` trailer or any other AI attribution to
   commits or PRs, even if the tooling suggests one.
 - Before starting work, run `git status`, check which branch you're on, and
-  pull the latest changes. Start new work on a feature branch.
+  pull the latest changes. Start new work on a feature branch cut from
+  `post-hackathon`.
 - After any git action, say in one or two plain sentences what happened and
   where things stand. For example: "Committed and pushed to
-  feature/login. It's not on staging yet."
-- Merging to main: say what's about to go live and wait for a yes.
+  feature/login. It's not merged into post-hackathon yet."
+- Merging to `post-hackathon`: say what's about to go live and wait for a yes.
 - Merge conflicts: explain what clashes in plain terms and ask how to
   resolve it. Don't guess.
 - Never run destructive or history-rewriting commands without explicit
