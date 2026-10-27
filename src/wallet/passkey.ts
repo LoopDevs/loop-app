@@ -9,7 +9,7 @@ import { PasskeyPublicKey } from '@/wallet/passkey-public-key';
 import { PasskeySite } from '@/wallet/passkey-site';
 
 function rpId(): string {
-  return PasskeySite.forHost(Platform.OS === 'web' ? window.location.hostname : null, loopEnvironment.name);
+  return PasskeySite.forHost(Platform.OS === 'web' ? window.location.hostname : null);
 }
 
 export type Passkey = {

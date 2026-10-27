@@ -4,6 +4,7 @@ import type { TokenStorage } from '../session/install-scoped-token.ts';
 import { base64 } from './base64.ts';
 import type { Passkey } from './passkey.ts';
 import type { PasskeyAssertion } from './passkey-assertion.ts';
+import type { WalletCheck } from './wallet-rules.ts';
 
 export type PinnedWallet = {
   address: string;
@@ -16,6 +17,8 @@ type LinkShape = {
   sponsored: boolean;
   status: string;
 };
+
+type SignWithPasskey = (challenge: Uint8Array) => Promise<PasskeyAssertion>;
 
 export class WalletPin {
   readonly key: string;
@@ -48,13 +51,14 @@ export class WalletPin {
   }
 
   async read(): Promise<PinnedWallet | null> {
-    const stored = await this.storage.getItem(this.key);
-    if (stored === null) {
+    const record = await this.record(this.key);
+    if (!record) {
       return null;
     }
-    const { address, passkeyPublicKey } = WalletPin.parse(stored);
+    const { address, passkeyPublicKey } = record;
     if (typeof address !== 'string' || typeof passkeyPublicKey !== 'string') {
-      throw WalletPin.unreadable();
+      await this.storage.removeItem(this.key);
+      return null;
     }
     return { address, passkeyPublicKey };
   }
@@ -66,21 +70,25 @@ export class WalletPin {
   }
 
   async pendingPasskey(): Promise<Passkey | null> {
-    const stored = await this.storage.getItem(this.pendingKey);
-    if (stored === null) {
+    const record = await this.record(this.pendingKey);
+    if (!record) {
       return null;
     }
-    const { credentialId, publicKey } = WalletPin.parse(stored);
+    const { credentialId, publicKey } = record;
     if (typeof credentialId !== 'string' || typeof publicKey !== 'string') {
-      throw WalletPin.unreadable();
+      await this.storage.removeItem(this.pendingKey);
+      return null;
     }
     return { credentialId, publicKey: base64.decode(publicKey) };
   }
 
-  async passkeyForSetup(create: () => Promise<Passkey>): Promise<Passkey> {
+  async passkeyForSetup(create: () => Promise<Passkey>, signWithPasskey: SignWithPasskey): Promise<Passkey> {
     const pending = await this.pendingPasskey();
-    if (pending) {
+    if (pending && (await WalletPin.stillHeld(pending, signWithPasskey))) {
       return pending;
+    }
+    if (pending) {
+      await this.storage.removeItem(this.pendingKey);
     }
     const created = await create();
     await this.requireCurrentUser();
@@ -89,6 +97,30 @@ export class WalletPin {
       JSON.stringify({ credentialId: created.credentialId, publicKey: base64.encode(created.publicKey) }),
     );
     return created;
+  }
+
+  async admits(pinned: PinnedWallet | null, address: string, checked: WalletCheck): Promise<boolean> {
+    if (checked.thisDevice === 'unlinked') {
+      return false;
+    }
+    return pinned !== null || (await this.pinCreatedHere(address, checked.passkeyPublicKey));
+  }
+
+  async confirmThisDevice(
+    pinned: PinnedWallet | null,
+    address: string,
+    checked: WalletCheck,
+    addDevice: () => Promise<void>,
+    signWithPasskey: SignWithPasskey,
+  ): Promise<void> {
+    if (checked.thisDevice === 'unlinked') {
+      await addDevice();
+      await this.write({ address, passkeyPublicKey: base64.encode(checked.passkeyPublicKey) });
+      return;
+    }
+    if (!pinned) {
+      await this.pinConfirmed(address, checked.passkeyPublicKey, signWithPasskey);
+    }
   }
 
   async pinCreatedHere(address: string, passkeyPublicKey: Uint8Array): Promise<boolean> {
@@ -100,11 +132,7 @@ export class WalletPin {
     return true;
   }
 
-  async pinConfirmed(
-    address: string,
-    passkeyPublicKey: Uint8Array,
-    signWithPasskey: (challenge: Uint8Array) => Promise<PasskeyAssertion>,
-  ): Promise<void> {
+  async pinConfirmed(address: string, passkeyPublicKey: Uint8Array, signWithPasskey: SignWithPasskey): Promise<void> {
     const challenge = randomBytes(32);
     const assertion = await signWithPasskey(challenge);
     assertion.requireSigned(challenge, passkeyPublicKey);
@@ -117,20 +145,27 @@ export class WalletPin {
     }
   }
 
-  private static parse(stored: string): Record<string, unknown> {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(stored);
-    } catch {
-      throw WalletPin.unreadable();
-    }
-    if (typeof parsed !== 'object' || parsed === null) {
-      throw WalletPin.unreadable();
-    }
-    return parsed as Record<string, unknown>;
+  private async record(key: string): Promise<Record<string, unknown> | null> {
+    const stored = await this.storage.getItem(key);
+    return stored === null ? null : WalletPin.parse(stored);
   }
 
-  private static unreadable(): Error {
-    return new Error("The wallet saved on this device can't be read. Contact support.");
+  private static async stillHeld(passkey: Passkey, signWithPasskey: SignWithPasskey): Promise<boolean> {
+    const challenge = randomBytes(32);
+    try {
+      (await signWithPasskey(challenge)).requireSigned(challenge, passkey.publicKey);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private static parse(stored: string): Record<string, unknown> {
+    try {
+      const parsed: unknown = JSON.parse(stored);
+      return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
   }
 }

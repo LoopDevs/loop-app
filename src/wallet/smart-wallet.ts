@@ -81,10 +81,7 @@ export class SmartWallet {
     }
     const wallet = new SmartWallet(link.id, link.address, userId);
     const checked = await wallet.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
-    if (checked.thisDevice === 'unlinked') {
-      throw new UnlinkedDevice(wallet);
-    }
-    if (!pinned && !(await pin.pinCreatedHere(wallet.address, checked.passkeyPublicKey))) {
+    if (!(await pin.admits(pinned, wallet.address, checked))) {
       throw new UnlinkedDevice(wallet);
     }
     return wallet;
@@ -109,7 +106,10 @@ export class SmartWallet {
     const pin = SmartWallet.pinFor(userId);
     const devicePublicKey = await deviceSigner.create(userId);
     await holdCriticalReload(async () => {
-      const created = await pin.passkeyForSetup(() => passkey.create(label));
+      const created = await pin.passkeyForSetup(
+        () => passkey.create(label),
+        (challenge) => passkey.sign(challenge),
+      );
       SmartWallet.creation.start(
         userId,
         holdCriticalReload(() => SmartWallet.deploy(pin, userId, devicePublicKey, created)),
@@ -124,7 +124,7 @@ export class SmartWallet {
     created: Passkey,
   ): Promise<SmartWallet> {
     await pin.requireCurrentUser();
-    const link = await ctx.deployWallet({
+    const link = await ctx.deployWallet(userId, {
       credentialId: created.credentialId,
       passkeyPublicKey: base64.encode(created.publicKey),
       devicePublicKey,
@@ -159,15 +159,13 @@ export class SmartWallet {
     const pin = SmartWallet.pinFor(this.userId);
     const pinned = await pin.read();
     const checked = await this.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
-    const { passkeyPublicKey } = checked;
-    if (checked.thisDevice === 'unlinked') {
-      await holdCriticalReload(() => this.deviceLink().add(this.address, passkeyPublicKey, signal));
-      await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
-      return;
-    }
-    if (!pinned) {
-      await pin.pinConfirmed(this.address, passkeyPublicKey, (challenge) => passkey.sign(challenge));
-    }
+    await pin.confirmThisDevice(
+      pinned,
+      this.address,
+      checked,
+      () => holdCriticalReload(() => this.deviceLink().add(this.address, checked.passkeyPublicKey, signal)),
+      (challenge) => passkey.sign(challenge),
+    );
   }
 
   async balances(): Promise<Balances> {
