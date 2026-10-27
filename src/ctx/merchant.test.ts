@@ -15,6 +15,13 @@ const json: MerchantJson = {
   userDiscount: 250,
 };
 
+test('a merchant is sold in its own country, or when the country is not known yet', () => {
+  const merchant = new Merchant(json);
+  assert.equal(merchant.isSoldIn('US'), true);
+  assert.equal(merchant.isSoldIn(undefined), true);
+  assert.equal(merchant.isSoldIn('GB'), false);
+});
+
 test('rate is the merchant default without an override', () => {
   assert.equal(new Merchant(json).cashbackBasisPoints(), 250);
 });

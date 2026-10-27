@@ -144,6 +144,10 @@ export class Merchant {
       .replace(/\/+$/, '');
   }
 
+  isSoldIn(country: string | undefined): boolean {
+    return country === undefined || this.country === country;
+  }
+
   whereToUse(): string | null {
     return this.redeemLocation ? (Merchant.redeemLocationLabels[this.redeemLocation] ?? null) : null;
   }
