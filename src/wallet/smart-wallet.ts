@@ -1,4 +1,4 @@
-import { MuxedAccount, scValToNative, StrKey, xdr } from '@stellar/stellar-sdk';
+import { xdr } from '@stellar/stellar-sdk';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -172,7 +172,12 @@ export class SmartWallet {
     timer?.mark('payment built');
     const call = await this.verifiedCall(built);
     timer?.mark('ledger read');
-    const transfer = this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
+    const transfer = call.requirePayment({
+      from: this.address,
+      token,
+      amount: units.parse(giftCard.paymentCryptoAmount),
+      orderAddress: giftCard.paymentCryptoAddress,
+    });
     const signed = await this.sign(call);
     timer?.mark('signed');
     return {
@@ -244,35 +249,6 @@ export class SmartWallet {
     return { token, amount: await soroban.balance(token.contract, this.address) };
   }
 
-  private static accountOf(address: string): string {
-    if (StrKey.isValidMed25519PublicKey(address)) {
-      return MuxedAccount.fromAddress(address, '0').baseAccount().accountId();
-    }
-    return address;
-  }
-
-  private static muxedIdOf(address: string): bigint | undefined {
-    if (!StrKey.isValidMed25519PublicKey(address)) {
-      return undefined;
-    }
-    return BigInt(MuxedAccount.fromAddress(address, '0').id());
-  }
-
-  private requirePayment(call: SponsoredCall, token: Token, amount: bigint): SignedTransfer {
-    if (call.contract !== token.contract || call.method !== 'transfer' || call.args.length !== 3) {
-      throw new Error(`The transaction is not a ${token.symbol} transfer`);
-    }
-    const [from, to, transferred] = call.args.map((arg) => scValToNative(arg)) as [string, string, bigint];
-    if (from !== this.address || SmartWallet.accountOf(to) !== network.payee) {
-      throw new Error('The payment goes to an unexpected address');
-    }
-    if (transferred !== amount) {
-      throw new Error('The payment amount does not match the order');
-    }
-    const muxedId = SmartWallet.muxedIdOf(to);
-    return muxedId === undefined ? { amount } : { amount, muxedId };
-  }
-
   private async rule(id: number): Promise<ContextRule> {
     return (await soroban.read(this.address, 'get_context_rule', [xdr.ScVal.scvU32(id)])) as ContextRule;
   }
@@ -290,18 +266,8 @@ export class SmartWallet {
   }
 
   private async requireWithdraw(call: SponsoredCall, shares: bigint): Promise<void> {
-    if (call.contract !== network.usdcVault || call.method !== 'withdraw' || call.args.length !== 3) {
-      throw new Error('The transaction is not a withdrawal from the savings vault');
-    }
-    const [amount, minimums, from] = call.args.map((arg) => scValToNative(arg)) as [
-      bigint,
-      bigint[],
-      string,
-    ];
-    if (amount !== shares || from !== this.address || minimums.length !== 1) {
-      throw new Error('The withdrawal does not match the request');
-    }
-    if (minimums[0] < Holdings.floorOf(await this.valueOf(shares))) {
+    const minimum = call.requireWithdrawal({ from: this.address, vault: network.usdcVault, shares });
+    if (minimum < Holdings.floorOf(await this.valueOf(shares))) {
       throw new Error('The withdrawal minimum is too low');
     }
   }
