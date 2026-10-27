@@ -8,13 +8,15 @@ import { loopLinks } from '@/constants/loop-links';
 import { Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
 import { orderHelp } from '@/ctx/order-help';
+import { useSentPayment } from '@/hooks/use-sent-payment';
 
 export function OrderHelp({ giftCard }: { giftCard: GiftCard }) {
   const [mailUnavailable, setMailUnavailable] = useState(false);
+  const sent = useSentPayment(giftCard.paymentId);
 
   const openMail = async () => {
     try {
-      await Linking.openURL(orderHelp.mailto(giftCard));
+      await Linking.openURL(orderHelp.mailto(giftCard, sent?.txId));
     } catch {
       setMailUnavailable(true);
     }

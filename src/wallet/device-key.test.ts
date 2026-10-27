@@ -132,3 +132,23 @@ test('a dropped shared secret removes the shared public key', async () => {
   await assert.rejects(new DeviceKey(storage, 'a').sign(digest), MissingDeviceSecret);
   assert.equal(await new DeviceKey(storage, 'a').publicKey(), null);
 });
+
+test('creating again keeps the existing key so a wallet deployed with it stays usable', async () => {
+  const storage = new MemoryStorage();
+  const key = new DeviceKey(storage, 'a');
+  const first = await key.create();
+  const signature = await key.sign(digest);
+  assert.equal(await key.create(), first);
+  assert.equal(await key.sign(digest), signature);
+});
+
+test('creating after the OS dropped the secret makes a new key', async () => {
+  const storage = new MemoryStorage();
+  const key = new DeviceKey(storage, 'a');
+  const first = await key.create();
+  storage.entries.delete(key.secretName);
+  await assert.rejects(key.sign(digest), MissingDeviceSecret);
+  const second = await key.create();
+  assert.notEqual(second, first);
+  assert.ok(ed25519.verify(base64.decode(await key.sign(digest)), digest, base64.decode(second)));
+});

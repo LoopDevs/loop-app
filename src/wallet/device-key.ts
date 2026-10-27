@@ -43,6 +43,10 @@ export class DeviceKey {
   }
 
   async create(): Promise<string> {
+    const existing = await this.storage.read(this.publicKeyName, false);
+    if (existing) {
+      return existing;
+    }
     const secret = randomBytes(32);
     const publicKey = base64.encode(ed25519.getPublicKey(secret));
     await this.storage.remove(this.secretName);

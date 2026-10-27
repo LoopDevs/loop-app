@@ -45,6 +45,7 @@ import {
   unpaidStatuses,
 } from "@/ctx/gift-card-status";
 import { useAppRefresh } from "@/hooks/use-app-refresh";
+import { sentPayments } from "@/hooks/use-sent-payment";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useSessionOwner } from "@/hooks/use-session-owner";
 import { useTheme } from "@/hooks/use-theme";
@@ -99,8 +100,12 @@ export default function WalletScreen() {
           perPage: ordersPerPage,
           page: next,
         });
+        const sent = await Promise.all(
+          result.map((giftCard) => sentPayments.get(giftCard.paymentId)),
+        );
         const shownResult = result.filter(
-          (giftCard) => !isHiddenFromHistory(giftCard),
+          (giftCard, index) =>
+            !isHiddenFromHistory(giftCard, sent[index] !== null),
         );
         setGiftCards((shown) =>
           next === 1 ? shownResult : [...shown, ...shownResult],

@@ -10,11 +10,11 @@ export function wasCharged(card: GiftCard): boolean {
   return card.paymentStatus === 'paid' || Boolean(card.paymentCryptoTxId) || card.paymentMethod !== 'crypto';
 }
 
-export function isHiddenFromHistory(card: GiftCard): boolean {
+export function isHiddenFromHistory(card: GiftCard, sentFromDevice = false): boolean {
   if (card.status === 'unpaid') {
     return true;
   }
-  return card.status === 'expired' && !wasCharged(card);
+  return card.status === 'expired' && !wasCharged(card) && !sentFromDevice;
 }
 
 export function giftCardStatusLabel(status: GiftCard['status']): string {
