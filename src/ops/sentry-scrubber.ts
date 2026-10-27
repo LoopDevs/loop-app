@@ -20,6 +20,26 @@ const STATIC_ROUTE_WORDS = new Set([
   'logout',
   'verify-email',
   'refresh-token',
+  'shop',
+  'wallet',
+  'cash-out',
+  'cashback',
+  'savings',
+  'profile',
+  'settings',
+  'about',
+  'accessibility',
+  'affiliates',
+  'careers',
+  'complaints',
+  'cookies',
+  'faq',
+  'how-it-works',
+  'press',
+  'privacy',
+  'security',
+  'support',
+  'terms',
 ]);
 
 const SAFE_EXTRA_KEYS = new Set(['componentStack']);
@@ -68,7 +88,7 @@ const PATTERNS: RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi,
   /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
   /\bS[A-Z2-7]{55}\b/g,
-  /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+  /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}/g,
   /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi,
   /\b[A-Fa-f0-9]{32,}\b/g,
   /[A-Za-z0-9+/_-]{40,}={0,2}/g,
@@ -76,9 +96,11 @@ const PATTERNS: RegExp[] = [
 
 const CTX_ERROR_MESSAGE = /CTX (\d{3}):[\s\S]*$/;
 
+const MAX_SCRUBBED_LENGTH = 4096;
+
 export class SentryScrubber {
   static scrubString(value: string): string {
-    let scrubbed = value.replace(CTX_ERROR_MESSAGE, 'CTX $1');
+    let scrubbed = SentryScrubber.bounded(value).replace(CTX_ERROR_MESSAGE, 'CTX $1');
     for (const pattern of PATTERNS) {
       scrubbed = scrubbed.replace(pattern, FILTERED);
     }
@@ -166,6 +188,17 @@ export class SentryScrubber {
       scrubbed.tags = SentryScrubber.stringValues(scrubbed.tags) as typeof scrubbed.tags;
     }
     return scrubbed;
+  }
+
+  private static bounded(value: string): string {
+    if (value.length <= MAX_SCRUBBED_LENGTH) {
+      return value;
+    }
+    let end = MAX_SCRUBBED_LENGTH;
+    while (end > 0 && !/\s/.test(value.charAt(end - 1))) {
+      end--;
+    }
+    return `${value.slice(0, end)}${FILTERED}`;
   }
 
   private static breadcrumbData(data: Bag): Bag {

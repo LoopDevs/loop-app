@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import type { Breadcrumb, ErrorEvent } from '@sentry/react-native';
 
@@ -91,6 +94,40 @@ test('route templates drop query strings and unknown segments', () => {
   assert.equal(SentryScrubber.routeTemplate('/users/abc/gift-cards/xyz?x=1'), '/users/:id/gift-cards/:id');
   assert.equal(SentryScrubber.routeTemplate('https://h.example.com/me#frag'), '/me');
   assert.equal(SentryScrubber.routeTemplate('/login/oauth'), '/login/oauth');
+});
+
+test('every static app route segment survives route templating', () => {
+  const segments = new Set<string>();
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const name = entry.name.replace(/\.tsx$/, '');
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name));
+      }
+      if (!/^[[(_+]/.test(name) && name !== 'index') {
+        segments.add(name);
+      }
+    }
+  };
+  walk(fileURLToPath(new URL('../app', import.meta.url)));
+  assert.ok(segments.has('shop'));
+  for (const segment of segments) {
+    assert.equal(SentryScrubber.routeTemplate(`/${segment}`), `/${segment}`, segment);
+  }
+  assert.equal(SentryScrubber.routeTemplate('/shop/aerie'), '/shop/:id');
+});
+
+test('a long run of address-like characters is scrubbed quickly', () => {
+  const started = performance.now();
+  SentryScrubber.scrubString('a.'.repeat(32 * 1024));
+  assert.ok(performance.now() - started < 50);
+});
+
+test('a string over the length cap is cut at a word boundary and marked filtered', () => {
+  const scrubbed = SentryScrubber.scrubString(`${'word '.repeat(1000)}${'x'.repeat(30)}`);
+  assert.ok(scrubbed.length <= 4096 + '[Filtered]'.length);
+  assert.ok(scrubbed.endsWith(' [Filtered]'));
+  assert.ok(!scrubbed.includes('x'));
 });
 
 test('events lose user, request data, headers and unlisted extra keys', () => {
