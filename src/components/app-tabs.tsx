@@ -3,16 +3,18 @@ import { StyleSheet } from 'react-native';
 
 import { SignInScreen, useSignIn } from '@/components/sign-in';
 import { ThemedView } from '@/components/ui/themed-view';
+import { useWelcomeSeen, WelcomeScreen } from '@/components/welcome';
 import { FontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   const { signedIn } = useSignIn();
-  if (signedIn === null) {
+  const [welcomeSeen, dismissWelcome] = useWelcomeSeen();
+  if (signedIn === null || (!signedIn && welcomeSeen === null)) {
     return <ThemedView style={styles.loading} />;
   }
   if (!signedIn) {
-    return <SignInScreen />;
+    return welcomeSeen ? <SignInScreen /> : <WelcomeScreen onContinue={dismissWelcome} />;
   }
   return <SignedInTabs />;
 }

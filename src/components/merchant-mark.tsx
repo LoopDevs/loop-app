@@ -45,9 +45,19 @@ type MerchantDiscProps = {
   size?: number;
 };
 
-export function MerchantDisc({ merchantId, name, size = 40 }: MerchantDiscProps) {
-  const theme = useTheme();
+export function MerchantDisc({ merchantId, name, size }: MerchantDiscProps) {
   const merchant = useMerchant(merchantId);
+  return <LogoDisc merchant={merchant} name={name} size={size} />;
+}
+
+type LogoDiscProps = {
+  merchant: Merchant | null;
+  name: string;
+  size?: number;
+};
+
+export function LogoDisc({ merchant, name, size = 40 }: LogoDiscProps) {
+  const theme = useTheme();
   const frame = { width: size, height: size };
   if (merchant?.logoUrl) {
     return (
