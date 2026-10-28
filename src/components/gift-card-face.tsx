@@ -1,43 +1,14 @@
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { cachedMerchant, loadMerchant } from '@/components/storefront';
+import { brandGround, useMerchant } from '@/components/merchant-mark';
 import { Wordmark } from '@/components/wordmark';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
-import type { Merchant } from '@/ctx/merchant';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 
 export const giftCardAspectRatio = 1.586;
-const fallbackHue = 225;
-
-function useMerchant(merchantId: string): Merchant | null {
-  const [loaded, setLoaded] = useState<Merchant | null>(null);
-  const merchant = cachedMerchant(merchantId) ?? (loaded?.id === merchantId ? loaded : null);
-  useEffect(() => {
-    if (merchant) {
-      return;
-    }
-    let active = true;
-    loadMerchant(merchantId)
-      .then((result) => {
-        if (active) {
-          setLoaded(result);
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [merchantId, merchant]);
-  return merchant;
-}
-
-function brandColor(hue: number): string {
-  return `hsl(${hue}, 42%, 34%)`;
-}
 
 type GiftCardFaceProps = {
   giftCard: GiftCard;
@@ -47,7 +18,7 @@ type GiftCardFaceProps = {
 export function GiftCardFace({ giftCard, style }: GiftCardFaceProps) {
   const theme = useTheme();
   const merchant = useMerchant(giftCard.merchantId);
-  const ground = brandColor(merchant?.tileHue() ?? fallbackHue);
+  const ground = brandGround(merchant);
   const amount = money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency);
   const initial = giftCard.merchantName.trim().charAt(0).toUpperCase();
   return (

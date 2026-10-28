@@ -1,13 +1,12 @@
-import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Children, Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { MerchantDisc } from '@/components/merchant-mark';
 import { Notice } from '@/components/ui/form';
 import { PressScale } from '@/components/ui/press-scale';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cachedMerchant } from '@/components/storefront';
 import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
@@ -561,24 +560,6 @@ function cashbackLine({ cashbackAmount, cashbackCurrency }: GiftCard): string | 
   return `+${money.ctx(cashbackAmount, cashbackCurrency)} cashback`;
 }
 
-function MerchantDisc({ merchantId, name }: { merchantId: string; name: string }) {
-  const theme = useTheme();
-  const merchant = cachedMerchant(merchantId);
-  if (merchant?.logoUrl) {
-    return (
-      <Disc ground={theme.backgroundElement}>
-        <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.discImage} accessible={false} />
-      </Disc>
-    );
-  }
-  const hue = merchant?.tileHue() ?? 225;
-  return (
-    <Disc ground={`hsl(${hue}, 42%, 34%)`}>
-      <Text style={[styles.discInitial, { color: theme.onInverse }]}>{name.trim().charAt(0).toUpperCase()}</Text>
-    </Disc>
-  );
-}
-
 function RowSkeleton() {
   return (
     <View style={styles.row}>
@@ -650,14 +631,6 @@ const styles = StyleSheet.create({
   discSymbol: {
     fontFamily: FontFamily.semibold,
     fontSize: 18,
-  },
-  discImage: {
-    width: '72%',
-    height: '72%',
-  },
-  discInitial: {
-    fontFamily: FontFamily.bold,
-    fontSize: 16,
   },
   textButton: {
     minHeight: 32,

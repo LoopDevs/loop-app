@@ -19,6 +19,7 @@ import Animated, {
 import { Button, Notice } from "@/components/ui/form";
 import { statusTone } from "@/components/gift-card-details";
 import { useScrimScroll, useScrollToTopOnFocus } from "@/components/home-panel";
+import { MerchantDisc } from "@/components/merchant-mark";
 import { PageHeader } from "@/components/page-header";
 import { PressScale } from "@/components/ui/press-scale";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
@@ -53,6 +54,7 @@ import { dates, money } from "@/money";
 
 const ordersPerPage = 20;
 const staggeredRows = 8;
+const tableMarkSize = 36;
 
 export default function WalletScreen() {
   const router = useRouter();
@@ -343,6 +345,7 @@ function OrdersTable({
           { borderColor: theme.border },
         ]}
       >
+        <View style={styles.markCell} />
         <ThemedText
           type="smallBold"
           themeColor="textSecondary"
@@ -418,6 +421,7 @@ function OrderTableRow({
         (hovered || pressed) && { backgroundColor: theme.backgroundSelected },
       ]}
     >
+      <MerchantDisc merchantId={giftCard.merchantId} name={giftCard.merchantName} size={tableMarkSize} />
       <View style={styles.cellMain}>
         <ThemedText type="smallBold">{giftCard.merchantName}</ThemedText>
         {outcome && (
@@ -501,6 +505,7 @@ function OrderRow({
         { backgroundColor: theme.backgroundElement, borderColor: theme.border },
       ]}
     >
+      <MerchantDisc merchantId={giftCard.merchantId} name={giftCard.merchantName} size={44} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <ThemedText type="smallBold" style={styles.rowName}>
@@ -635,6 +640,9 @@ const styles = StyleSheet.create({
   },
   lastRow: {
     borderBottomWidth: 0,
+  },
+  markCell: {
+    width: tableMarkSize,
   },
   cellMain: {
     flex: 2.2,
