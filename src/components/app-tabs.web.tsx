@@ -22,7 +22,7 @@ import { useTheme } from '@/hooks/use-theme';
 export default function AppTabs() {
   const { wide } = usePageLayout();
   return (
-    <Tabs style={styles.shell}>
+    <Tabs style={styles.shell} options={{ backBehavior: 'history' }}>
       {wide ? null : <TabSlot style={styles.slot} />}
       <TabList asChild>
         <CustomTabList>
