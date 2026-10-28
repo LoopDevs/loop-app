@@ -1,5 +1,6 @@
 import type { GiftCard } from './client.ts';
 import type { ShownOrder } from './one-tap-buy.ts';
+import type { PaymentCurrency } from '../stellar/network.ts';
 
 type BankOrder = Pick<GiftCard, 'status' | 'paymentStatus' | 'paymentMethod' | 'paymentUrl' | 'paymentUrlExpiration'>;
 
@@ -7,22 +8,35 @@ type BankProfile = {
   stableCurrency?: string;
 };
 
+export type BankRail = {
+  country: string;
+  currency: string;
+  stable: PaymentCurrency;
+  method: string;
+  bankLabel: string;
+};
+
 export class BankPayment {
   static readonly option = 'bank';
-  static readonly method = 'plaid-uk-eu';
-  static readonly currency = 'GBP';
-  static readonly stable = 'XLM.GBPLOOP';
+  static readonly rails: readonly BankRail[] = [
+    { country: 'GB', currency: 'GBP', stable: 'XLM.GBPLOOP', method: 'plaid-uk-eu', bankLabel: 'UK bank account' },
+  ];
+
+  static rail(merchantCurrency: string): BankRail | null {
+    return BankPayment.rails.find((rail) => rail.currency === merchantCurrency) ?? null;
+  }
 
   static accepts(merchantCurrency: string): boolean {
-    return merchantCurrency === BankPayment.currency;
+    return BankPayment.rail(merchantCurrency) !== null;
   }
 
   static offered(merchantCurrency: string, profile: BankProfile): boolean {
-    return BankPayment.accepts(merchantCurrency) && profile.stableCurrency === BankPayment.stable;
+    const rail = BankPayment.rail(merchantCurrency);
+    return rail !== null && profile.stableCurrency === rail.stable;
   }
 
   static isBank(order: Pick<GiftCard, 'paymentMethod'>): boolean {
-    return order.paymentMethod === BankPayment.method;
+    return BankPayment.rails.some((rail) => rail.method === order.paymentMethod);
   }
 
   static charged(order: Pick<GiftCard, 'paymentStatus'>): boolean {

@@ -113,8 +113,9 @@ export default function MerchantScreen() {
   const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and earn ${merchant.rateLabel()}` : '';
   const cardStyle = [styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
-  const payCopy = BankPayment.accepts(merchant.currency)
-    ? 'Pay from your UK bank account or your Loop wallet.'
+  const rail = BankPayment.rail(merchant.currency);
+  const payCopy = rail
+    ? `Pay from your ${rail.bankLabel} or your Loop wallet.`
     : 'Pay with XLM, USDC or EURC.';
   const buyCard = wallet && profile && !merchant.isSoldIn(profile.country) ? (
     <View style={cardStyle}>

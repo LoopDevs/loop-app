@@ -18,7 +18,7 @@ const bankOrder = (fields: Partial<GiftCard> = {}): GiftCard => ({
   cardFiatCurrency: 'GBP',
   paymentId: 'p1',
   paymentStatus: 'unpaid',
-  paymentMethod: BankPayment.method,
+  paymentMethod: 'plaid-uk-eu',
   paymentUrl: 'https://secure.plaid.com/hl/abc',
   paymentUrlExpiration: later,
   ...fields,
@@ -34,6 +34,14 @@ test('bank payment is offered for pound merchants to users whose cashback is in 
 test('pound merchants accept bank payment whatever the user has set up', () => {
   assert.equal(BankPayment.accepts('GBP'), true);
   assert.equal(BankPayment.accepts('EUR'), false);
+});
+
+test('a merchant currency maps to the rail of one country, or to none', () => {
+  assert.equal(BankPayment.rail('GBP')?.country, 'GB');
+  assert.equal(BankPayment.rail('GBP')?.bankLabel, 'UK bank account');
+  assert.equal(BankPayment.rail('CAD'), null);
+  const currencies = BankPayment.rails.map((rail) => rail.currency);
+  assert.equal(new Set(currencies).size, currencies.length);
 });
 
 test('only orders paid through the bank method are bank orders', () => {
