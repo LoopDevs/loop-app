@@ -6,6 +6,7 @@ export const SymbolFont = {
 
 const codepoints: Record<string, number> = {
   account_balance: 0xe84f,
+  account_balance_wallet: 0xe850,
   account_circle: 0xe853,
   add: 0xe145,
   apps: 0xe5c3,
@@ -18,6 +19,7 @@ const codepoints: Record<string, number> = {
   chevron_right: 0xe5cc,
   close: 0xe5cd,
   content_copy: 0xe14d,
+  credit_card: 0xe870,
   devices: 0xe1b1,
   directions_run: 0xe566,
   error: 0xe000,
