@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Button, Notice } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
+import { Button, Notice } from '@/components/ui/form';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Layout, Motion, Spacing } from '@/constants/theme';
 import { errorMessage } from '@/hooks/use-busy-action';
 import type { SmartWallet } from '@/wallet/smart-wallet';

@@ -4,11 +4,11 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Children, Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Notice } from '@/components/form';
-import { PressScale } from '@/components/press-scale';
-import { Skeleton } from '@/components/skeleton';
+import { Notice } from '@/components/ui/form';
+import { PressScale } from '@/components/ui/press-scale';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cachedMerchant } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';

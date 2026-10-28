@@ -2,8 +2,8 @@ import * as Linking from 'expo-linking';
 import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/form';
+import { ThemedText } from '@/components/ui/themed-text';
 import { loopLinks } from '@/constants/loop-links';
 import { Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';

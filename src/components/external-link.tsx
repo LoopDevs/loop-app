@@ -2,7 +2,7 @@ import { Href, Link } from 'expo-router';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { type ComponentProps } from 'react';
 
-import { useToast } from '@/components/toast';
+import { useToast } from '@/components/ui/toast';
 
 type Props = Omit<ComponentProps<typeof Link>, 'href'> & { href: Href & string };
 

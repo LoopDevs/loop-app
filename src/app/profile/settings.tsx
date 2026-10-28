@@ -11,17 +11,17 @@ import { AccountDeletion } from "@/components/account-deletion";
 import { AddDevice } from "@/components/add-device";
 import { AppLockToggle } from "@/components/app-lock";
 import { CountryPicker } from "@/components/country-picker";
-import { Button, Notice } from "@/components/form";
+import { Button, Notice } from "@/components/ui/form";
 import { useScrimScroll } from "@/components/home-panel";
-import { ListGroup, ListRow } from "@/components/list-row";
+import { ListGroup, ListRow } from "@/components/ui/list-row";
 import { PageHeader } from "@/components/page-header";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
 import { SiteFooter } from "@/components/site-footer";
-import { OrderRowsSkeleton } from "@/components/skeleton";
+import { OrderRowsSkeleton } from "@/components/ui/skeleton";
 import { SplitLayout } from "@/components/split-layout";
 import { PageWidth } from "@/components/storefront";
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
+import { ThemedText } from "@/components/ui/themed-text";
+import { ThemedView } from "@/components/ui/themed-view";
 import { loopLinks } from "@/constants/loop-links";
 import {
   MaxContentWidth,

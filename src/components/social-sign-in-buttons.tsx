@@ -1,8 +1,8 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/form';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Radius } from '@/constants/theme';
 import type { SocialProvider } from '@/session/social-sign-in';
 

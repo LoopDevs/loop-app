@@ -10,8 +10,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Button, Field } from "@/components/form";
-import { ThemedText } from "@/components/themed-text";
+import { Button, Field } from "@/components/ui/form";
+import { ThemedText } from "@/components/ui/themed-text";
 import { Elevation, FontFamily, Radius, Spacing } from "@/constants/theme";
 import { CountryOption } from "@/ctx/country-option";
 import { type CountryChoice, Profile } from "@/ctx/profile";

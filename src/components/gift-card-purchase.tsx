@@ -7,10 +7,10 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
-import { Button, Field, Notice } from '@/components/form';
-import { Skeleton } from '@/components/skeleton';
-import { ThemedText } from '@/components/themed-text';
-import { useToast } from '@/components/toast';
+import { Button, Field, Notice } from '@/components/ui/form';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ThemedText } from '@/components/ui/themed-text';
+import { useToast } from '@/components/ui/toast';
 import { loopLinks } from '@/constants/loop-links';
 import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';

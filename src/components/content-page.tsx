@@ -3,10 +3,10 @@ import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { SiteFooter } from '@/components/site-footer';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
 import { FontFamily, Layout, MaxContentWidth, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';

@@ -14,7 +14,7 @@ import { CrashFallback, ScreenCrash } from '@/components/crash-fallback';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ServiceUnavailable } from '@/components/service-unavailable';
 import { SignInProvider } from '@/components/sign-in';
-import { ToastProvider } from '@/components/toast';
+import { ToastProvider } from '@/components/ui/toast';
 import { FontAssets, NavigationTheme } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { BlockingServiceState } from '@/ctx/service-state';
