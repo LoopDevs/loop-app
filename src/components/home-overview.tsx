@@ -23,12 +23,6 @@ import type { SavingsHolding } from '@/wallet/holdings';
 
 const recentShown = 4;
 
-const pegNames: Record<'USD' | 'EUR' | 'GBP', { name: string; symbol: string }> = {
-  USD: { name: 'US dollars', symbol: '$' },
-  EUR: { name: 'Euros', symbol: '€' },
-  GBP: { name: 'British pounds', symbol: '£' },
-};
-
 const amountStyle = { fontVariant: ['tabular-nums' as const] };
 
 export function OverviewCard({
@@ -127,87 +121,12 @@ function Disc({ children, ground }: { children: ReactNode; ground?: string }) {
   return <View style={[styles.disc, { backgroundColor: ground ?? theme.backgroundSelected }]}>{children}</View>;
 }
 
-function SymbolDisc({ symbol }: { symbol: string }) {
-  const theme = useTheme();
-  return (
-    <Disc>
-      <Text style={[styles.discSymbol, { color: theme.accent }]} maxFontSizeMultiplier={1.2}>
-        {symbol}
-      </Text>
-    </Disc>
-  );
-}
-
 function IconDisc({ icon }: { icon: SymbolViewProps['name'] }) {
   const theme = useTheme();
   return (
     <Disc>
       <SymbolView name={icon} size={20} tintColor={theme.accent} />
     </Disc>
-  );
-}
-
-export function SpendingBalances({ view }: { view: HoldingsView | null }) {
-  if (!view) {
-    return (
-      <OverviewCard title="Spending balance">
-        <RowSkeleton />
-      </OverviewCard>
-    );
-  }
-  const { holdings, stable } = view;
-  const stableCode = stable && Object.hasOwn(stablePeg, stable) ? stablePeg[stable as PaymentCurrency] : stable;
-  const pegged = holdings.balances.tokens.filter(
-    ({ token, amount }) =>
-      stablePeg[token.currency] !== null && (amount > 0n || stablePeg[token.currency] === stableCode),
-  );
-  const others = holdings.balances.tokens.filter(
-    ({ token, amount }) => stablePeg[token.currency] === null && amount > 0n,
-  );
-  const otherValue =
-    stable && others.length > 0
-      ? others.reduce<bigint | null>((sum, { token, amount }) => {
-          const value = holdings.valueIn(amount, token.currency, stable);
-          return sum === null || value === null ? null : sum + value;
-        }, 0n)
-      : null;
-  const rows =
-    pegged.length > 0 || otherValue !== null
-      ? pegged
-      : holdings.balances.tokens.filter(({ token }) => stablePeg[token.currency] !== null).slice(0, 1);
-  return (
-    <OverviewCard title="Spending balance">
-      {rows.map(({ token, amount }) => {
-        const peg = stablePeg[token.currency];
-        const named = peg ? pegNames[peg] : null;
-        return (
-          <MoneyRow
-            key={token.currency}
-            leading={<SymbolDisc symbol={named?.symbol ?? '¤'} />}
-            label={named?.name ?? 'Balance'}
-            detail={peg === stableCode ? 'Main balance' : 'Ready to spend'}
-            amount={money.token(amount, token.currency)}
-            amountDetail={peg ?? undefined}
-          />
-        );
-      })}
-      {otherValue !== null && stable && (
-        <MoneyRow
-          leading={
-            <IconDisc
-              icon={{
-                ios: 'arrow.triangle.2.circlepath',
-                android: 'sync',
-                web: 'sync',
-              }}
-            />
-          }
-          label="Other money"
-          detail="Valued at today's rate"
-          amount={money.ctx(units.format(otherValue, units.decimals), stable)}
-        />
-      )}
-    </OverviewCard>
   );
 }
 
@@ -627,10 +546,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-  },
-  discSymbol: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 18,
   },
   textButton: {
     minHeight: 32,

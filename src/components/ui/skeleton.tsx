@@ -53,17 +53,6 @@ export function Skeleton({ width, height, aspectRatio, color }: SkeletonProps) {
   );
 }
 
-export function BalanceSkeleton() {
-  return (
-    <View style={styles.stack} accessible accessibilityLabel="Loading balances">
-      <Skeleton width="40%" height={14} />
-      <Skeleton width="70%" height={20} />
-      <Skeleton width="60%" height={20} />
-      <Skeleton width="55%" height={20} />
-    </View>
-  );
-}
-
 export function OrderRowsSkeleton() {
   return (
     <View style={styles.stack} accessible accessibilityLabel="Loading orders">
