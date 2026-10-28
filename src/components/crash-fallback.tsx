@@ -2,7 +2,7 @@ import type { ErrorBoundaryProps } from 'expo-router';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
-import { Button } from '@/components/form';
+import { Button } from '@/components/ui/form';
 import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
 import { errorReporting } from '@/ops/error-reporting';
 import { StaleBuild } from '@/ops/stale-build';

@@ -13,11 +13,11 @@ import {
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { MerchantCard } from '@/components/merchant-card';
-import { PressScale } from '@/components/press-scale';
-import { Skeleton } from '@/components/skeleton';
-import { ThemedText } from '@/components/themed-text';
+import { PressScale } from '@/components/ui/press-scale';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
 import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';

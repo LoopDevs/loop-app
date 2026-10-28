@@ -2,7 +2,7 @@ import { NativeTabs } from 'expo-router/native-tabs';
 import { StyleSheet } from 'react-native';
 
 import { SignInScreen, useSignIn } from '@/components/sign-in';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedView } from '@/components/ui/themed-view';
 import { FontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 

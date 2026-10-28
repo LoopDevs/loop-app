@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Wordmark } from '@/components/wordmark';
 import { Layout, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';

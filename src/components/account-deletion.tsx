@@ -3,9 +3,9 @@ import * as Linking from 'expo-linking';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, Notice } from '@/components/form';
-import { ListGroup, ListRow } from '@/components/list-row';
-import { ThemedText } from '@/components/themed-text';
+import { Button, Notice } from '@/components/ui/form';
+import { ListGroup, ListRow } from '@/components/ui/list-row';
+import { ThemedText } from '@/components/ui/themed-text';
 import { loopLinks } from '@/constants/loop-links';
 import { Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/form';
+import { Button } from '@/components/ui/form';
 import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
 import { FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';

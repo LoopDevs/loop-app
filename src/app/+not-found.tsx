@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 
-import { Button } from '@/components/form';
+import { Button } from '@/components/ui/form';
 import { MessageScreen } from '@/components/message-screen';
 
 export default function NotFoundScreen() {

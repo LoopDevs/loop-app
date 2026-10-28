@@ -5,10 +5,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import { externalUrl, useOpenExternal } from '@/components/external-link';
-import { Button, Notice } from '@/components/form';
-import { PressScale } from '@/components/press-scale';
-import { ThemedText } from '@/components/themed-text';
-import { useToast } from '@/components/toast';
+import { Button, Notice } from '@/components/ui/form';
+import { PressScale } from '@/components/ui/press-scale';
+import { ThemedText } from '@/components/ui/themed-text';
+import { useToast } from '@/components/ui/toast';
 import { Collapsible } from '@/components/ui/collapsible';
 import { Elevation, FontFamily, Fonts, Radius, Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';

@@ -2,7 +2,7 @@ import { SymbolView } from 'expo-symbols';
 import { useId, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { PressScale } from '@/components/press-scale';
+import { PressScale } from '@/components/ui/press-scale';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';

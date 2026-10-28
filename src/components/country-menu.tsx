@@ -4,8 +4,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PressScale } from '@/components/press-scale';
-import { ThemedText } from '@/components/themed-text';
+import { PressScale } from '@/components/ui/press-scale';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Market } from '@/ctx/market';
 import { useMarket } from '@/hooks/use-market';

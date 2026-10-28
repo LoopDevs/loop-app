@@ -4,10 +4,10 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { AddMoney } from '@/components/add-money';
-import { Button } from '@/components/form';
-import { ListGroup, ListRow } from '@/components/list-row';
-import { Skeleton } from '@/components/skeleton';
-import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/form';
+import { ListGroup, ListRow } from '@/components/ui/list-row';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Motion, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';

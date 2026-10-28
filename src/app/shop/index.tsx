@@ -6,14 +6,14 @@ import { StyleSheet, TextInput, View, type FlatList } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { CountryMenu } from '@/components/country-menu';
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { CategoryTiles, MerchantCard, MerchantCardStrip } from '@/components/merchant-card';
 import { PageHeader } from '@/components/page-header';
-import { PressScale } from '@/components/press-scale';
+import { PressScale } from '@/components/ui/press-scale';
 import { useOnSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
-import { MerchantGridSkeleton } from '@/components/skeleton';
+import { MerchantGridSkeleton } from '@/components/ui/skeleton';
 import {
   cachedMerchantPage,
   loadedCategories,
@@ -23,8 +23,8 @@ import {
   TopCashback,
   useCatalog,
 } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import { Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';

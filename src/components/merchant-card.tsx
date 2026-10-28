@@ -3,8 +3,8 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { PressScale } from '@/components/press-scale';
-import { ThemedText } from '@/components/themed-text';
+import { PressScale } from '@/components/ui/press-scale';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Merchant } from '@/ctx/merchant';
 import { usePageLayout } from '@/hooks/use-page-layout';

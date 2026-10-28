@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
 import { CountryMenu } from '@/components/country-menu';
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { HomeActions } from '@/components/home-actions';
 import { NextStep, RecentGiftCards } from '@/components/home-overview';
 import { BalanceCard, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
@@ -20,10 +20,10 @@ import {
   MerchantCover,
   SectionHeading,
 } from '@/components/merchant-card';
-import { PressScale } from '@/components/press-scale';
+import { PressScale } from '@/components/ui/press-scale';
 import { SignInButton, useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
-import { Skeleton } from '@/components/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   HowLoopWorks,
   PageWidth,
@@ -31,8 +31,8 @@ import {
   useCatalog,
   type Catalog,
 } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';

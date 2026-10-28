@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ListGroup, ListRow } from '@/components/list-row';
+import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { Wordmark } from '@/components/wordmark';
 import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useBusyAction } from '@/hooks/use-busy-action';

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-import { Button } from '@/components/form';
+import { Button } from '@/components/ui/form';
 import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
 import { ctx, CtxError } from '@/ctx/client';
 import {
