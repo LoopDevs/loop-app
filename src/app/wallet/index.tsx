@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   },
   table: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     overflow: "hidden",
   },
   tableRow: {
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
   },
   asideCard: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     padding: Spacing.four,
     gap: Spacing.two,
   },
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     minHeight: 72,
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
   },
   rowMain: {
     flex: 1,
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width: 48,
     height: 48,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: Spacing.one,

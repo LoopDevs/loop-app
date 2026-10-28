@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.four,
   },
   accountCard: {

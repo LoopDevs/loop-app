@@ -432,7 +432,8 @@ function BrandWall({ catalog, onOpen, onSeeAll }: ListingProps) {
               accessibilityRole="button"
               accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
               style={[styles.brandTile, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-              <View style={[styles.brandLogo, { borderColor: theme.border }]}>
+              <View
+                style={[styles.brandLogo, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
                 <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.brandLogoImage} />
               </View>
               <Text style={[styles.brandName, { color: theme.text }]} numberOfLines={1}>
@@ -539,7 +540,7 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.two,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: 1,
   },
   brandLogo: {
@@ -547,7 +548,6 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
     padding: Spacing.two,
     marginBottom: Spacing.one,
     alignItems: 'center',
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
     minHeight: 72,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
   },
   nudgeIcon: {
     width: 40,

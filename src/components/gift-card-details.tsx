@@ -108,7 +108,7 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
             Elevation.card,
           ]}>
           {giftCard.barcodeUrl && secrets.revealed && (
-            <View style={styles.barcodeFrame}>
+            <View style={[styles.barcodeFrame, { backgroundColor: theme.backgroundElement }]}>
               <Image
                 source={{ uri: giftCard.barcodeUrl }}
                 style={styles.barcode}
@@ -222,13 +222,12 @@ const styles = StyleSheet.create({
   },
   panel: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.three,
     gap: Spacing.three,
   },
   barcodeFrame: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: Radius.tile,
+    borderRadius: Radius.medium,
     padding: Spacing.three,
   },
   barcode: {

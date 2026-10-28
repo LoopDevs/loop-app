@@ -3,7 +3,8 @@ import { StyleSheet } from 'react-native';
 
 import { SignInScreen, useSignIn } from '@/components/sign-in';
 import { ThemedView } from '@/components/themed-view';
-import { Colors, FontFamily } from '@/constants/theme';
+import { FontFamily } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   const { signedIn } = useSignIn();
@@ -17,10 +18,11 @@ export default function AppTabs() {
 }
 
 function SignedInTabs() {
-  const colors = Colors.light;
+  const colors = useTheme();
 
   return (
     <NativeTabs
+      labelVisibilityMode="labeled"
       backgroundColor={colors.backgroundElement}
       indicatorColor={colors.backgroundSelected}
       rippleColor={colors.backgroundSelected}

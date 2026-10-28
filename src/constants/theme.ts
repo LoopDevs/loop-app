@@ -5,7 +5,6 @@ import { Platform } from 'react-native';
 import { Easing } from 'react-native-reanimated';
 
 import { SymbolFont } from '@/components/symbol-codepoints';
-import { PageMetrics } from '@/hooks/page-layout';
 
 export const Colors = {
   light: {
@@ -17,12 +16,14 @@ export const Colors = {
     textSecondary: '#5A6577',
     border: '#E6EAF0',
     borderStrong: '#D3DBE6',
-    accent: '#1A56DB',
-    accentSoft: '#EBF1FE',
+    accent: '#2F6BFF',
+    accentPressed: '#1A56DB',
+    accentSoft: '#EAF0FF',
     onAccent: '#FFFFFF',
     danger: '#B42318',
     success: '#11734B',
     chrome: 'rgba(255, 255, 255, 0.92)',
+    scrim: 'rgba(15, 27, 45, 0.32)',
     inverse: '#0F1B2D',
     onInverse: '#FFFFFF',
     onInverseMuted: '#C3CAD5',
@@ -84,10 +85,9 @@ export const Spacing = {
 } as const;
 
 export const Radius = {
-  tile: 12,
-  control: 12,
-  media: 18,
-  card: 22,
+  small: 8,
+  medium: 14,
+  large: 22,
   pill: 999,
 } as const;
 
@@ -100,6 +100,9 @@ export const Elevation = {
   },
   badge: {
     boxShadow: '0 1px 2px rgba(15, 27, 45, 0.12), 0 2px 6px rgba(15, 27, 45, 0.1)',
+  },
+  sheet: {
+    boxShadow: '0 16px 40px rgba(15, 27, 45, 0.24)',
   },
 } as const;
 
@@ -116,6 +119,13 @@ export const Motion = {
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const ScrollEndInset = Platform.OS === 'web' ? 0 : BottomTabInset + Spacing.five;
 export const MaxContentWidth = 800;
+
+export const PageMetrics = {
+  wideMinWidth: 960,
+  pageMaxWidth: 1240,
+  narrowGutter: 16,
+  wideGutter: 32,
+} as const;
 
 export const Layout = {
   ...PageMetrics,

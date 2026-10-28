@@ -1,3 +1,5 @@
+import { PageMetrics } from '@/constants/theme';
+
 const columnSteps = [
   { minWidth: 1180, columns: 6 },
   { minWidth: 960, columns: 5 },
@@ -7,17 +9,8 @@ const columnSteps = [
 
 const prerenderWidth = 1440;
 
-export const PageMetrics = {
-  wideMinWidth: 960,
-  pageMaxWidth: 1240,
-  narrowGutter: 16,
-  wideGutter: 32,
-} as const;
-
 export class PageLayout {
   static readonly pendingAttribute = 'data-layout-pending';
-  static readonly background = '#FFFFFF';
-  static readonly text = '#0F1B2D';
 
   static forWidth(width: number, web: boolean) {
     const wide = web && width >= PageMetrics.wideMinWidth;

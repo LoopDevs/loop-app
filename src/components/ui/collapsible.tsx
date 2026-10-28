@@ -62,7 +62,7 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
 const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     overflow: 'hidden',
   },
   heading: {

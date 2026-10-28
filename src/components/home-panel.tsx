@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   card: {
     padding: Spacing.four,
     gap: Spacing.four,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: 1,
   },
   balanceBlock: {

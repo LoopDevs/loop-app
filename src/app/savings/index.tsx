@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   hero: {
     padding: Spacing.four,
     gap: Spacing.two,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
   },
   heroWide: {
     padding: Spacing.five,
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   card: {
     padding: Spacing.four,
     gap: Spacing.three,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
   },
   sheet: {

@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button, Field } from "@/components/form";
 import { ThemedText } from "@/components/themed-text";
-import { FontFamily, Radius, Spacing } from "@/constants/theme";
+import { Elevation, FontFamily, Radius, Spacing } from "@/constants/theme";
 import { CountryOption } from "@/ctx/country-option";
 import { type CountryChoice, Profile } from "@/ctx/profile";
 import { useMarket } from "@/hooks/use-market";
@@ -154,6 +154,7 @@ function CountryList({ options, selected, onPick, onClose }: CountryListProps) {
       <Pressable
         style={[
           styles.backdrop,
+          { backgroundColor: theme.scrim },
           wide ? styles.backdropWide : styles.backdropNarrow,
         ]}
         onPress={onClose}
@@ -274,7 +275,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: Spacing.three,
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
   },
   triggerLabel: {
     flex: 1,
@@ -288,7 +289,6 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(10, 22, 64, 0.32)",
   },
   backdropWide: {
     justifyContent: "center",
@@ -300,10 +300,10 @@ const styles = StyleSheet.create({
   },
   sheet: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     paddingTop: Spacing.three,
     maxHeight: "80%",
-    boxShadow: "0 16px 40px rgba(10, 22, 64, 0.24)",
+    ...Elevation.sheet,
   },
   sheetWide: {
     width: "100%",

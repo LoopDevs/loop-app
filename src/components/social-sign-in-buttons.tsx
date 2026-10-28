@@ -30,7 +30,7 @@ export function SocialSignInButtons({ providers, appleAccountHint, disabled, onP
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-            cornerRadius={Radius.control}
+            cornerRadius={Radius.medium}
             style={styles.appleButton}
             onPress={() => onPress('apple')}
           />

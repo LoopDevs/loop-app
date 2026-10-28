@@ -101,7 +101,7 @@ export function OrderDetailSkeleton() {
 
 const styles = StyleSheet.create({
   block: {
-    borderRadius: Radius.tile,
+    borderRadius: Radius.medium,
   },
   stack: {
     gap: Spacing.two,

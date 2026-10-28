@@ -94,6 +94,8 @@ export function MerchantCover({ merchant, size }: CoverProps) {
             bottom: -badgeSize * badgeOverhang,
             left: size === 'hero' ? Spacing.four : Spacing.three,
             borderWidth: size === 'hero' ? 4 : 3,
+            borderColor: theme.backgroundElement,
+            backgroundColor: theme.backgroundElement,
           },
         ]}>
         {merchant.logoUrl && merchant.logoUrl !== failedLogoUrl ? (
@@ -107,7 +109,9 @@ export function MerchantCover({ merchant, size }: CoverProps) {
           />
         ) : (
           <View style={[styles.badgeInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
-            <Text style={[styles.badgeInitialText, { fontSize: badgeSize * 0.38 }]}>{merchant.initial()}</Text>
+            <Text style={[styles.badgeInitialText, { fontSize: badgeSize * 0.38, color: theme.onInverse }]}>
+              {merchant.initial()}
+            </Text>
           </View>
         )}
       </View>
@@ -150,8 +154,8 @@ function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourit
         favourite.saved ? `Remove ${merchant.name} from favourites` : `Add ${merchant.name} to favourites`
       }
       accessibilityState={{ selected: favourite.saved }}>
-      <View style={styles.favouriteDisc}>
-        <SymbolView name={icon} size={20} tintColor={favourite.saved ? theme.accent : '#FFFFFF'} />
+      <View style={[styles.favouriteDisc, { backgroundColor: theme.scrim }]}>
+        <SymbolView name={icon} size={20} tintColor={favourite.saved ? theme.accent : theme.onInverse} />
       </View>
     </PressScale>
   );
@@ -362,17 +366,15 @@ const styles = StyleSheet.create({
   },
   cover: {
     aspectRatio: coverAspect,
-    borderRadius: Radius.media,
+    borderRadius: Radius.medium,
     overflow: 'hidden',
   },
   coverHero: {
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
   },
   badge: {
     position: 'absolute',
     borderRadius: Radius.pill,
-    borderColor: '#FFFFFF',
-    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -392,7 +394,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeInitialText: {
-    color: '#FFFFFF',
     fontFamily: FontFamily.bold,
   },
   pill: {
@@ -430,7 +431,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(15, 27, 45, 0.32)',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   unlock: {
     minHeight: 50,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
