@@ -12,14 +12,20 @@ export type BankRail = {
   country: string;
   currency: string;
   stable: PaymentCurrency;
-  method: string;
+  methods: readonly string[];
   bankLabel: string;
 };
 
 export class BankPayment {
   static readonly option = 'bank';
   static readonly rails: readonly BankRail[] = [
-    { country: 'GB', currency: 'GBP', stable: 'XLM.GBPLOOP', method: 'plaid-uk-eu', bankLabel: 'UK bank account' },
+    {
+      country: 'GB',
+      currency: 'GBP',
+      stable: 'XLM.GBPLOOP',
+      methods: ['plaid-uk-eu', 'plaid-vrp'],
+      bankLabel: 'UK bank account',
+    },
   ];
 
   static rail(merchantCurrency: string): BankRail | null {
@@ -36,7 +42,7 @@ export class BankPayment {
   }
 
   static isBank(order: Pick<GiftCard, 'paymentMethod'>): boolean {
-    return BankPayment.rails.some((rail) => rail.method === order.paymentMethod);
+    return BankPayment.rails.some((rail) => rail.methods.includes(order.paymentMethod));
   }
 
   static charged(order: Pick<GiftCard, 'paymentStatus'>): boolean {
@@ -76,6 +82,8 @@ export class BankPayment {
       case 'ErrCashbackStableMismatch':
       case 'ErrCashbackNotStable':
         return 'Bank payments pay cashback in pounds, which your account is not set up for. Pay from your wallet instead.';
+      case 'ErrBankLinkRequired':
+        return "Your bank isn't linked to Loop yet. Pay from your wallet instead.";
       case 'ErrCurrencyInvalid':
       case 'ErrBankLinkNotEnabled':
         return "Bank payments aren't available on your account yet. Pay from your wallet instead.";

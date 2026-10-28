@@ -46,6 +46,7 @@ test('a merchant currency maps to the rail of one country, or to none', () => {
 
 test('only orders paid through the bank method are bank orders', () => {
   assert.equal(BankPayment.isBank(bankOrder()), true);
+  assert.equal(BankPayment.isBank(bankOrder({ paymentMethod: 'plaid-vrp' })), true);
   assert.equal(BankPayment.isBank(bankOrder({ paymentMethod: 'crypto' })), false);
 });
 
@@ -119,6 +120,7 @@ test('refusals that the user can act on get a plain message', () => {
   assert.match(BankPayment.refusalMessage('ErrCashbackStableMismatch') ?? '', /cashback in pounds/);
   assert.match(BankPayment.refusalMessage('ErrCashbackNotStable') ?? '', /cashback in pounds/);
   assert.match(BankPayment.refusalMessage('ErrCurrencyInvalid') ?? '', /aren't available/);
+  assert.match(BankPayment.refusalMessage('ErrBankLinkRequired') ?? '', /isn't linked/);
   assert.equal(BankPayment.refusalMessage('ErrServerError'), null);
   assert.equal(BankPayment.refusalMessage(undefined), null);
 });
