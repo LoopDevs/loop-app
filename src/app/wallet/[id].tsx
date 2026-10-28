@@ -6,6 +6,7 @@ import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { Button, Notice } from '@/components/ui/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
+import { GiftCardFace } from '@/components/gift-card-face';
 import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
@@ -214,12 +215,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
       style={styles.summarySections}>
       <View style={styles.hero}>
         <View style={[styles.heroInner, pageWidth]}>
-          <Text style={[styles.heroName, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
-            {giftCard.merchantName}
-          </Text>
-          <Text style={[styles.heroAmount, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
-            {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)}
-          </Text>
+          <GiftCardFace giftCard={giftCard} style={styles.heroCard} />
           <View style={styles.heroStatus}>
             {processing && <ActivityIndicator size="small" color={theme.textSecondary} />}
             <Text style={[styles.heroStatusText, { color: theme.text }]} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
@@ -313,18 +309,10 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
-    gap: Spacing.one,
+    gap: Spacing.two,
   },
-  heroName: {
-    fontFamily: FontFamily.medium,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  heroAmount: {
-    fontFamily: FontFamily.bold,
-    fontSize: 40,
-    lineHeight: 46,
-    letterSpacing: -1,
+  heroCard: {
+    maxWidth: 380,
   },
   heroStatus: {
     flexDirection: 'row',
