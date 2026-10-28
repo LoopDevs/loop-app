@@ -1,25 +1,16 @@
+import { SocketEvent } from "@/ctx/socket-event";
+
 export class OrderWake {
   private release: (() => void) | null = null;
   private signalled = false;
 
   static concerns(raw: unknown, orderId: string): boolean {
-    if (typeof raw !== "string") {
+    const event = SocketEvent.parse(raw);
+    if (!event || event.topic !== "giftcard") {
       return false;
     }
-    try {
-      const message: unknown = JSON.parse(raw);
-      if (!message || typeof message !== "object") {
-        return false;
-      }
-      const { type, topic, data } = message as {
-        type?: unknown;
-        topic?: unknown;
-        data?: { id?: unknown } | null;
-      };
-      return type === "event" && topic === "giftcard" && data?.id === orderId;
-    } catch {
-      return false;
-    }
+    const data = event.data as { id?: unknown } | null | undefined;
+    return data?.id === orderId;
   }
 
   signal(): void {

@@ -8,6 +8,7 @@ import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
 import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { signInReportMessage } from '@/ctx/sign-in-report';
 import { OrderWake } from '@/ctx/order-wake';
+import { SocketEvent } from '@/ctx/socket-event';
 import { Deadline } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
 import type { PayoutJson } from '@/ctx/payout';
@@ -390,7 +391,23 @@ class CtxClient {
     );
   }
 
-  async watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
+  watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
+    return this.openSocket('giftcard', (raw) => {
+      if (OrderWake.concerns(raw, orderId)) {
+        wake.signal();
+      }
+    });
+  }
+
+  watchAccount(onChange: () => void): Promise<() => void> {
+    return this.openSocket('account', (raw) => {
+      if (SocketEvent.parse(raw)?.topic === 'account') {
+        onChange();
+      }
+    });
+  }
+
+  private async openSocket(topic: string, onMessage: (raw: unknown) => void): Promise<() => void> {
     const accessToken = await this.auth.requireAccessToken();
     const HeaderSocket = WebSocket as unknown as new (
       url: string,
@@ -404,12 +421,8 @@ class CtxClient {
         'X-App-Version': this.appVersion,
       },
     });
-    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic: 'giftcard' }));
-    socket.onmessage = (message) => {
-      if (OrderWake.concerns(message.data, orderId)) {
-        wake.signal();
-      }
-    };
+    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic }));
+    socket.onmessage = (message) => onMessage(message.data);
     return () => socket.close();
   }
 

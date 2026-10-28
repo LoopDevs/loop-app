@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useOnSignIn } from '@/components/sign-in';
+import { useAccountChanges } from '@/hooks/use-account-changes';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
@@ -61,6 +62,7 @@ export function useWallet() {
   );
   useAppRefresh(load);
   useOnSignIn(load);
+  useAccountChanges(refresh, wallet !== null);
 
   return { state, wallet, view, refresh, reload: load, problem };
 }
