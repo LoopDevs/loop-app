@@ -116,7 +116,7 @@ export default function MerchantScreen() {
   const rail = BankPayment.rail(merchant.currency);
   const payCopy = rail
     ? `Pay from your ${rail.bankLabel} or your Loop wallet.`
-    : 'Pay with XLM, USDC or EURC.';
+    : 'Pay from your Loop wallet.';
   const buyCard = wallet && profile && !merchant.isSoldIn(profile.country) ? (
     <View style={cardStyle}>
       <ThemedText type="heading">Not sold in your country</ThemedText>
