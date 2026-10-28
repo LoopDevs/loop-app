@@ -51,9 +51,7 @@ export function WalletSummary() {
 
   const balance = view ? money.token(view.holdings.inWallet(dollars), dollars) : null;
   const onTheWay = view?.stable ? view.holdings.onTheWayIn(view.stable) : null;
-  const received = view?.account?.payouts
-    .filter((payout) => payout.status === 'complete' && offeredCurrencies.has(payout.currency))
-    .reduce((sum, payout) => sum + units.parse(payout.netAmount()), 0n);
+  const received = view?.account?.receivedCashback(offeredCurrencies);
 
   return (
     <View style={styles.stack}>

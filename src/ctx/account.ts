@@ -76,6 +76,12 @@ export class Account {
     return [...balances, ...payouts];
   }
 
+  receivedCashback(currencies: ReadonlySet<string>): bigint {
+    return this.payouts
+      .filter((payout) => payout.status === 'complete' && currencies.has(payout.currency))
+      .reduce((sum, payout) => sum + units.parse(payout.netAmount()), 0n);
+  }
+
   private balanceItem(balance: BalanceJson, routing: CashbackRouting): OnTheWayItem {
     const item = {
       key: `balance:${balance.currency}`,

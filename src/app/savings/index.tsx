@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { Alert, Platform, StyleSheet, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Button, Field, Notice } from '@/components/ui/form';
@@ -14,16 +14,20 @@ import { useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
 import { SplitLayout } from '@/components/split-layout';
 import { PageWidth } from '@/components/storefront';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { useToast } from '@/components/ui/toast';
-import { Layout, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
+import { FontFamily, Layout, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
+import { Rates } from '@/ctx/rates';
+import type { HoldingsView } from '@/hooks/use-holdings';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
+import { units } from '@/stellar/units';
 import { strings } from '@/strings';
 import { Savings } from '@/wallet/savings';
 import { UnlinkedDevice } from '@/wallet/smart-wallet';
@@ -102,19 +106,35 @@ export default function SavingsScreen() {
         <PageWidth style={[styles.page, wide && styles.pageWide]}>
           <SplitLayout aside={wide ? <SavingsFacts /> : null} asideWidth={360}>
           <View style={[styles.hero, wide && styles.heroWide, { backgroundColor: theme.accentSoft }]}>
-            <View style={[styles.heroIcon, { backgroundColor: theme.accent }]}>
-              <SymbolView
-                name={{ ios: 'leaf', android: 'savings', web: 'savings' }}
-                size={22}
-                tintColor={theme.onAccent}
-              />
+            <View style={styles.heroTop}>
+              <View style={[styles.heroIcon, { backgroundColor: theme.accent }]}>
+                <SymbolView
+                  name={{ ios: 'leaf', android: 'savings', web: 'savings' }}
+                  size={22}
+                  tintColor={theme.onAccent}
+                />
+              </View>
+              {state === 'ready' && (
+                <View style={[styles.ratePill, { backgroundColor: theme.accent }]}>
+                  <Text style={[styles.ratePillText, { color: theme.onAccent }]} maxFontSizeMultiplier={1.3}>
+                    {Savings.rateHeadline}
+                  </Text>
+                </View>
+              )}
             </View>
-            <ThemedText type={wide ? 'title' : 'subtitle'} accessibilityRole="header" style={styles.heroTitle}>
-              {Savings.rateHeadline}
-            </ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.heroLine}>
-              Your savings grow every day. Your cashback lands here too, and you can take it out whenever you like.
-            </ThemedText>
+            {state === 'ready' ? (
+              <SavingsBalance view={view} />
+            ) : (
+              <>
+                <ThemedText type={wide ? 'title' : 'subtitle'} accessibilityRole="header" style={styles.heroTitle}>
+                  {Savings.rateHeadline}
+                </ThemedText>
+                <ThemedText themeColor="textSecondary" style={styles.heroLine}>
+                  Your savings grow every day. Your cashback lands here too, and you can take it out whenever you
+                  like.
+                </ThemedText>
+              </>
+            )}
             <View style={wide && styles.heroAction}>
               <Button label="Add to savings" variant="primary" onPress={addToSavings} selected={adding} />
             </View>
@@ -180,6 +200,40 @@ const savingsFacts = [
     body: 'Move your savings back to your balance whenever you like.',
   },
 ] as const;
+
+function SavingsBalance({ view }: { view: HoldingsView | null }) {
+  if (!view) {
+    return (
+      <>
+        <ThemedText type="small" themeColor="textSecondary">
+          Savings
+        </ThemedText>
+        <Skeleton width={160} height={40} />
+      </>
+    );
+  }
+  const stable = view.stable ?? Rates.usd;
+  const [first] = view.holdings.savingsHoldings();
+  const balance = first ? money.token(first.amount, first.currency) : money.ctx('0', stable);
+  const earned = view.account?.receivedCashback(new Set([stable])) ?? 0n;
+  const earnedLine =
+    earned > 0n
+      ? `${money.ctx(units.format(earned, units.decimals), stable)} cashback earned so far`
+      : 'Your cashback lands here and earns interest every day.';
+  return (
+    <>
+      <ThemedText type="small" themeColor="textSecondary">
+        Savings
+      </ThemedText>
+      <ThemedText type="title" accessibilityRole="header" style={styles.heroBalance}>
+        {balance}
+      </ThemedText>
+      <ThemedText themeColor="textSecondary" style={styles.heroLine}>
+        {earnedLine}
+      </ThemedText>
+    </>
+  );
+}
 
 function SavingsFacts() {
   const router = useRouter();
@@ -266,6 +320,25 @@ const styles = StyleSheet.create({
   heroWide: {
     padding: Spacing.five,
     gap: Spacing.three,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  ratePill: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+    borderRadius: Radius.pill,
+  },
+  ratePillText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  heroBalance: {
+    fontVariant: ['tabular-nums'],
   },
   heroTitle: {
     maxWidth: 560,
