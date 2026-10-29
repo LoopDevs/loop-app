@@ -226,18 +226,21 @@ export default function SettingsScreen() {
         label="Contact support"
         trailing="external"
         accessibilityRole="link"
+        href={loopLinks.supportMail()}
         onPress={() => Linking.openURL(loopLinks.supportMail())}
       />
       <ListRow
         label="Terms"
         trailing="external"
         accessibilityRole="link"
+        href={loopLinks.terms}
         onPress={() => openBrowserAsync(loopLinks.terms)}
       />
       <ListRow
         label="Privacy Policy"
         trailing="external"
         accessibilityRole="link"
+        href={loopLinks.privacy}
         onPress={() => openBrowserAsync(loopLinks.privacy)}
       />
     </ListGroup>
