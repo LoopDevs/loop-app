@@ -7,7 +7,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { Button } from '@/components/form';
+import { Button, Notice } from '@/components/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { ListGroup } from '@/components/list-row';
 import { PageHeader } from '@/components/page-header';
@@ -18,6 +18,7 @@ import { ThemedView } from '@/components/themed-view';
 import { loopLinks } from '@/constants/loop-links';
 import { BottomTabInset, Layout, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
@@ -41,17 +42,21 @@ export default function ProfileScreen() {
   const { signedIn, openSignIn, check } = useSignIn();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [email, setEmail] = useState<string | null>(null);
+  const [accountFailed, setAccountFailed] = useState(false);
+  const { busy: signingOut, message: signOutFailure, run } = useBusyAction();
 
   const loadEmail = useCallback(async () => {
     if (!(await ctx.isSignedIn())) {
       setEmail(null);
+      setAccountFailed(false);
       return;
     }
     try {
       const profile = await ctx.me();
       setEmail(profile.email ?? null);
+      setAccountFailed(false);
     } catch {
-      setEmail(null);
+      setAccountFailed(true);
     }
   }, []);
 
@@ -62,11 +67,16 @@ export default function ProfileScreen() {
   );
   useOnSignIn(loadEmail);
 
-  const signOut = async () => {
-    await ctx.signOut();
-    setEmail(null);
-    await check();
-    router.navigate('/');
+  const signOut = () => {
+    if (signingOut) {
+      return;
+    }
+    run(async () => {
+      await ctx.signOut();
+      setEmail(null);
+      await check();
+      router.navigate('/');
+    });
   };
 
   const confirmSignOut = () => {
@@ -116,6 +126,13 @@ export default function ProfileScreen() {
             ) : (
               <>
                 <AccountCard email={email} />
+                {accountFailed && (
+                  <Notice
+                    message="We couldn't load your account details."
+                    actionLabel="Try again"
+                    onAction={loadEmail}
+                  />
+                )}
                 <View style={styles.tileRow}>
                   <Tile
                     icon={bagIcon}
@@ -144,8 +161,15 @@ export default function ProfileScreen() {
                   />
                   {helpRow}
                   {privacyRow}
-                  <IconRow icon={signOutIcon} label="Sign out" tone="danger" onPress={confirmSignOut} />
+                  <IconRow
+                    icon={signOutIcon}
+                    label="Sign out"
+                    tone="danger"
+                    disabled={signingOut}
+                    onPress={confirmSignOut}
+                  />
                 </ListGroup>
+                {signOutFailure !== '' && <Notice message={signOutFailure} />}
               </>
             )}
           </View>
@@ -245,14 +269,17 @@ type IconRowProps = {
   label: string;
   onPress: () => void;
   tone?: 'text' | 'danger';
+  disabled?: boolean;
 };
 
-function IconRow({ icon, label, onPress, tone = 'text' }: IconRowProps) {
+function IconRow({ icon, label, onPress, tone = 'text', disabled = false }: IconRowProps) {
   const theme = useTheme();
   const tint = tone === 'danger' ? theme.danger : theme.text;
   return (
     <PressScale
       style={styles.row}
+      disabled={disabled}
+      accessibilityState={{ disabled }}
       onPress={() => {
         haptics.tap();
         onPress();

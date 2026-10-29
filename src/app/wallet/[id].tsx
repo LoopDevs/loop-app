@@ -1,7 +1,7 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { Button, Notice } from '@/components/form';
@@ -44,6 +44,8 @@ export default function GiftCardScreen() {
   const [giftCard, setGiftCard] = useState<GiftCard | null>(null);
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const theme = useTheme();
   const readSession = useSessionOwner();
   const { onScroll } = useScrimScroll();
   const { openSignIn } = useSignIn();
@@ -100,6 +102,10 @@ export default function GiftCardScreen() {
         if (active) {
           setMessage(error instanceof Error ? error.message : String(error));
         }
+      } finally {
+        if (active) {
+          setRefreshing(false);
+        }
       }
     };
     load();
@@ -114,13 +120,28 @@ export default function GiftCardScreen() {
     setAttempt((count) => count + 1);
   };
 
+  const pullToRefresh = () => {
+    setRefreshing(true);
+    retry();
+  };
+
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={[styles.content, wide && styles.wideContent]}>
+        contentContainerStyle={[styles.content, wide && styles.wideContent]}
+        refreshControl={
+          giftCard ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={pullToRefresh}
+              tintColor={theme.textSecondary}
+              colors={[theme.accent]}
+            />
+          ) : undefined
+        }>
         {(!giftCard || message !== '') && (
           <View style={[styles.body, styles.status, wide && styles.wideStatus]}>
             {!giftCard && !message && <OrderDetailSkeleton />}
