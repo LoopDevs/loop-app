@@ -2,6 +2,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Children, Fragment, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { webLink } from '@/components/external-link';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -47,6 +48,7 @@ type ListRowProps = {
   detail?: string;
   value?: string;
   onPress?: () => void;
+  href?: string;
   disabled?: boolean;
   tone?: 'text' | 'danger' | 'accent';
   trailing?: Trailing;
@@ -66,6 +68,7 @@ export function ListRow({
   detail,
   value,
   onPress,
+  href,
   disabled = false,
   tone = 'text',
   trailing = onPress ? 'chevron' : 'none',
@@ -100,14 +103,18 @@ export function ListRow({
       )}
     </>
   );
-  if (!onPress) {
+  if (!onPress && !href) {
     return <View style={styles.row}>{content}</View>;
   }
+  const link = webLink(href);
   return (
     <Pressable
+      {...link}
       onPress={() => {
         haptics.tap();
-        onPress();
+        if (!link) {
+          onPress?.();
+        }
       }}
       disabled={disabled}
       accessibilityRole={accessibilityRole}

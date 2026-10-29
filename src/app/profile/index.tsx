@@ -7,6 +7,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { webLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { ListGroup } from '@/components/list-row';
@@ -97,11 +98,17 @@ export default function ProfileScreen() {
     <IconRow
       icon={helpIcon}
       label="Get help"
+      href={loopLinks.supportMail()}
       onPress={() => Linking.openURL(loopLinks.supportMail())}
     />
   );
   const privacyRow = (
-    <IconRow icon={privacyIcon} label="Privacy" onPress={() => openBrowserAsync(loopLinks.privacy)} />
+    <IconRow
+      icon={privacyIcon}
+      label="Privacy"
+      href={loopLinks.privacy}
+      onPress={() => openBrowserAsync(loopLinks.privacy)}
+    />
   );
 
   return (
@@ -268,24 +275,29 @@ type IconRowProps = {
   icon: SymbolViewProps['name'];
   label: string;
   onPress: () => void;
+  href?: string;
   tone?: 'text' | 'danger';
   disabled?: boolean;
 };
 
-function IconRow({ icon, label, onPress, tone = 'text', disabled = false }: IconRowProps) {
+function IconRow({ icon, label, onPress, href, tone = 'text', disabled = false }: IconRowProps) {
   const theme = useTheme();
   const tint = tone === 'danger' ? theme.danger : theme.text;
+  const link = webLink(href);
   return (
     <PressScale
+      {...link}
       style={styles.row}
       disabled={disabled}
       accessibilityState={{ disabled }}
       onPress={() => {
         haptics.tap();
-        onPress();
+        if (!link) {
+          onPress();
+        }
       }}
       scale={0.99}
-      accessibilityRole="button"
+      accessibilityRole={href ? 'link' : 'button'}
       accessibilityLabel={label}>
       <SymbolView name={icon} size={22} tintColor={tint} />
       <ThemedText themeColor={tone} style={styles.rowLabel}>
