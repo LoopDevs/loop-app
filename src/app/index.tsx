@@ -155,6 +155,12 @@ export default function HomeScreen() {
     }
   }, [wallet, refresh, setMessage]);
 
+  const retry = () => {
+    setMessage('');
+    readSession();
+    refreshBalances();
+  };
+
   useFocusEffect(
     useCallback(() => {
       refreshBalances();
@@ -241,7 +247,9 @@ export default function HomeScreen() {
             <AddDevice wallet={unlinkedWallet} onAdded={loadWallet} />
           )}
 
-          {message !== '' && <Notice message={message} />}
+          {message !== '' && (
+            <Notice message={message} actionLabel="Try again" onAction={retry} disabled={busy} />
+          )}
 
           {showsListings && <FeaturedOffers catalog={catalog} onOpen={openMerchant} onSeeAll={openShop} />}
 
