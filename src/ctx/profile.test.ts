@@ -170,3 +170,17 @@ test('the destination follows the saved user', () => {
   });
   assert.equal(saved.savesCashback(), true);
 });
+
+test('an update applies locally and keeps the rest of the user', () => {
+  const profile = Profile.fromMe({
+    user: { id: 'u1', email: 'a@b.co', stableCurrency: 'XLM.USDC', oauthIdentities: [{ provider: 'apple' }] },
+    company,
+  });
+  const updated = profile.withUpdate({ cashbackDestination: 'savings' });
+  assert.equal(updated.savesCashback(), true);
+  assert.equal(updated.email, 'a@b.co');
+  assert.equal(updated.stableCurrency, 'XLM.USDC');
+  assert.equal(updated.signInProviderLabel(), 'Signed in with Apple');
+  assert.deepEqual(updated.cashbackDestinations(), profile.cashbackDestinations());
+  assert.equal(profile.savesCashback(), false);
+});

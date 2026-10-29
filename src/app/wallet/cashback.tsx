@@ -96,8 +96,14 @@ export default function CashbackScreen() {
       return;
     }
     destinationWrites.current += 1;
+    setProfile(profile.withUpdate(update));
     run(async () => {
-      setProfile(profile.withUser(await ctx.updateUser(update)));
+      try {
+        setProfile(profile.withUser(await ctx.updateUser(update)));
+      } catch (error) {
+        setProfile(profile);
+        throw error;
+      }
     });
   };
 

@@ -22,8 +22,10 @@ export class Profile {
   readonly signInProviders: string[];
   readonly countries: string[];
   readonly stableCurrencies: string[];
+  private readonly user: UserJson;
 
   constructor(user: UserJson, company: MeJson['company']) {
+    this.user = user;
     this.email = user.email;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
@@ -42,6 +44,10 @@ export class Profile {
       countries: this.countries,
       stableCurrencies: this.stableCurrencies,
     });
+  }
+
+  withUpdate(update: UserUpdate): Profile {
+    return this.withUser({ ...this.user, ...update });
   }
 
   needsCurrencyChoice(): boolean {
