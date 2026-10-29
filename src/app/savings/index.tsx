@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { Alert, Platform, StyleSheet, View } from 'react-native';
+import { Alert, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Button, Field, Notice } from '@/components/form';
@@ -35,6 +35,7 @@ export default function SavingsScreen() {
   const { busy, message, setMessage, run } = useBusyAction();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [adding, setAdding] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const vaultShares = view?.holdings.balances.vaultShares ?? 0n;
 
   const withdraw = () =>
@@ -70,6 +71,15 @@ export default function SavingsScreen() {
     ]);
   };
 
+  const pullToRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const addToSavings = () => {
     if (state === 'signed-out') {
       openSignIn('Sign in to start saving.');
@@ -86,7 +96,17 @@ export default function SavingsScreen() {
         onScroll={onScroll}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scroll}>
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          state === 'ready' ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={pullToRefresh}
+              tintColor={theme.textSecondary}
+              colors={[theme.accent]}
+            />
+          ) : undefined
+        }>
         <PageHeader title="Savings" width={wide ? 'page' : 'content'} />
         <View style={[styles.body, wide && styles.bodyWide]}>
           <View style={[styles.hero, { backgroundColor: theme.accentSoft }]}>
