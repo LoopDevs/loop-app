@@ -78,6 +78,7 @@ export default function ShopScreen() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
   const { q } = useLocalSearchParams<{ q?: string }>();
   const [search, setSearch] = useState(q ?? '');
@@ -183,6 +184,12 @@ export default function ShopScreen() {
     loadMerchants(1);
   }, [loadMerchants]);
 
+  const pullToRefresh = async () => {
+    setRefreshing(true);
+    await loadMerchants(1);
+    setRefreshing(false);
+  };
+
   useEffect(() => {
     if (!country) {
       return;
@@ -283,6 +290,8 @@ export default function ShopScreen() {
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        refreshing={refreshing}
+        onRefresh={country ? pullToRefresh : undefined}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={

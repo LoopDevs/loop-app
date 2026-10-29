@@ -113,9 +113,9 @@ export function ListRow({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
       accessibilityState={{ disabled, checked: accessibilityRole === 'radio' ? Boolean(selected) : undefined }}
-      style={({ pressed }) => [
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
         styles.row,
-        pressed && { backgroundColor: theme.backgroundSelected },
+        (pressed || (hovered && !disabled)) && { backgroundColor: theme.backgroundSelected },
         disabled && styles.disabled,
       ]}>
       {content}
