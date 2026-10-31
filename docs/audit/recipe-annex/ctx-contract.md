@@ -1,61 +1,81 @@
 # Annex: CTX customer contract
 
-What CTX spend-api does with each call the app makes. Read from `git -C ../spend-api show origin/staging:<path>` at `8d0242b6` (2026-10-26). Paths below are under `internal/` in spend-api. Line numbers are at that commit. CTX staging moves daily: re-read before relying on any line. Items marked **unverified** were reported by the extraction pass without a traced code path.
+What CTX spend-api does with each call the app makes. Read from `git -C ../spend-api show origin/staging:<path>` at `189b9409` (2026-10-31; 86 commits since `8d0242b6`). Paths are under `internal/` in spend-api; line numbers are at that commit. CTX staging moves daily: re-read before relying on any line. Items marked **unverified** were not traced to a code path.
 
 ## Routes and authorization
 
-- Routes: `http_router.go:155-322`. Customer role: `service_rbac.go:157-192`. Every customer permission is scoped `User=self`, except merchant get/list.
-- IDOR guard: `validateUserScope` (`service_rbac.go:530-561`) via `resolveAccountUser` (`http_ep_user_account.go:112-131`) requires the token's user id to equal the path user id. `GET /gift-cards/:id` sets the target user to the card's owner, so a non-owner gets `ErrNotAuthorized`. The list forces `UserId` to the caller.
-- Customer-reachable endpoints the app does not call: `POST/PUT/DELETE /users/:id/wallets` (link an arbitrary address), wallet-backup and recover, payment-methods, transfers, protected-requests, gift-card view/barcode/redeem, `/merchant-links`, `/2fa/*`, `/logout`. Any of these is attack surface a customer token can reach even though the app never calls it. Whether a customer can create a link with `sponsored: true` is **unverified**; it matters because `SmartWallet.load` takes the first link that is sponsored, XLM and active.
-- Blocked for customers: `GET /payments`, `GET /users/:id`, changing `stableCurrency` after it is set, gift-card archive and status update.
+- Customer role: `service_rbac.go:167-200`. It includes wallet deploy, sponsor, list, update and unlink, backup, recovery start and finish, bank-withdrawal create/get, and payment-method create/list/delete. Every customer permission is scoped `User=self`, except merchant get/list.
+- IDOR guard: the token's user id must equal the path user id; `GET /gift-cards/:id` targets the card's owner; the list forces `UserId` to the caller.
+- A customer cannot create a sponsored link: `Sponsored = true` is set only in deploy (`http_ep_user_wallet_smart.go:135`).
+- Sponsor and build take `walletId` from the path (`http_ep_user_wallet_smart.go:253-269`). Inactive links → 404; non-sponsored or non-XLM → `ErrSmartWalletNotSponsored`.
+- Recovery cancel has no customer permission (`http_router.go:253`).
+- Maintenance mode blocks everything except `/status`, `/me` and `/system/trigger` (`http_router.go:158`).
+- Customer-reachable endpoints the app does not call: wallet link CRUD, backup, recovery start/finish, payment methods, bank withdrawals, transfers, `/2fa/*`, the `send` intent. Attack surface a customer token reaches regardless of the app.
 
 ## Sessions
 
-- Bearer auth: `getRequestAuthScope` (`http_router.go:443-519`). Tokens are looked up in the DB (revocable). Claims required: `cid`, `tid`. `X-Client-Id` must equal the client name (`485-502`), else `ErrTokenInvalid`. A `?token=` query parameter is also accepted (`http_auth.go:116-130`); the app does not use it.
-- Claims: `iat, exp, tid, ttp, cid, jti` (`http_auth.go:191-198`). `tid` is the user id the app puts in `/users/{tid}` paths.
-- TTLs: access 8 h, refresh 90 days (`http_auth.go:149-154`).
-- Refresh rotates on every call (`http_auth.go:271-297`) with a 30 s grace window (line 93). Reusing a refresh token inside the window revokes the successor chain. After the window the old token returns `ErrTokenInvalid`. Consequence for the app: two JS contexts (two web tabs, or app plus a second process) refreshing the same stored token both lose the session.
-- `/refresh-token` does not check `X-Client-Id` for non-legacy tokens (`http_ep_auth_refresh.go:24-177`).
-- `/login` sleeps 5 s on any error (`http_ep_auth_login.go:21-28`); returns 200 for an existing user and 201 for a new one (113-157), which is an account-existence oracle.
-- OTP: 6 digits (`emailer.go:242-285`); resend deduped for 20 min; no explicit expiry, cleared on first successful login (`http_auth.go:415-453`); no per-code attempt cap on `/verify-email` (`http_ep_auth_verify_email.go:54-57`). Only the global limiter applies (burst 100, 2 rps; `http_router.go:57-68`). This is a CTX-side account-takeover risk; record it as a dependency, not a finding against this repo.
+- Access token 8 h, refresh 90 days (`http_auth.go:149,154`). `X-Client-Id` must match the token's client on bearer requests.
+- Refresh rotates on every call with a 30 s grace window (`http_auth.go:93`, 271-297); reuse inside the window revokes the successor chain. Whether `/refresh-token` checks `X-Client-Id` for non-legacy tokens: **unverified** at this SHA (the previous read said it does not).
+- `POST /login`: 200 for an existing user, 201 for a new one (`http_ep_auth_login.go:131,147`): an account-existence oracle. Any error sleeps 5 s. An `X-Signature` header takes the key-only path.
+- OTP: expires after 20 min, locks after 5 failed guesses (`entity_verification_code.go:15-17,97-147`, `Err2FATooManyAttempts` 429). A locked code clears only at expiry. A live code is not re-sent within 1 min (`emailer.go:266-268`).
+- `/login/oauth` body `{provider, idToken, nonce?}`; the nonce is verified only when sent (`http_ep_auth_login_oauth.go:13-98`). Signup requires a verified email; an existing email gets the identity linked (`:112-128`).
+- `/logout` revokes the session; needs a bearer token.
+
+## WebSocket `/ws`
+
+- Authenticates once, at upgrade, from request headers (`http_ws.go:89-96`). No later expiry re-check was found, so a socket can outlive the 8 h access token (**unverified** beyond reading). A browser cannot set those headers (recipe trap 22).
+- Commands `subscribe`, `unsubscribe`, `list`; replies `{type:"ok"|"error", action, subscriptions}`; events `{type:"event", topic, event, data}`; errors `not authorized` / `unknown topic`.
+- Ping every 20 s; closes after 60 s without a pong and on a backlog overflow of 256 events (`:149-231`).
+- `giftcard` topic (`http_ws_topic_giftcard.go`): `system.giftcard.created|paid|fulfilled|rejected|refunded|expired|display_status_updated`, own cards only, payload without details or secrets. The client must `GET /gift-cards/:id` for codes. No cashback events here.
+- `account` topic (`http_ws_topic_account.go`): `system.account.balances.updated`, `system.wallet.holdings.updated`, `system.payout.held|submitted|queued|completed|failed`, `user.profile.updated`.
 
 ## Smart wallet
 
-- Deploy (`http_ep_user_wallet_smart.go:40-116`): body `credentialId`, `passkeyPublicKey` (65 bytes), `devicePublicKey` (32 bytes). Address = factory `wallet_address(credentialId)` (`crypto_node_stellar_smartwallet.go:121-135`): it depends on the credential id only. Deploy call `deploy(sponsor, credentialId, passkeyPk, devicePk)` (137-174).
-- Deploy is idempotent per user: a repeat call returns 200 with the existing link and ignores the keys sent. Consequence: after `deviceSigner.create` replaces the device key, a second deploy cannot register the new key; `verify()` then fails on the rule-1 key and the user cannot sign. Address linked to another user → 409. At most 5 sponsored links per user (`entity_wallet_link.go:21`); how that squares with per-user idempotency is **unverified**.
-- Build (`http_ep_user_wallet_smart.go:118-143`, `crypto_node_stellar_smartwallet.go:58-126`): response `{transaction, digest (hex), contextRuleIds, expiryLedger}`. Both intents use rule ids `[1]`. Transaction source is the relayer; simulated; signature expiry = latest ledger + 60 (lines 20, 205), about 5 min.
-  - Pay: payment must belong to the user, be on XLM, status pending or part-paid (`payment_walletconnect.go:573-575`). Call: SAC `transfer(wallet, payment.CryptoAddresses[0].Address, amount)` (`entity_payment.go:259-269`). Destination is a per-payment muxed M-address.
-  - Vault withdraw: `withdraw(shares, [minAmount], wallet)` (`defindex/service.go:341-366`); minimum computed server-side from the vault value.
-  - Digest: `sha256(ScMap{account, context_rule_ids, signature_payload})`, `signature_payload` = sha256 of the Soroban authorization preimage (`crypto_node_stellar_smartwallet.go:462-498`). Matches the app's `authDigest` structurally.
-- Sponsor (`http_ep_user_wallet_smart.go:145-201`, smartwallet `234-302`, `352-424`): CTX re-derives the expected call from the intent and rejects unless not fee-bumped, source is the relayer, one InvokeHostFunction op, contract/function/args equal (`scEqual`), and exactly one auth entry for this wallet. It attaches the signature as an External signer (ed25519 verifier, device public key, 64-byte signature), re-simulates, signs as relayer, fee-bumps from the system key. Response `{hash, status, error?}`. `sponsoredWallet` (203-219) requires an active, sponsored XLM link owned by the user. Pay intents record the payment tx id (`recordSponsoredPayment`). CTX does not check the device signature itself (**unverified**); the chain does.
-- Not found in CTX: anything about rule 0 (passkey) beyond passing the key to the factory; any wasm-hash pinning. Rule-1 restrictions (`device_allows`) are a factory matter, not checked by CTX.
+- **Deploy** (`http_ep_user_wallet_smart.go:77-153`): body `credentialId`, `passkeyPublicKey` (65 bytes), `devicePublicKey` (32 bytes). Address depends on `credentialId` only. New deploy → 201 with `txHash`; a repeat with the same credential id → 200 with the existing link, keys ignored (`:104-110`). Lifetime cap of 5 sponsored links per user (`:122`, `entity_wallet_link.go:27`, `ErrSmartWalletLimit`). Address linked to another user → `ErrSmartWalletLinkedElsewhere`.
+- **Build** (`:155-180`): `{transaction, digest, contextRuleIds, expiryLedger}`; expiry = latest + 60 (`crypto/crypto_node_stellar_smartwallet.go:24,252`).
+- **Sponsor** (`:182-251`): `passkey` only for passkey intents (`smartwallet.go:43`), otherwise `{signature (64 B), devicePublicKey (32 B)}`. Passkey signatures are folded to low-S (`crypto_node_stellar_smartwallet.go:731-748`). CTX re-derives the call and verifies the transaction against it (`:286`), then attaches the signature as an External signer with the Ed25519 or WebAuthn verifier (`:709-729`). CTX does not verify the signature itself; the chain does. Per-user sponsor rate limit (`ErrRateLimitReached`). Holdings refresh asynchronously afterwards.
+- **Intents** (`smartwallet.go:68-314`):
+  - `pay {paymentId}`: rule `[1]`. SAC `transfer(wallet, payment muxed address, amount)`. The payment must be the user's, on XLM, status exactly `pending` (part-paid refused, `:149-152`). One in-flight tx per payment (`claimSponsoredPayment`, `:226-245`); a failed tx releases the claim; a pending one returns `ErrPaymentAlreadySubmitted {txId}`.
+  - `vault_withdraw {currency, shares}`: rule `[1]`. `withdraw(shares, [min], wallet)`; `shares` a decimal string. Vault lookup keyed by chain-qualified `XLM.USDC|XLM.EURC|XLM.GBPLOOP` (`defindex/defindex.go:39`, `service.go:172`); a missing or unverified vault → `ErrSavingsUnavailable`. Whether a bare `USDC` is normalised: **unverified**.
+  - `rotate_device {newDevicePublicKey}` (32 bytes): rule `[0]` (passkey). Calls `rotate_device(bytes)` on the wallet (`smartwallet.go:289-304`). The sponsor body must carry `passkey`. CTX stores no device key on the link, so nothing to update off chain and deploy cannot repair a device key.
+  - Not used by the app: `send` (passkey, rule `[0]`, XLM USDC/EURC to any non-self address), `vault_deposit` (rule `[1,1]`), `recovery_cancel` (device, rule `[1]`).
+- **Recovery:** `/stellar/recovery` start (owner; takes `devicePublicKey`, body partly **unverified**), `/recovery/finish`, `/recovery/cancel` (system only).
+- Nothing in CTX pins rule 0 or the wasm hash; the app's `WalletRules.check` is the only check. Rule-1 `device_allows` is a factory matter.
 
 ## Gift cards
 
-- Create (`http_ep_giftcard_create.go`): amount rules by denomination type (`fixed` exact; `min-max` in subunits; `min-max-major` whole numbers only). Errors: `ErrAmountDenominationInvalid`, `ErrAmountBelowMinimum`, `ErrAmountAboveMaximum`, `ErrAmountFractional`, `ErrNoDiscountsAvailable`. `fiatCurrency` must be accepted. Crypto amount = `rates.Convert(PaymentFiatAmount, crypto)`.
-- XLM payments get a muxed address whose id is the low 8 bytes of the payment UUID (`payment_crypto.go:533-536`). The app could recompute that id from `giftCard.paymentId` and pin it; it does not.
-- JSON (`http_json.go:25-402`): unpaid cards carry `paymentCryptoAddress` (M-address) and `paymentUrls`; crypto payments have no `paymentUrlExpiration`. Codes (number, PIN) appear only on `GET /gift-cards/:id` for fulfilled cards. `redeemUrl` and `barcodeUrl` embed 10-year unauthenticated view tokens: anyone holding the URL can see the card. The list carries no codes and no payment addresses.
-- Statuses (`entity_gift_card.go:75-80`): `unpaid, paid, fulfilled, rejected, refunded, expired` (matches the app's union).
-- `GET /gift-cards/:id?stream=true` is SSE (20 s keepalive, 10 min timeout); the app polls instead.
+- **Create** (`http_ep_giftcard_create.go:17-25`): `cryptoCurrency, fiatAmount, fiatCurrency, merchantId, locationId, operatorReference, rewardType`. Amount rules by denomination type; errors `ErrAmountDenominationInvalid|BelowMinimum|AboveMaximum|Fractional`, `ErrNoDiscountsAvailable`.
+- **`Idempotency-Key` is not implemented:** no handler in `internal/` reads it. A retried `POST /gift-cards` creates a second card. Whether `operatorReference` is unique and could dedupe: **unverified**.
+- **No `paymentMethod` request field.** Empty `cryptoCurrency` = fiat. The server picks `plaid-vrp` when recurring is enabled, else `plaid-uk-eu` (`config.go:105-110`, create `:610-620`). Production accepts fiat in GBP only (`:600-608`).
+  - VRP (`:647-659`): needs an authorised, unexpired payment method, else `ErrBankLinkRequired` (402); executes immediately; no `paymentUrl` returned (`http_json.go:330-337`).
+  - UK/EU (`payment_plaid.go:262-312`): returns `paymentUrl` and `paymentUrlExpiration`. `ErrBankPaymentIdentityRequired` (400) when the user lacks given/family name or email; fix via `PUT /users/:id {legalName}`.
+- XLM payments get a muxed address whose id is the low 8 bytes of the payment UUID; the app could derive and pin it from `paymentId`.
+- **JSON** (`http_json.go`): crypto payments carry `paymentCryptoAddress` and `paymentUrlExpiration` (`:180`). Fields the app reads: `paymentStatus`, `redeemType`, `cashbackCredited`, `cashbackReversed`, and on fulfilled cards with secrets only (`GET /:id`) `barcodeType`, `redeemUrlChallenge`. `redeemUrl` and `barcodeUrl` embed 10-year unauthenticated view tokens (`:369-396`).
+- Statuses `unpaid, paid, fulfilled, rejected, refunded, expired`. List query parameters (`status=a,b`, `status!=`, `order`): **unverified** at this SHA.
 
-## Cashback
+## Cashback and refunds
 
-- `rewardType` defaults to the company default (`discount`); the app always sends `cashback`. With cashback: holding currency must be a stable (`ErrCashbackNotStable`); a fiat payment must match the user's stable (`ErrCashbackStableMismatch`); the user pays full price; `cashbackAmount` is an estimate at create, fixed at settlement (`payment-flows.md:154-201`).
-- Crediting is a ledger transfer `system:giftcard` → user wallet (`payment-flows.md:201,258`). Whether that is an on-chain transfer to the smart account or a CTX-internal ledger entry is **unresolved**.
-- Refund (`payment-flows.md:369-399`): operator-triggered; refused with `ErrInsufficientBalance` if the wallet holds less than the cashback; otherwise reverses the cashback from the user's wallet. How CTX can debit a non-custodial smart account is **unresolved** and is a contradiction worth chasing.
-- `cashbackDestination: savings` gifts vault shares instead (`payment-flows.md:269`).
+- With `rewardType: cashback` the holding currency must be a stable; a fiat payment must match the user's stable; the user pays full price; `cashbackAmount` is fixed at settlement.
+- Crediting is a ledger transfer into the user's CTX account wallet (`flow_payment_settlement.go`). On chain only as a threshold payout (`flow_account_threshold.go:311-365`); below the network fee it is held.
+- `cashbackDestination: savings` makes that payout a gift of vault shares (`flow_payout.go:823-880`); unsupported currency → balance stays put. Sponsored links pay no network fee out of the payout (commit `c869cf29`).
+- Refund reversal is a ledger transfer from the account wallet back to the card (`flow_payment_settlement.go:621-681`), never a chain debit. If the balance was already paid out, `AssertRefundable` refuses the refund.
 
-## Merchants and profile
+## Merchants, profile and account
 
-- `GET /merchants` works without auth; an invalid token falls back to the unauthenticated list, never 401 (`http_ep_merchant_list.go`). The app nonetheless calls it through `sessionRequest`, so signed-out users see no shop.
-- `userDiscount` and `savingsPercentage` are the same integer basis points (10000 = 100%). The `link` object can override discount and status. `info` is not in the list response. Denominations are decimal strings; min-max in subunits. `GET /merchants/:idOrSlug` (used by `/shop/[slug]`) was not traced: **unverified**.
-- `/me` returns `{user, company, client, permissions}` (`http_ep_me_get.go`), allowed during maintenance.
-- `PUT /users/:id` (`http_ep_user_update.go`): customer may set name, timezone, country, `stableCurrency` (only while empty, must be in `company.StableCurrencies`; later change → 403), `cashbackDestination` (`account`|`savings`), `twoFactorEnabled`. Privileged fields are silently ignored for self.
+- `GET /merchants` (`http_ep_merchant_list.go:16-45`): `page, perPage, id, slug, ids, name, name!, group, enabled, status, country, currency, category, discount, order`, and more. `name`, `ids`, `slug`, `country`, `currency` are **regex** filters (`:49-52,63-64`): a bare `slug` is a partial match. The unauthenticated route has no company or discount scoping (`:102-132`). Whether an invalid bearer still falls back to it: **unverified**. `group` and `category` fields added.
+- `GET /merchants/:id`: not traced.
+- `PUT /users/:id` (`http_ep_user_update.go:74-165`): `legalName` trimmed; `country` must be valid and supported by an operator company, and assigns the country's stable if none is set (`entity_user.go:551-561`); `stableCurrency` only while empty and only with an empty wallet (`:134-147`); `cashbackDestination` `account|savings`. All but `legalName` fire `user.profile.updated`.
+- `/me` and `/users/:id/account` shapes: **unverified** at this SHA (account now reads indexed holdings, commit `9312bd76`).
+- An account-erase route exists (commit list); the app does not call it.
 
 ## Contradictions with the app
 
-1. Pay destination is a per-payment muxed M-address; the app pins only its base G-address (`network.payee`). Whether CTX's system G-address equals `network.payee` on each network depends on CTX config, not code: **unverified**.
-2. Deploy ignores keys on repeat, so device-key replacement cannot be repaired through deploy.
-3. CTX enforces nothing about rule 0 or wasm; the app's `verify()` is the only check.
-4. Signature expiry is 60 ledgers; build and sponsor must run back-to-back, and the biometric prompt sits between them.
-5. Concurrent refreshes inside 30 s revoke the new tokens.
+1. The app sends `Idempotency-Key` on `POST /gift-cards`; CTX ignores it. Retries duplicate orders.
+2. The app models bank methods (`plaid-uk-eu`, `plaid-vrp`); CTX picks the method from config. Branch on `paymentUrl` presence and handle `ErrBankLinkRequired`.
+3. The app's socket sends auth headers; a browser cannot, and CTX authenticates only at upgrade.
+4. The pay destination is a CTX field; the muxed id is derivable from `paymentId` and is not derived.
+5. `slug` is a regex on CTX; the signed-out merchant page looks up by `?slug=`.
+6. Deploy ignores keys on repeat; only `rotate_device` (passkey) changes the device key.
+7. CTX enforces nothing about rule 0 or wasm.
+8. Signature expiry is 60 ledgers; the biometric or passkey prompt sits between build and sponsor.
+9. Concurrent refreshes inside 30 s revoke the new tokens.
