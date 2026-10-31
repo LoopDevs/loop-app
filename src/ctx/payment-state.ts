@@ -1,9 +1,11 @@
 export type PaymentState =
   | { kind: 'ready' }
+  | { kind: 'bank' }
+  | { kind: 'bankExpired' }
   | { kind: 'movingSavings' }
   | { kind: 'sending' }
   | { kind: 'confirming'; txId?: string; expiryLedger?: number }
-  | { kind: 'failed'; contactSupport?: boolean }
+  | { kind: 'failed' }
   | { kind: 'priceExpired' }
   | { kind: 'notSent'; detail: string };
 
@@ -90,20 +92,22 @@ export function transferMuxedId(value: unknown): bigint | null {
   return null;
 }
 
+export function transferMatches(value: unknown, expected: SignedTransfer | null): boolean {
+  const amount = transferAmount(value);
+  if (amount === null) {
+    return false;
+  }
+  if (!expected) {
+    return true;
+  }
+  return (
+    amount === expected.amount &&
+    (expected.muxedId === undefined || transferMuxedId(value) === expected.muxedId)
+  );
+}
+
 export function transferLanded(values: readonly unknown[], expected: SignedTransfer | null): boolean {
-  return values.some((value) => {
-    const amount = transferAmount(value);
-    if (amount === null) {
-      return false;
-    }
-    if (!expected) {
-      return true;
-    }
-    return (
-      amount === expected.amount &&
-      (expected.muxedId === undefined || transferMuxedId(value) === expected.muxedId)
-    );
-  });
+  return values.some((value) => transferMatches(value, expected));
 }
 
 export function isAlreadySubmitted(rejection: PayRejection): boolean {

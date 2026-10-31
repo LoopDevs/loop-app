@@ -8,16 +8,17 @@ import { Alert, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { webLink } from '@/components/external-link';
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
-import { ListGroup } from '@/components/list-row';
+import { ListGroup } from '@/components/ui/list-row';
 import { PageHeader } from '@/components/page-header';
-import { PressScale } from '@/components/press-scale';
+import { PressScale } from '@/components/ui/press-scale';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { SiteFooter } from '@/components/site-footer';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, Layout, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Layout, MaxContentWidth, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -75,8 +76,8 @@ export default function ProfileScreen() {
     run(async () => {
       await ctx.signOut();
       setEmail(null);
-      await check();
       router.navigate('/');
+      await check();
     });
   };
 
@@ -134,11 +135,7 @@ export default function ProfileScreen() {
               <>
                 <AccountCard email={email} />
                 {accountFailed && (
-                  <Notice
-                    message="We couldn't load your account details."
-                    actionLabel="Try again"
-                    onAction={loadEmail}
-                  />
+                  <Notice message="We couldn't load your account details." actionLabel="Try again" onAction={loadEmail} />
                 )}
                 <View style={styles.tileRow}>
                   <Tile
@@ -181,6 +178,7 @@ export default function ProfileScreen() {
             )}
           </View>
         </View>
+        <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>
@@ -276,11 +274,11 @@ type IconRowProps = {
   label: string;
   onPress: () => void;
   href?: string;
-  tone?: 'text' | 'danger';
   disabled?: boolean;
+  tone?: 'text' | 'danger';
 };
 
-function IconRow({ icon, label, onPress, href, tone = 'text', disabled = false }: IconRowProps) {
+function IconRow({ icon, label, onPress, href, disabled = false, tone = 'text' }: IconRowProps) {
   const theme = useTheme();
   const tint = tone === 'danger' ? theme.danger : theme.text;
   const link = webLink(href);
@@ -288,8 +286,6 @@ function IconRow({ icon, label, onPress, href, tone = 'text', disabled = false }
     <PressScale
       {...link}
       style={styles.row}
-      disabled={disabled}
-      accessibilityState={{ disabled }}
       onPress={() => {
         haptics.tap();
         if (!link) {
@@ -297,7 +293,9 @@ function IconRow({ icon, label, onPress, href, tone = 'text', disabled = false }
         }
       }}
       scale={0.99}
+      disabled={disabled}
       accessibilityRole={href ? 'link' : 'button'}
+      accessibilityState={{ disabled }}
       accessibilityLabel={label}>
       <SymbolView name={icon} size={22} tintColor={tint} />
       <ThemedText themeColor={tone} style={styles.rowLabel}>
@@ -313,7 +311,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   page: {
     width: '100%',
@@ -328,7 +327,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.four,
   },
   accountCard: {
@@ -364,8 +363,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex: 1,
-    aspectRatio: 1,
-    minHeight: 140,
+    height: 140,
     justifyContent: 'space-between',
   },
   tileText: {

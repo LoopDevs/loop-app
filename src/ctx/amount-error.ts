@@ -3,7 +3,9 @@ import type { MerchantJson } from './client';
 type AmountRules = Pick<MerchantJson, 'currency'> & { denominationValues: string[] };
 
 export function amountErrorMessage(errorName: string | undefined, merchant: AmountRules): string | null {
-  const [min, max] = merchant.denominationValues;
+  const byValue = [...merchant.denominationValues].sort((a, b) => Number(a) - Number(b));
+  const min = byValue[0];
+  const max = byValue[byValue.length - 1];
   switch (errorName) {
     case 'ErrAmountBelowMinimum':
       return `Minimum is ${min} ${merchant.currency}`;

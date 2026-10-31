@@ -3,6 +3,11 @@ import type { GiftCard } from '@/ctx/client';
 export type CashbackState = 'none' | 'pending' | 'credited' | 'reversed';
 
 export const pollIntervalMs = 3000;
+const maxPollIntervalMs = 30000;
+
+export function pollDelayMs(polls: number): number {
+  return Math.min(maxPollIntervalMs, pollIntervalMs * 2 ** Math.floor(polls / 10));
+}
 export const settledStatuses: GiftCard['status'][] = ['fulfilled', 'rejected', 'refunded', 'expired'];
 export const unpaidStatuses: GiftCard['status'][] = ['unpaid'];
 
@@ -10,11 +15,15 @@ export function wasCharged(card: GiftCard): boolean {
   return card.paymentStatus === 'paid' || Boolean(card.paymentCryptoTxId) || card.paymentMethod !== 'crypto';
 }
 
-export function isHiddenFromHistory(card: GiftCard): boolean {
+export function needsPaymentSearch(card: GiftCard): boolean {
+  return card.status === 'expired' && !wasCharged(card);
+}
+
+export function isHiddenFromHistory(card: GiftCard, paymentSent = false): boolean {
   if (card.status === 'unpaid') {
     return true;
   }
-  return card.status === 'expired' && !wasCharged(card);
+  return needsPaymentSearch(card) && !paymentSent;
 }
 
 export function giftCardStatusLabel(status: GiftCard['status']): string {
@@ -63,11 +72,16 @@ export function outcomeText(card: GiftCard, sentUnconfirmed = false): string | n
   if (paymentStatus === 'error' || paymentStatus === 'expired') {
     return "This order didn't go through. You weren't charged.";
   }
+  if (status === 'paid') {
+    return "We'll also email your card when it's ready.";
+  }
   return null;
 }
 
-export function cashbackState(card: GiftCard): CashbackState {
-  if (!card.cashbackAmount) {
+export function cashbackState(
+  card: Pick<GiftCard, 'status' | 'cashbackAmount' | 'cashbackCredited' | 'cashbackReversed'>,
+): CashbackState {
+  if (!card.cashbackAmount || !(Number(card.cashbackAmount) > 0)) {
     return 'none';
   }
   if (card.cashbackReversed) {
@@ -82,9 +96,9 @@ export function cashbackState(card: GiftCard): CashbackState {
 export function cashbackStateLabel(state: CashbackState): string {
   switch (state) {
     case 'pending':
-      return 'on the way';
+      return 'pending';
     case 'credited':
-      return 'paid';
+      return 'on the way';
     case 'reversed':
       return 'reversed';
     case 'none':

@@ -4,34 +4,40 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
+import { GiftCardFace } from '@/components/gift-card-face';
 import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { OrderDetailSkeleton } from '@/components/skeleton';
+import { SiteFooter } from '@/components/site-footer';
+import { OrderDetailSkeleton } from '@/components/ui/skeleton';
 import { SplitLayout } from '@/components/split-layout';
 import { PageWidth } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import {
-  BottomTabInset,
   FontFamily,
   Layout,
   MaxContentWidth,
   Motion,
   Radius,
+  ScrollEndInset,
   Spacing,
 } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, type GiftCard } from '@/ctx/client';
 import {
   cashbackState,
   cashbackStateLabel,
   giftCardStatusLabel,
   outcomeText,
-  pollIntervalMs,
+  pollDelayMs,
+  wasCharged,
 } from '@/ctx/gift-card-status';
+import { CashbackRate } from '@/ctx/merchant';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { usePaymentSent } from '@/hooks/use-sent-payment';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { dates, money } from '@/money';
@@ -48,7 +54,7 @@ export default function GiftCardScreen() {
   const theme = useTheme();
   const readSession = useSessionOwner();
   const { onScroll } = useScrimScroll();
-  const { openSignIn } = useSignIn();
+  const { openSignIn, signedIn } = useSignIn();
   const { wide } = usePageLayout();
   useOnSignIn(() => {
     setGiftCard(null);
@@ -77,6 +83,7 @@ export default function GiftCardScreen() {
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let polls = 0;
     const load = async () => {
       try {
         const { userId, changed } = await readSession();
@@ -96,7 +103,8 @@ export default function GiftCardScreen() {
         }
         setGiftCard(loaded);
         if (loaded.status === 'paid') {
-          timer = setTimeout(load, pollIntervalMs);
+          timer = setTimeout(load, pollDelayMs(polls));
+          polls += 1;
         }
       } catch (error) {
         if (active) {
@@ -125,15 +133,16 @@ export default function GiftCardScreen() {
     retry();
   };
 
+  const shownGiftCard = signedIn === false ? null : giftCard;
+
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={[styles.content, wide && styles.wideContent]}
         refreshControl={
-          giftCard ? (
+          shownGiftCard ? (
             <RefreshControl
               refreshing={refreshing}
               onRefresh={pullToRefresh}
@@ -141,10 +150,11 @@ export default function GiftCardScreen() {
               colors={[theme.accent]}
             />
           ) : undefined
-        }>
-        {(!giftCard || message !== '') && (
+        }
+        contentContainerStyle={styles.content}>
+        {(!shownGiftCard || message !== '') && (
           <View style={[styles.body, styles.status, wide && styles.wideStatus]}>
-            {!giftCard && !message && <OrderDetailSkeleton />}
+            {!shownGiftCard && !message && <OrderDetailSkeleton />}
             {message !== '' &&
               (message === signInMessage ? (
                 <View style={styles.section}>
@@ -156,7 +166,8 @@ export default function GiftCardScreen() {
               ))}
           </View>
         )}
-        {giftCard && <GiftCardSummary giftCard={giftCard} wide={wide} />}
+        {shownGiftCard && <GiftCardSummary giftCard={shownGiftCard} wide={wide} />}
+        <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
   );
@@ -181,13 +192,23 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const { gutter } = usePageLayout();
   const reduceMotion = useReducedMotion();
   const cashback = cashbackState(giftCard);
-  const outcome = outcomeText(giftCard);
+  const payment = usePaymentSent(giftCard);
+  const outcome = payment === undefined ? null : outcomeText(giftCard, payment.kind !== 'notSent');
+  const sentTxId = payment?.kind === 'sent' ? payment.txId : undefined;
   const processing = giftCard.status === 'paid';
-  const paid = amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency);
+  const byBank = BankPayment.isBank(giftCard);
+  const paid = byBank
+    ? BankPayment.charged(giftCard)
+      ? amountInMoney(giftCard.paymentFiatAmount, giftCard.paymentFiatCurrency)
+      : null
+    : wasCharged(giftCard)
+      ? amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency)
+      : null;
   const cashbackAmount = amountInMoney(giftCard.cashbackAmount, giftCard.cashbackCurrency);
+  const quotedCashback = cashback === 'none' ? CashbackRate.quotedFor(giftCard) : null;
   const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
 
-  const summary = (paid || cashback !== 'none') && (
+  const summary = (paid || cashback !== 'none' || quotedCashback) && (
     <View
       style={[
         styles.summary,
@@ -196,7 +217,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
           borderColor: theme.border,
         },
       ]}>
-      {paid && <SummaryRow label="Paid" value={paid} />}
+      {paid && <SummaryRow label={byBank ? 'Paid by bank' : 'Paid'} value={paid} />}
       {cashback !== 'none' && (
         <SummaryRow
           label={cashbackAmount ? `Cashback, ${cashbackStateLabel(cashback)}` : 'Cashback'}
@@ -204,6 +225,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
           tone={cashback === 'reversed' ? 'danger' : 'success'}
         />
       )}
+      {quotedCashback && <SummaryRow label="Cashback, expected" value={quotedCashback} />}
       <SummaryRow label="Ordered" value={dates.day(giftCard.created)} />
     </View>
   );
@@ -214,12 +236,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
       style={styles.summarySections}>
       <View style={styles.hero}>
         <View style={[styles.heroInner, pageWidth]}>
-          <Text style={[styles.heroName, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
-            {giftCard.merchantName}
-          </Text>
-          <Text style={[styles.heroAmount, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
-            {money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency)}
-          </Text>
+          <GiftCardFace giftCard={giftCard} style={styles.heroCard} />
           <View style={styles.heroStatus}>
             {processing && <ActivityIndicator size="small" color={theme.textSecondary} />}
             <Text style={[styles.heroStatusText, { color: theme.text }]} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
@@ -236,7 +253,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
             aside={
               <>
                 {summary}
-                <OrderHelp giftCard={giftCard} />
+                <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
               </>
             }>
             {outcome ? <Notice message={outcome} /> : null}
@@ -248,7 +265,7 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
           {outcome ? <Notice message={outcome} /> : null}
           <GiftCardDetails giftCard={giftCard} />
           {summary}
-          <OrderHelp giftCard={giftCard} />
+          <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
         </View>
       )}
     </Animated.View>
@@ -281,7 +298,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
     gap: Spacing.three,
   },
   body: {
@@ -292,9 +310,6 @@ const styles = StyleSheet.create({
   },
   status: {
     paddingTop: Spacing.three,
-  },
-  wideContent: {
-    paddingBottom: Spacing.six,
   },
   wideStatus: {
     maxWidth: 560,
@@ -315,18 +330,10 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
-    gap: Spacing.one,
+    gap: Spacing.two,
   },
-  heroName: {
-    fontFamily: FontFamily.medium,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  heroAmount: {
-    fontFamily: FontFamily.bold,
-    fontSize: 40,
-    lineHeight: 46,
-    letterSpacing: -1,
+  heroCard: {
+    maxWidth: 380,
   },
   heroStatus: {
     flexDirection: 'row',
@@ -342,7 +349,7 @@ const styles = StyleSheet.create({
   },
   summary: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },

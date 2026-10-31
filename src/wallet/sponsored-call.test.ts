@@ -6,6 +6,7 @@ import {
   Account,
   Address,
   Asset,
+  MuxedAccount,
   Networks,
   Operation,
   StrKey,
@@ -18,6 +19,7 @@ import {
 
 import type { BuiltTransaction } from '../ctx/client.ts';
 import { network } from '../stellar/network.ts';
+import { Savings } from './savings.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 
 const wallet = StrKey.encodeContract(Buffer.alloc(32, 1));
@@ -38,18 +40,19 @@ type Shape = {
   authCount?: number;
   extraOperation?: boolean;
   payment?: boolean;
+  call?: xdr.InvokeContractArgs;
 };
 
-function transferArgs(amount: bigint): xdr.InvokeContractArgs {
+function transferArgs(amount: bigint, to: string = network.payee): xdr.InvokeContractArgs {
   return new xdr.InvokeContractArgs({
     contractAddress: new Address(token).toScAddress(),
     functionName: 'transfer',
-    args: [new Address(wallet).toScVal(), new Address(network.payee).toScVal(), nativeToScVal(amount, { type: 'i128' })],
+    args: [new Address(wallet).toScVal(), new Address(to).toScVal(), nativeToScVal(amount, { type: 'i128' })],
   });
 }
 
 function authEntry(shape: Shape): xdr.SorobanAuthorizationEntry {
-  const call = transferArgs(shape.amount ?? 10n);
+  const call = shape.call ?? transferArgs(shape.amount ?? 10n);
   const fn =
     shape.authFunction === 'create'
       ? xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeCreateContractHostFn(
@@ -108,7 +111,9 @@ function build(shape: Shape = {}, overrides: Partial<BuiltTransaction> = {}): Bu
   } else {
     builder.addOperation(
       Operation.invokeHostFunction({
-        func: xdr.HostFunction.hostFunctionTypeInvokeContract(transferArgs(shape.txAmount ?? shape.amount ?? 10n)),
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          shape.call ?? transferArgs(shape.txAmount ?? shape.amount ?? 10n),
+        ),
         auth,
       }),
     );
@@ -195,4 +200,147 @@ test('unexpected wallet rules are refused', () => {
 test('a digest that does not match the transaction is refused', () => {
   rejects(build({}, { digest: independentDigest(authEntry({}), [0]) }), /digest to sign does not match/);
   rejects(build({}, { digest: '00'.repeat(32) }), /digest to sign does not match/);
+});
+
+const payToken = network.tokens[1];
+const orderAddress = new MuxedAccount(new Account(network.payee, '0'), '7').accountId();
+const otherOrderAddress = new MuxedAccount(new Account(network.payee, '0'), '8').accountId();
+
+function verified(call: xdr.InvokeContractArgs): SponsoredCall {
+  return SponsoredCall.verify(build({ call }), wallet, ruleIds, latestLedger);
+}
+
+test('a payment to the order address returns its amount and muxed id', () => {
+  const call = verified(transferArgs(25n, orderAddress));
+  assert.deepEqual(call.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }), {
+    amount: 25n,
+    muxedId: 7n,
+  });
+});
+
+test('a payment to another order of the same payee is refused', () => {
+  const call = verified(transferArgs(25n, otherOrderAddress));
+  assert.throws(
+    () => call.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /different order/,
+  );
+});
+
+test('a payment to an account other than the payee is refused', () => {
+  const call = verified(transferArgs(25n, source));
+  assert.throws(
+    () => call.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /unexpected address/,
+  );
+});
+
+test('a payment for a different amount is refused', () => {
+  const call = verified(transferArgs(26n, orderAddress));
+  assert.throws(
+    () => call.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /amount does not match/,
+  );
+});
+
+test('a payment from another wallet is refused', () => {
+  const call = verified(transferArgs(25n, orderAddress));
+  assert.throws(
+    () => call.requirePayment({ from: otherWallet, token: payToken, amount: 25n, orderAddress }),
+    /unexpected address/,
+  );
+});
+
+test('a payment in a different token is refused', () => {
+  const call = verified(transferArgs(25n, orderAddress));
+  assert.throws(
+    () => call.requirePayment({ from: wallet, token: network.tokens[0], amount: 25n, orderAddress }),
+    /is not a/,
+  );
+});
+
+function withdrawArgs(contract: string, shares: bigint, minimums: bigint[], owner: string): xdr.InvokeContractArgs {
+  return new xdr.InvokeContractArgs({
+    contractAddress: new Address(contract).toScAddress(),
+    functionName: 'withdraw',
+    args: [
+      nativeToScVal(shares, { type: 'i128' }),
+      xdr.ScVal.scvVec(minimums.map((minimum) => nativeToScVal(minimum, { type: 'i128' }))),
+      new Address(owner).toScVal(),
+    ],
+  });
+}
+
+const usdcVault = Savings.vault('XLM.USDC');
+const expectedWithdrawal = { from: wallet, vault: usdcVault, shares: 40n };
+
+test('a matching withdrawal returns its minimum', () => {
+  const call = verified(withdrawArgs(usdcVault, 40n, [39n], wallet));
+  assert.equal(call.requireWithdrawal(expectedWithdrawal), 39n);
+});
+
+test('a withdrawal from another contract, of other shares or for another owner is refused', () => {
+  assert.throws(
+    () => verified(withdrawArgs(token, 40n, [39n], wallet)).requireWithdrawal(expectedWithdrawal),
+    /not a withdrawal/,
+  );
+  assert.throws(
+    () => verified(withdrawArgs(usdcVault, 41n, [39n], wallet)).requireWithdrawal(expectedWithdrawal),
+    /does not match/,
+  );
+  assert.throws(
+    () => verified(withdrawArgs(usdcVault, 40n, [39n], otherWallet)).requireWithdrawal(expectedWithdrawal),
+    /does not match/,
+  );
+  assert.throws(
+    () => verified(withdrawArgs(usdcVault, 40n, [39n, 1n], wallet)).requireWithdrawal(expectedWithdrawal),
+    /does not match/,
+  );
+});
+
+test('a payment is refused when the order has no address or names another one', () => {
+  const muxed = verified(transferArgs(25n, orderAddress));
+  assert.throws(
+    () => muxed.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress: undefined }),
+    /different order/,
+  );
+  assert.throws(
+    () => muxed.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress: network.payee }),
+    /different order/,
+  );
+  const plain = verified(transferArgs(25n));
+  assert.throws(
+    () => plain.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /different order/,
+  );
+});
+
+test('a transfer amount that is not an i128 is refused', () => {
+  const call = verified(
+    new xdr.InvokeContractArgs({
+      contractAddress: new Address(token).toScAddress(),
+      functionName: 'transfer',
+      args: [new Address(wallet).toScVal(), new Address(orderAddress).toScVal(), nativeToScVal(25n, { type: 'u64' })],
+    }),
+  );
+  assert.throws(
+    () => call.requirePayment({ from: wallet, token: payToken, amount: 25n, orderAddress }),
+    /is not a/,
+  );
+});
+
+test('withdrawal minimums that are not i128 values are refused', () => {
+  const call = verified(withdrawArgs(usdcVault, 40n, [], wallet));
+  const stringMinimum = verified(
+    new xdr.InvokeContractArgs({
+      contractAddress: new Address(usdcVault).toScAddress(),
+      functionName: 'withdraw',
+      args: [
+        nativeToScVal(40n, { type: 'i128' }),
+        xdr.ScVal.scvVec([xdr.ScVal.scvString('z')]),
+        new Address(wallet).toScVal(),
+      ],
+    }),
+  );
+  assert.throws(() => call.requireWithdrawal(expectedWithdrawal), /does not match/);
+  assert.throws(() => stringMinimum.requireWithdrawal(expectedWithdrawal), /not a withdrawal/);
 });

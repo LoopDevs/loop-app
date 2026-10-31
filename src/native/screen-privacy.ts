@@ -7,22 +7,17 @@ export function useBlockScreenCapture(): void {
 }
 
 export function useAppSwitcherProtection(): void {
+  const key = useId();
   useEffect(() => {
     if (Platform.OS === 'ios') {
       ScreenCapture.enableAppSwitcherProtectionAsync().catch(() => {});
-    }
-  }, []);
-}
-
-export function useRecentsProtection(enabled: boolean): void {
-  const key = useId();
-  useEffect(() => {
-    if (Platform.OS !== 'android' || !enabled) {
       return;
     }
-    ScreenCapture.preventScreenCaptureAsync(key).catch(() => {});
-    return () => {
-      ScreenCapture.allowScreenCaptureAsync(key).catch(() => {});
-    };
-  }, [enabled, key]);
+    if (Platform.OS === 'android' && !__DEV__) {
+      ScreenCapture.preventScreenCaptureAsync(key).catch(() => {});
+      return () => {
+        ScreenCapture.allowScreenCaptureAsync(key).catch(() => {});
+      };
+    }
+  }, [key]);
 }

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import {
   Platform,
   Pressable,
@@ -13,22 +13,23 @@ import {
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { MerchantCard } from '@/components/merchant-card';
-import { PressScale } from '@/components/press-scale';
-import { Skeleton } from '@/components/skeleton';
-import { ThemedText } from '@/components/themed-text';
+import { PressScale } from '@/components/ui/press-scale';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
 import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx, type MerchantPage, type MerchantQuery } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
+import { CategoryTally, MerchantPaging } from '@/ctx/merchant-paging';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { Savings } from '@/wallet/savings';
 
-const catalogScanSize = 500;
+const catalogTopSize = 10;
 const heroPhoto = require('@/assets/images/home-shopping.jpg');
 const catalogPageSize = 24;
 const searchDelayMs = 300;
@@ -38,9 +39,7 @@ const suggestionScanSize = 20;
 const suggestionDelayMs = 120;
 
 export type Catalog = {
-  merchants: Merchant[];
   top: Merchant[];
-  categories: string[];
   total: number;
 };
 
@@ -48,6 +47,17 @@ const catalogRequests = new Map<string, Promise<Catalog>>();
 const loadedCatalogs = new Map<string, Catalog>();
 const loadedMerchants = new Map<string, Merchant>();
 const loadedPages = new Map<string, MerchantPage>();
+const categoryTallies = new Map<string, CategoryTally>();
+
+export function loadedCategories(country: string): string[] {
+  return categoryTallies.get(country)?.list() ?? [];
+}
+
+function tallyCategories(country: string, merchants: readonly Merchant[]) {
+  const tally = categoryTallies.get(country) ?? new CategoryTally();
+  tally.add(merchants);
+  categoryTallies.set(country, tally);
+}
 
 function rememberMerchants(merchants: readonly Merchant[]) {
   for (const merchant of merchants) {
@@ -86,50 +96,55 @@ export function cachedMerchantPage(query: MerchantQuery): MerchantPage | null {
 export async function loadMerchantPage(query: MerchantQuery): Promise<MerchantPage> {
   const loaded = await ctx.merchants(query);
   rememberMerchants(loaded.result);
+  tallyCategories(query.country, loaded.result);
   loadedPages.set(pageKey(query), loaded);
   return loaded;
 }
 
-export function loadCatalog(country: string): Promise<Catalog> {
-  const pending = catalogRequests.get(country);
+function catalogKey(country: string, size: number): string {
+  return `${country}:${size}`;
+}
+
+export function loadCatalog(country: string, size: number): Promise<Catalog> {
+  const key = catalogKey(country, size);
+  const pending = catalogRequests.get(key);
   if (pending) {
     return pending;
   }
-  const request = loadMerchantPage({ country, perPage: catalogScanSize })
+  const request = loadMerchantPage({ country, order: '-discount,name', perPage: size })
     .then(({ result, pagination }) => {
       const catalog = {
-        merchants: result,
         top: Merchant.byCashback(result).filter((merchant) => merchant.cashbackBasisPoints() > 0),
-        categories: Merchant.categoriesOf(result),
         total: pagination.total,
       };
-      loadedCatalogs.set(country, catalog);
+      loadedCatalogs.set(key, catalog);
       return catalog;
     })
     .catch(() => {
-      catalogRequests.delete(country);
-      return { merchants: [], top: [], categories: [], total: 0 };
+      catalogRequests.delete(key);
+      return { top: [], total: 0 };
     });
-  catalogRequests.set(country, request);
+  catalogRequests.set(key, request);
   return request;
 }
 
-export function useCatalog(country: string | undefined) {
-  const [loaded, setLoaded] = useState<{ country: string; catalog: Catalog } | null>(() => {
-    const cached = country ? loadedCatalogs.get(country) : undefined;
-    return country && cached ? { country, catalog: cached } : null;
+export function useCatalog(country: string | undefined, size = catalogTopSize) {
+  const key = country ? catalogKey(country, size) : null;
+  const [loaded, setLoaded] = useState<{ key: string; catalog: Catalog } | null>(() => {
+    const cached = key ? loadedCatalogs.get(key) : undefined;
+    return key && cached ? { key, catalog: cached } : null;
   });
   useEffect(() => {
-    if (!country) {
+    if (!country || !key) {
       return;
     }
     let current = true;
-    loadCatalog(country).then((catalog) => current && setLoaded({ country, catalog }));
+    loadCatalog(country, size).then((catalog) => current && setLoaded({ key, catalog }));
     return () => {
       current = false;
     };
-  }, [country]);
-  return loaded && loaded.country === country ? loaded.catalog : null;
+  }, [country, size, key]);
+  return loaded && loaded.key === key ? loaded.catalog : null;
 }
 
 export function PageWidth({ children, style }: { children: ReactNode; style?: object }) {
@@ -156,7 +171,11 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
     <View style={styles.hero}>
       <PageWidth style={[styles.heroInner, wide && styles.heroInnerWide]}>
         <Animated.View
-          entering={reduceMotion ? undefined : FadeInDown.duration(Motion.transition).easing(Motion.easeOut)}
+          entering={
+            reduceMotion || Platform.OS === 'web'
+              ? undefined
+              : FadeInDown.duration(Motion.transition).easing(Motion.easeOut)
+          }
           style={[styles.heroCopy, wide && styles.heroCopyWide]}>
           {!wide && (
             <View style={styles.heroTopRow}>
@@ -193,9 +212,19 @@ function HeroPhoto({ best, onOpen }: { best: Merchant | null; onOpen: (merchant:
   const theme = useTheme();
   return (
     <Animated.View
-      entering={reduceMotion ? undefined : FadeIn.duration(Motion.transition).delay(Motion.stagger * 2)}
+      entering={
+        reduceMotion || Platform.OS === 'web'
+          ? undefined
+          : FadeIn.duration(Motion.transition).delay(Motion.stagger * 2)
+      }
       style={[styles.heroPhotoWrap, wide && styles.heroPhotoWrapWide]}>
-      <View style={[styles.heroPhoto, wide && styles.heroPhotoWide, Elevation.raised]}>
+      <View
+        style={[
+          styles.heroPhoto,
+          wide && styles.heroPhotoWide,
+          { borderColor: theme.backgroundElement },
+          Elevation.raised,
+        ]}>
         <Image
           source={heroPhoto}
           contentFit="cover"
@@ -214,7 +243,8 @@ function HeroPhoto({ best, onOpen }: { best: Merchant | null; onOpen: (merchant:
             Elevation.raised,
             { backgroundColor: theme.backgroundElement, borderColor: theme.border },
           ]}>
-          <View style={[styles.heroOfferLogo, { borderColor: theme.border }]}>
+          <View
+            style={[styles.heroOfferLogo, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
             {best.logoUrl ? (
               <Image source={{ uri: best.logoUrl }} contentFit="contain" style={styles.heroOfferLogoImage} />
             ) : (
@@ -243,16 +273,12 @@ type MerchantSearchProps = {
 };
 
 export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen, large = false }: MerchantSearchProps) {
-  const catalog = useCatalog(country);
-  const remote = useRemoteMatches(country, value);
+  const found = useSearchResults(country, value);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const query = value.trim();
-  const suggestions = useMemo(
-    () => Merchant.matching([...(catalog?.merchants ?? []), ...remote], query, suggestionLimit),
-    [catalog, remote, query],
-  );
+  const suggestions = useMemo(() => Merchant.matching(found, query, suggestionLimit), [found, query]);
   const open = focused && !dismissed && suggestions.length > 0;
 
   const change = (text: string) => {
@@ -318,7 +344,7 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
   );
 }
 
-function useRemoteMatches(country: string, text: string): Merchant[] {
+function useSearchResults(country: string, text: string): Merchant[] {
   const name = text.trim();
   const query = useMemo(() => ({ country, name, perPage: suggestionScanSize }), [country, name]);
   const searchable = name.length >= 2;
@@ -358,17 +384,20 @@ function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: Sugges
       {merchants.map((merchant, index) => (
         <Pressable
           key={merchant.id}
-          {...(Platform.OS === 'web' ? { onPressIn: () => onPick(merchant) } : { onPress: () => onPick(merchant) })}
+          {...(Platform.OS === 'web'
+            ? { onPressIn: () => onPick(merchant), delayPressIn: 0 }
+            : { onPress: () => onPick(merchant) })}
           onHoverIn={() => onHighlight(index)}
           accessibilityRole="button"
           accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
           style={[styles.suggestion, index === highlight && { backgroundColor: theme.backgroundSelected }]}>
-          <View style={[styles.suggestionLogo, { borderColor: theme.border }]}>
+          <View
+            style={[styles.suggestionLogo, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
             {merchant.logoUrl ? (
               <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.suggestionLogoImage} />
             ) : (
               <View style={[styles.suggestionInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
-                <Text style={styles.suggestionInitialText}>{merchant.initial()}</Text>
+                <Text style={[styles.suggestionInitialText, { color: theme.onInverse }]}>{merchant.initial()}</Text>
               </View>
             )}
           </View>
@@ -523,14 +552,15 @@ function SectionHeading({ title, detail, accessory }: { title: string; detail?: 
 
 type CatalogProps = {
   country: string;
-  categories: string[];
   search: string;
   onSearch: (text: string) => void;
   onOpen: (merchant: Merchant) => void;
+  loadMoreRef: MutableRefObject<(() => void) | null>;
 };
 
-export function MerchantCatalog({ country, categories, search, onSearch, onOpen }: CatalogProps) {
-  const { wide } = usePageLayout();
+export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef }: CatalogProps) {
+  const { wide, columns } = usePageLayout();
+  const categories = loadedCategories(country);
   const [query, setQuery] = useState(search.trim());
   const [pickedCategory, setPickedCategory] = useState<{ country: string; category: string | null }>({
     country,
@@ -542,7 +572,7 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
   const [total, setTotal] = useState<number | null>(null);
-  const { busy, message, run } = useBusyAction();
+  const { busy, message, load: track } = useBusyAction();
   const latestRequest = useRef(0);
   const retryPage = useRef(1);
 
@@ -553,7 +583,7 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
 
   const load = useCallback(
     (next: number) =>
-      run(async () => {
+      track(async () => {
         const request = ++latestRequest.current;
         retryPage.current = next;
         const merchantQuery = {
@@ -576,17 +606,29 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
         if (request !== latestRequest.current) {
           return;
         }
-        setMerchants((shown) => (next === 1 ? result : [...shown, ...result]));
+        setMerchants((shown) => MerchantPaging.merge(shown, result, next));
         setPage(next);
         setPages(pagination.pages);
         setTotal(pagination.total);
       }),
-    [run, country, query, category],
+    [track, country, query, category],
   );
 
   useEffect(() => {
     load(1);
   }, [load]);
+
+  useEffect(() => {
+    loadMoreRef.current = () => {
+      const next = MerchantPaging.nextPage(page, pages, busy || message !== '');
+      if (next) {
+        load(next);
+      }
+    };
+    return () => {
+      loadMoreRef.current = null;
+    };
+  }, [loadMoreRef, load, page, pages, busy, message]);
 
   const searching = query !== '';
   const firstLoad = page === 0 && busy;
@@ -623,7 +665,10 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
       {firstLoad ? (
         <MerchantGrid merchants={Array.from({ length: 12 }, () => null)} onOpen={onOpen} stagger={false} />
       ) : merchants.length > 0 ? (
-        <MerchantGrid merchants={merchants} onOpen={onOpen} />
+        <MerchantGrid
+          merchants={busy && page > 0 ? [...merchants, ...Array.from({ length: columns }, () => null)] : merchants}
+          onOpen={onOpen}
+        />
       ) : message === '' && page > 0 ? (
         <View style={styles.empty}>
           <ThemedText type="heading">{searching ? 'No matches' : 'No gift cards here yet'}</ThemedText>
@@ -641,15 +686,6 @@ export function MerchantCatalog({ country, categories, search, onSearch, onOpen 
       ) : null}
       {message !== '' && (
         <Notice message={message} actionLabel="Try again" onAction={() => load(retryPage.current)} disabled={busy} />
-      )}
-      {page > 0 && page < pages && (
-        <View style={styles.more}>
-          <Button
-            label={busy ? 'Loading gift cards…' : 'Show more gift cards'}
-            onPress={() => load(page + 1)}
-            disabled={busy}
-          />
-        </View>
       )}
     </View>
   );
@@ -712,7 +748,7 @@ const benefits: Point[] = [
   {
     icon: { ios: 'leaf.fill', android: 'savings', web: 'savings' },
     title: 'Savings that earn',
-    body: `Move your cashback to savings. ${Savings.rateHeadline}.`,
+    body: `Move your cashback to savings. ${Savings.rateHeadline}. ${Savings.riskShort}.`,
   },
   {
     icon: { ios: 'lock.shield', android: 'verified_user', web: 'verified_user' },
@@ -908,7 +944,7 @@ const styles = StyleSheet.create({
     right: 0,
     marginTop: Spacing.two,
     borderWidth: 1,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.one,
     overflow: 'hidden',
   },
@@ -918,14 +954,13 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     minHeight: 52,
     paddingHorizontal: Spacing.two,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
   },
   suggestionLogo: {
     width: 36,
     height: 36,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -941,7 +976,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   suggestionInitialText: {
-    color: '#FFFFFF',
     fontFamily: FontFamily.semibold,
     fontSize: 15,
   },
@@ -973,7 +1007,6 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 32,
     borderWidth: 6,
-    borderColor: '#FFFFFF',
     overflow: 'hidden',
     transform: [{ rotate: '4deg' }],
   },
@@ -1009,7 +1042,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
     padding: Spacing.one,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1085,10 +1117,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingTop: Spacing.two,
   },
-  more: {
-    alignSelf: 'center',
-    minWidth: 240,
-  },
   band: {
     width: '100%',
   },
@@ -1121,7 +1149,7 @@ const styles = StyleSheet.create({
   step: {
     gap: Spacing.two,
     padding: Spacing.four,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: 1,
   },
   stepWide: {

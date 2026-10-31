@@ -9,27 +9,33 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, SlideInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
+import { CountryPicker } from '@/components/country-picker';
 import { ExternalLink } from '@/components/external-link';
-import { Button, Field } from '@/components/form';
-import { PressScale } from '@/components/press-scale';
+import { Button, Field } from '@/components/ui/form';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
+import { PressScale } from '@/components/ui/press-scale';
 import { SocialSignInButtons } from '@/components/social-sign-in-buttons';
-import { ThemedText } from '@/components/themed-text';
-import { useToast } from '@/components/toast';
+import { ThemedText } from '@/components/ui/themed-text';
+import { useToast } from '@/components/ui/toast';
 import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
 import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
+import { strings } from '@/strings';
 import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
+import type { CountryChoice } from '@/ctx/profile';
 import type { SocialProvider } from '@/session/social-sign-in';
+import { passkey } from '@/wallet/passkey';
 import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
 
 type SignInListener = () => void;
@@ -39,6 +45,7 @@ type SignInState = {
   openSignIn: (reason?: string) => void;
   check: () => Promise<boolean>;
   onSignIn: (listener: SignInListener) => () => void;
+  finishSignIn: () => Promise<void>;
 };
 
 const SignInContext = createContext<SignInState | null>(null);
@@ -70,21 +77,23 @@ export function SignInProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const finish = useCallback(async () => {
+  const finishSignIn = useCallback(async () => {
     setReason(null);
     await check();
     listeners.current.forEach((listener) => listener());
   }, [check]);
 
   const value = useMemo(
-    () => ({ signedIn, openSignIn, check, onSignIn }),
-    [signedIn, openSignIn, check, onSignIn],
+    () => ({ signedIn, openSignIn, check, onSignIn, finishSignIn }),
+    [signedIn, openSignIn, check, onSignIn, finishSignIn],
   );
 
   return (
     <SignInContext.Provider value={value}>
       {children}
-      {reason !== null && <SignInSheet reason={reason} onClose={() => setReason(null)} onSignedIn={finish} />}
+      {reason !== null && (
+        <SignInSheet reason={reason} onClose={() => setReason(null)} onSignedIn={finishSignIn} />
+      )}
     </SignInContext.Provider>
   );
 }
@@ -124,12 +133,10 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
     : (wide ? FadeInDown : SlideInDown).duration(Motion.transition).easing(Motion.easeOut);
   return (
     <Modal transparent visible animationType="none" onRequestClose={close} statusBarTranslucent>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={[styles.layer, wide ? styles.layerWide : styles.layerNarrow]}>
+      <KeyboardAvoid style={[styles.layer, wide ? styles.layerWide : styles.layerNarrow]}>
         <Animated.View entering={FadeIn.duration(Motion.state)} style={StyleSheet.absoluteFill}>
           <Pressable
-            style={styles.backdrop}
+            style={[styles.backdrop, { backgroundColor: theme.scrim }]}
             onPress={close}
             accessibilityRole="button"
             accessibilityLabel="Close sign in"
@@ -160,21 +167,44 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
             <SignInForm reason={reason} onAuthenticated={() => setAuthenticated(true)} onSignedIn={onSignedIn} />
           </ScrollView>
         </Animated.View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
     </Modal>
   );
 }
 
-type SignInStep = 'email' | 'code' | 'secure' | 'add-device';
+export function SignInScreen() {
+  const { finishSignIn } = useSignIn();
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <KeyboardAvoid style={[styles.layer, { backgroundColor: theme.background }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.screenBody,
+          { paddingTop: insets.top + Spacing.four, paddingBottom: insets.bottom + Spacing.four },
+        ]}
+        keyboardShouldPersistTaps="handled">
+        <View style={styles.screenContent}>
+          <Wordmark height={24} />
+          <SignInForm reason="" onAuthenticated={() => undefined} onSignedIn={finishSignIn} />
+        </View>
+      </ScrollView>
+    </KeyboardAvoid>
+  );
+}
+
+type SignInStep = 'email' | 'code' | 'country' | 'secure' | 'add-device';
 
 const stepNumbers: Record<SignInStep, number> = {
   email: 1,
   code: 2,
-  secure: 3,
-  'add-device': 3,
+  country: 3,
+  secure: 4,
+  'add-device': 4,
 };
 
-const stepCount = 3;
+const stepCount = 4;
+const resendCooldownMs = 30_000;
 
 type SignInFormProps = {
   reason: string;
@@ -187,8 +217,19 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
+  const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
+  const resendBlocked = codeSentAt !== null;
+  const { profile, setProfile, applyCountryChoice } = useProfile();
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
+
+  useEffect(() => {
+    if (codeSentAt === null) {
+      return;
+    }
+    const timer = setTimeout(() => setCodeSentAt(null), resendCooldownMs);
+    return () => clearTimeout(timer);
+  }, [codeSentAt]);
 
   const finish = () => {
     haptics.success();
@@ -197,12 +238,21 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
 
   const continueToWallet = async () => {
     onAuthenticated();
+    const loaded = await ctx.me();
+    if (loaded.needsSetup()) {
+      setProfile(loaded);
+      setStep('country');
+      return;
+    }
+    await openWallet();
+  };
+
+  const openWallet = async () => {
     try {
       if (await SmartWallet.load()) {
         finish();
         return;
       }
-      setStep('secure');
     } catch (error) {
       if (error instanceof UnlinkedDevice) {
         setUnlinkedWallet(error.wallet);
@@ -211,24 +261,43 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
       }
       throw error;
     }
+    setStep('secure');
+    if (Platform.OS !== 'web') {
+      await createWallet().catch((error: unknown) => {
+        if (!passkey.isUserCancel(error)) {
+          throw error;
+        }
+      });
+    }
   };
 
-  const secureAccount = () =>
+  const createWallet = async () => {
+    const profile = await ctx.me();
+    await SmartWallet.create(profile.passkeyLabel());
+    finish();
+  };
+
+  const chooseCountry = (choice: CountryChoice) =>
     run(async () => {
-      const profile = await ctx.me();
-      await SmartWallet.create(profile.passkeyLabel());
-      finish();
+      await applyCountryChoice(choice);
+      await openWallet();
     });
+
+  const secureAccount = () => run(createWallet);
 
   const requestCode = () =>
     run(async () => {
       await ctx.requestCode(email.trim());
+      setCodeSentAt(Date.now());
       setStep('code');
     });
 
   const verifyCode = () =>
     run(async () => {
-      if (!(await ctx.isSignedIn())) {
+      if (!(await ctx.isSignedInAs(email))) {
+        if (await ctx.isSignedIn()) {
+          await ctx.signOut();
+        }
         await ctx.verifyCode(email.trim(), code.trim());
       }
       await continueToWallet();
@@ -237,6 +306,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const resendCode = () =>
     run(async () => {
       await ctx.requestCode(email.trim());
+      setCodeSentAt(Date.now());
       toast('Code sent');
     });
 
@@ -248,11 +318,11 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
 
   const signInWith = (provider: SocialProvider) =>
     run(async () => {
-      const idToken = await socialSignIn.idToken(provider);
-      if (!idToken) {
+      const credential = await socialSignIn.credential(provider);
+      if (!credential) {
         return;
       }
-      await ctx.signInWithOAuth(provider, idToken);
+      await ctx.signInWithOAuth(provider, credential);
       await continueToWallet();
     });
 
@@ -269,11 +339,17 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
               {reason || 'Buy gift cards and earn cashback on every one.'}
             </ThemedText>
           </View>
-          <SocialSignInButtons providers={socialSignIn.providers()} disabled={busy} onPress={signInWith} />
+          <SocialSignInButtons
+            providers={socialSignIn.providers()}
+            appleAccountHint={socialSignIn.appleAccountHint()}
+            disabled={busy}
+            onPress={signInWith}
+          />
           <Field
             value={email}
             onChangeText={setEmail}
-            placeholder="Email"
+            label={strings.field.email}
+            disabled={busy}
             keyboardType="email-address"
             autoComplete="email"
             textContentType="emailAddress"
@@ -300,7 +376,8 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
           <Field
             value={code}
             onChangeText={setCode}
-            placeholder="Code"
+            label={strings.field.code}
+            disabled={busy}
             keyboardType="number-pad"
             autoComplete="one-time-code"
             textContentType="oneTimeCode"
@@ -316,12 +393,27 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
           />
           <View style={styles.row}>
             <View style={styles.rowItem}>
-              <Button label="Resend code" variant="quiet" onPress={resendCode} disabled={busy} />
+              <Button
+                label="Resend code"
+                variant="quiet"
+                onPress={resendCode}
+                disabled={busy || resendBlocked}
+              />
             </View>
             <View style={styles.rowItem}>
               <Button label="Change email" variant="quiet" onPress={changeEmail} disabled={busy} />
             </View>
           </View>
+        </Animated.View>
+      )}
+      {step === 'country' && profile && (
+        <Animated.View key="country" entering={FadeIn.duration(Motion.state)} style={styles.form}>
+          <View style={styles.intro}>
+            <ThemedText type="subtitle" accessibilityRole="header">
+              Where do you shop?
+            </ThemedText>
+          </View>
+          <CountryPicker profile={profile} busy={busy} onChoose={chooseCountry} />
         </Animated.View>
       )}
       {step === 'secure' && (
@@ -422,21 +514,20 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 27, 45, 0.32)',
   },
   sheetWide: {
     width: '100%',
     maxWidth: Layout.sheetWidth,
     maxHeight: '90%',
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     ...Elevation.raised,
   },
   sheetNarrow: {
     maxHeight: '92%',
-    borderTopLeftRadius: Radius.card,
-    borderTopRightRadius: Radius.card,
+    borderTopLeftRadius: Radius.large,
+    borderTopRightRadius: Radius.large,
     borderTopWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     ...Elevation.raised,
@@ -457,6 +548,17 @@ const styles = StyleSheet.create({
   },
   sheetBody: {
     padding: Spacing.four,
+  },
+  screenBody: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+  },
+  screenContent: {
+    width: '100%',
+    maxWidth: Layout.formMaxWidth,
+    alignSelf: 'center',
+    gap: Spacing.five,
   },
   form: {
     gap: Spacing.three,
@@ -490,7 +592,7 @@ const styles = StyleSheet.create({
   signInButton: {
     minHeight: 44,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },

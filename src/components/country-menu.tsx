@@ -4,9 +4,9 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PressScale } from '@/components/press-scale';
-import { ThemedText } from '@/components/themed-text';
-import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
+import { PressScale } from '@/components/ui/press-scale';
+import { ThemedText } from '@/components/ui/themed-text';
+import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Market } from '@/ctx/market';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -57,7 +57,7 @@ export function CountryMenu() {
       </View>
       <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
         <Pressable
-          style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}
+          style={[styles.backdrop, { backgroundColor: theme.scrim }, wide ? styles.backdropWide : styles.backdropNarrow]}
           onPress={() => setOpen(false)}
           accessibilityRole="button"
           accessibilityLabel="Close country list">
@@ -126,7 +126,6 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(10, 22, 64, 0.32)',
   },
   backdropWide: {},
   backdropNarrow: {
@@ -134,9 +133,9 @@ const styles = StyleSheet.create({
   },
   menu: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     paddingVertical: Spacing.two,
-    boxShadow: '0 16px 40px rgba(10, 22, 64, 0.24)',
+    ...Elevation.sheet,
   },
   menuTitle: {
     paddingHorizontal: Spacing.three,

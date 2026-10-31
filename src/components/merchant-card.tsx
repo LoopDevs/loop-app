@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { PressScale } from '@/components/press-scale';
-import { ThemedText } from '@/components/themed-text';
+import { PressScale } from '@/components/ui/press-scale';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Merchant } from '@/ctx/merchant';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -63,7 +64,8 @@ type CoverProps = {
 export function MerchantCover({ merchant, size }: CoverProps) {
   const theme = useTheme();
   const badgeSize = badgeSizes[size];
-  const tint = `hsl(${merchant.tileHue()}, 45%, 92%)`;
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const tint =`hsl(${merchant.tileHue()}, 45%, 92%)`;
   return (
     <View>
       <View
@@ -92,19 +94,24 @@ export function MerchantCover({ merchant, size }: CoverProps) {
             bottom: -badgeSize * badgeOverhang,
             left: size === 'hero' ? Spacing.four : Spacing.three,
             borderWidth: size === 'hero' ? 4 : 3,
+            borderColor: theme.backgroundElement,
+            backgroundColor: theme.backgroundElement,
           },
         ]}>
-        {merchant.logoUrl ? (
+        {merchant.logoUrl && merchant.logoUrl !== failedLogoUrl ? (
           <Image
             source={{ uri: merchant.logoUrl }}
-            contentFit="contain"
+            contentFit="cover"
             transition={Motion.state}
             style={styles.badgeImage}
             accessible={false}
+            onError={() => setFailedLogoUrl(merchant.logoUrl ?? null)}
           />
         ) : (
           <View style={[styles.badgeInitial, { backgroundColor: `hsl(${merchant.tileHue()}, 42%, 34%)` }]}>
-            <Text style={[styles.badgeInitialText, { fontSize: badgeSize * 0.38 }]}>{merchant.initial()}</Text>
+            <Text style={[styles.badgeInitialText, { fontSize: badgeSize * 0.38, color: theme.onInverse }]}>
+              {merchant.initial()}
+            </Text>
           </View>
         )}
       </View>
@@ -147,8 +154,8 @@ function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourit
         favourite.saved ? `Remove ${merchant.name} from favourites` : `Add ${merchant.name} to favourites`
       }
       accessibilityState={{ selected: favourite.saved }}>
-      <View style={styles.favouriteDisc}>
-        <SymbolView name={icon} size={20} tintColor={favourite.saved ? theme.accent : '#FFFFFF'} />
+      <View style={[styles.favouriteDisc, { backgroundColor: theme.scrim }]}>
+        <SymbolView name={icon} size={20} tintColor={favourite.saved ? theme.accent : theme.onInverse} />
       </View>
     </PressScale>
   );
@@ -359,25 +366,23 @@ const styles = StyleSheet.create({
   },
   cover: {
     aspectRatio: coverAspect,
-    borderRadius: Radius.media,
+    borderRadius: Radius.medium,
     overflow: 'hidden',
   },
   coverHero: {
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
   },
   badge: {
     position: 'absolute',
     borderRadius: Radius.pill,
-    borderColor: '#FFFFFF',
-    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     ...Elevation.badge,
   },
   badgeImage: {
-    width: '72%',
-    height: '72%',
+    width: '100%',
+    height: '100%',
   },
   badgeInitial: {
     position: 'absolute',
@@ -389,7 +394,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeInitialText: {
-    color: '#FFFFFF',
     fontFamily: FontFamily.bold,
   },
   pill: {
@@ -427,7 +431,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(15, 27, 45, 0.32)',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,3 +1,5 @@
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+
 export type SocialProvider = 'apple' | 'google';
 
 export type SignInMethod = 'email' | SocialProvider;
@@ -8,10 +10,18 @@ export type SocialSignInEnv = {
   googleIosClientId?: string;
 };
 
+export type SocialCredential = {
+  idToken: string;
+  nonce?: string;
+};
+
 export type OAuthLoginBody = {
   provider: SocialProvider;
   idToken: string;
+  nonce?: string;
 };
+
+const nonceByteLength = 32;
 
 const providerNames: Record<SocialProvider, string> = {
   apple: 'Apple',
@@ -37,7 +47,7 @@ export class SocialSignInConfig {
         if (!this.appleSignIn) {
           return [];
         }
-        return this.googleWebClientId && this.googleIosClientId ? ['apple', 'google'] : ['apple'];
+        return this.googleWebClientId && this.googleIosUrlScheme() ? ['apple', 'google'] : ['apple'];
       case 'android':
         return this.googleWebClientId ? ['google'] : [];
       default:
@@ -52,10 +62,27 @@ export class SocialSignInConfig {
     const prefix = this.googleIosClientId.slice(0, -googleClientIdSuffix.length);
     return prefix ? `com.googleusercontent.apps.${prefix}` : null;
   }
+
+  appleAccountHint(platform: string): string | null {
+    if (platform !== 'ios') {
+      return 'Signed up with Apple on an iPhone? Sign in with Apple on that iPhone, or enter the email you shared with Apple. If you hid your email, use the relay address shown in Settings on your iPhone.';
+    }
+    return this.appleSignIn
+      ? 'Signed up with Apple and hid your email? Use the relay address shown in Settings on your iPhone.'
+      : null;
+  }
 }
 
-export function oauthLoginBody(provider: SocialProvider, idToken: string): OAuthLoginBody {
-  return { provider, idToken };
+export function newSignInNonce(): string {
+  return bytesToHex(randomBytes(nonceByteLength));
+}
+
+export function oauthLoginBody(provider: SocialProvider, credential: SocialCredential): OAuthLoginBody {
+  const body: OAuthLoginBody = { provider, idToken: credential.idToken };
+  if (credential.nonce) {
+    body.nonce = credential.nonce;
+  }
+  return body;
 }
 
 export function socialProviderName(provider: SocialProvider): string {

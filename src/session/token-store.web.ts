@@ -1,3 +1,5 @@
+import { holdCriticalReload } from '@/updates/update-checker';
+
 const refreshTokenKey = 'ctx.refreshToken';
 const refreshLockName = 'ctx.refreshToken';
 
@@ -13,6 +15,7 @@ export const tokenStore = {
   },
   exclusive<T>(task: () => Promise<T>): Promise<T> {
     const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
-    return locks ? locks.request(refreshLockName, task) : task();
+    const held = () => holdCriticalReload(task);
+    return locks ? locks.request(refreshLockName, held) : held();
   },
 };

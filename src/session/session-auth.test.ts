@@ -7,6 +7,7 @@ import { SessionAuth, type RefreshTokenStore, type Send, type SendOptions } from
 type Call = {
   path: string;
   token: string | undefined;
+  idempotencyKey?: string;
 };
 
 type Route = (call: Call) => Promise<unknown>;
@@ -20,7 +21,11 @@ class FakeCtx {
   }
 
   send: Send = <T>(_method: string, path: string, _body?: unknown, options?: SendOptions): Promise<T> => {
-    const call = { path, token: options?.headers?.Authorization?.replace('Bearer ', '') };
+    const call = {
+      path,
+      token: options?.headers?.Authorization?.replace('Bearer ', ''),
+      idempotencyKey: options?.headers?.['Idempotency-Key'],
+    };
     this.calls.push(call);
     return this.route(call) as Promise<T>;
   };
@@ -88,6 +93,30 @@ test('a call made during sign-in waits for and uses the new tokens', async () =>
   assert.deepEqual(ctx.tokensFor('/me'), ['a-new']);
   assert.equal(ctx.refreshes(), 0);
   assert.equal(store.refreshToken, 'r-new');
+});
+
+test('a request retried after a refresh keeps its idempotency key', async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    if (token === 'a2') {
+      return { ok: true };
+    }
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null));
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  await auth.sessionRequest('POST', '/gift-cards', {}, true, { 'Idempotency-Key': 'order-1' });
+
+  assert.deepEqual(
+    ctx.calls.filter((call) => call.path === '/gift-cards').map((call) => [call.token, call.idempotencyKey]),
+    [
+      ['a1', 'order-1'],
+      ['a2', 'order-1'],
+    ],
+  );
 });
 
 test('a late 401 after a refresh retries with the new token without rotating again', async () => {
@@ -165,4 +194,109 @@ test('concurrent refreshes share one rotation', async () => {
   assert.equal(ctx.refreshes(), 1);
   assert.deepEqual(ctx.tokensFor('/one'), ['a2']);
   assert.deepEqual(ctx.tokensFor('/two'), ['a2']);
+});
+
+test('a refresh token CTX rejects is cleared and the session ends', async () => {
+  const ctx = new FakeCtx(async () => {
+    throw unauthorized();
+  });
+  const store = new MemoryStore('r1');
+  const auth = new SessionAuth(ctx.send, store);
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
+
+  assert.equal(ctx.refreshes(), 1);
+  assert.equal(store.refreshToken, null);
+  assert.equal(await auth.hasSession(), false);
+});
+
+test('a second 401 after the retry is thrown without another rotation', async () => {
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null));
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), (error) => error instanceof CtxError && error.status === 401);
+
+  assert.equal(ctx.refreshes(), 1);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1', 'a2']);
+});
+
+test('signing out during a refresh keeps the session ended', async () => {
+  const rotation = new Gate();
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      await rotation.opened;
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore('r1');
+  const auth = new SessionAuth(ctx.send, store);
+
+  const request = auth.sessionRequest('GET', '/me');
+  await new Promise((resolve) => setImmediate(resolve));
+  await auth.clearSession();
+  rotation.open();
+
+  await assert.rejects(request, /Sign in first/);
+  assert.equal(store.refreshToken, null);
+  assert.equal(await auth.hasSession(), false);
+  assert.deepEqual(ctx.tokensFor('/me'), []);
+});
+
+test('a rotation runs inside the store lock', async () => {
+  let locked = false;
+  const rotatedWhileLocked: boolean[] = [];
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      rotatedWhileLocked.push(locked);
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore('r1');
+  store.exclusive = async (task) => {
+    locked = true;
+    try {
+      return await task();
+    } finally {
+      locked = false;
+    }
+  };
+  const auth = new SessionAuth(ctx.send, store);
+
+  await auth.sessionRequest('GET', '/me');
+
+  assert.deepEqual(rotatedWhileLocked, [true]);
+});
+
+test('a 401 after another tab rotates the session retries with the token that tab stored', async () => {
+  const store = new MemoryStore(null);
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return store.refreshToken === 'r1'
+        ? { accessToken: 'a2', refreshToken: 'r2' }
+        : { accessToken: 'a4', refreshToken: 'r4' };
+    }
+    if (token === 'a2') {
+      store.refreshToken = 'r3';
+    }
+    if (token === 'a4') {
+      return { ok: true };
+    }
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, store);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  await auth.sessionRequest('GET', '/me');
+
+  assert.equal(ctx.refreshes(), 2);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1', 'a2', 'a4']);
+  assert.equal(store.refreshToken, 'r4');
 });

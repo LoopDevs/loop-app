@@ -13,7 +13,9 @@ export const payoutStatuses = [
 
 export type PayoutStatus = (typeof payoutStatuses)[number];
 
-export type PayoutKind = 'wallet' | 'savings';
+export const payoutKinds = ['wallet', 'savings'] as const;
+
+export type PayoutKind = (typeof payoutKinds)[number];
 
 export type PayoutJson = {
   id: string;
@@ -23,13 +25,22 @@ export type PayoutJson = {
   amount: string;
   address?: string;
   sentAmount?: string;
+  txHash?: string;
   retryAt?: string;
   reservationTransferId?: string;
   reversalTransferId?: string;
 };
 
 export class Payout {
-  static readonly terminalStatuses: readonly PayoutStatus[] = ['complete', 'rejected', 'cancelled'];
+  static readonly inFlightStatuses: readonly PayoutStatus[] = [
+    'pending-approval',
+    'approved',
+    'held',
+    'pending',
+    'submitted',
+    'queued',
+    'failed',
+  ];
 
   readonly id: string;
   readonly kind: PayoutKind;
@@ -38,6 +49,7 @@ export class Payout {
   readonly amount: string;
   readonly address?: string;
   readonly sentAmount?: string;
+  readonly txHash?: string;
   readonly retryAt?: string;
   readonly reservationTransferId?: string;
   readonly reversalTransferId?: string;
@@ -50,17 +62,24 @@ export class Payout {
     this.amount = json.amount;
     this.address = json.address;
     this.sentAmount = json.sentAmount;
+    this.txHash = json.txHash;
     this.retryAt = json.retryAt;
     this.reservationTransferId = json.reservationTransferId;
     this.reversalTransferId = json.reversalTransferId;
   }
 
-  isTerminal(): boolean {
-    return Payout.terminalStatuses.includes(this.status);
+  static isKnown(json: { status: string; kind?: string }): boolean {
+    const statuses: readonly string[] = payoutStatuses;
+    const kinds: readonly string[] = payoutKinds;
+    return statuses.includes(json.status) && (json.kind === undefined || kinds.includes(json.kind));
   }
 
   isInFlight(): boolean {
-    return !this.isTerminal() && Boolean(this.reservationTransferId) && !this.reversalTransferId;
+    return (
+      Payout.inFlightStatuses.includes(this.status) &&
+      Boolean(this.reservationTransferId) &&
+      !this.reversalTransferId
+    );
   }
 
   netAmount(): string {

@@ -4,17 +4,18 @@ import { useCallback, useRef, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 
-import { Notice } from '@/components/form';
+import { Notice } from '@/components/ui/form';
 import { useScrimScroll } from '@/components/home-panel';
-import { ListGroup, ListRow } from '@/components/list-row';
+import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { PageHeader } from '@/components/page-header';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { OrderRowsSkeleton } from '@/components/skeleton';
+import { SiteFooter } from '@/components/site-footer';
+import { OrderRowsSkeleton } from '@/components/ui/skeleton';
 import { SplitLayout } from '@/components/split-layout';
 import { PageWidth } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
+import { MaxContentWidth, ScrollEndInset, Spacing } from '@/constants/theme';
 import type { Account, OnTheWayItem } from '@/ctx/account';
 import { ctx, type CashbackDestination } from '@/ctx/client';
 import { Profile } from '@/ctx/profile';
@@ -35,7 +36,7 @@ const destinationCopy: Record<CashbackDestination, { label: string; detail: stri
   },
 };
 
-const savingsNote = `Loop savings holds ${Profile.currencyLabel(Savings.currency)}. Cashback in another currency stays with Loop; switch to Account to have it paid into your balance.`;
+const savingsNote = `Loop savings holds ${Profile.savingsLabel()}. Cashback in another currency stays with Loop; switch to Account to have it paid into your balance.`;
 
 const signInFailure = 'Sign in to see your cashback.';
 const destinationFooter = 'Your choice applies to future cashback. Cashback already paid out stays where it is.';
@@ -143,7 +144,7 @@ export default function CashbackScreen() {
       </ListGroup>
       {destinations.includes('savings') && (
         <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-          {savingsNote}
+          {savingsNote} {Savings.riskNote}
         </ThemedText>
       )}
       {message !== '' && <Notice message={message} />}
@@ -210,6 +211,7 @@ export default function CashbackScreen() {
             {onTheWaySection && <View style={styles.section}>{onTheWaySection}</View>}
           </>
         )}
+        <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
   );
@@ -236,11 +238,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
     gap: Spacing.four,
   },
   wideContent: {
-    paddingBottom: Spacing.six,
     gap: Spacing.five,
   },
   section: {

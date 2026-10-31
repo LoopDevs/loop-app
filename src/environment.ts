@@ -4,21 +4,43 @@ export type EnvironmentName = 'staging' | 'production';
 
 const definitions: Record<
   EnvironmentName,
-  { ctxApiUrl: string; stellarNetwork: StellarNetworkName; passkeyLabelSuffix: string }
+  {
+    ctxApiUrl: string;
+    ctxClientId: string;
+    stellarNetwork: StellarNetworkName;
+    passkeyLabelSuffix: string;
+    googleIosClientId: string;
+  }
 > = {
-  staging: { ctxApiUrl: 'https://staging.spend.ctx.com', stellarNetwork: 'testnet', passkeyLabelSuffix: ' (test)' },
-  production: { ctxApiUrl: 'https://spend.ctx.com', stellarNetwork: 'mainnet', passkeyLabelSuffix: '' },
+  staging: {
+    ctxApiUrl: 'https://staging.spend.ctx.com',
+    ctxClientId: 'loopapp',
+    stellarNetwork: 'testnet',
+    passkeyLabelSuffix: ' (test)',
+    googleIosClientId: '',
+  },
+  production: {
+    ctxApiUrl: 'https://spend.ctx.com',
+    ctxClientId: 'loopapp',
+    stellarNetwork: 'mainnet',
+    passkeyLabelSuffix: '',
+    googleIosClientId: '',
+  },
 };
 
 export class LoopEnvironment {
   readonly name: EnvironmentName;
   readonly ctxApiUrl: string;
+  readonly ctxClientId: string;
   readonly stellarNetwork: StellarNetworkName;
+  readonly googleIosClientId: string;
 
   private constructor(name: EnvironmentName) {
     this.name = name;
     this.ctxApiUrl = definitions[name].ctxApiUrl;
+    this.ctxClientId = definitions[name].ctxClientId;
     this.stellarNetwork = definitions[name].stellarNetwork;
+    this.googleIosClientId = definitions[name].googleIosClientId;
   }
 
   static resolve(value: string | undefined): LoopEnvironment {
@@ -31,6 +53,10 @@ export class LoopEnvironment {
 
   passkeyLabel(label: string): string {
     return `${label}${definitions[this.name].passkeyLabelSuffix}`;
+  }
+
+  storageKey(key: string): string {
+    return `${key}.${this.name}`;
   }
 }
 

@@ -1,20 +1,27 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/form';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Radius } from '@/constants/theme';
 import type { SocialProvider } from '@/session/social-sign-in';
 
 type SocialSignInButtonsProps = {
   providers: SocialProvider[];
+  appleAccountHint: string | null;
   disabled: boolean;
   onPress: (provider: SocialProvider) => void;
 };
 
-export function SocialSignInButtons({ providers, disabled, onPress }: SocialSignInButtonsProps) {
+export function SocialSignInButtons({ providers, appleAccountHint, disabled, onPress }: SocialSignInButtonsProps) {
   if (providers.length === 0) {
-    return null;
+    return (
+      appleAccountHint && (
+        <ThemedText type="small" themeColor="textSecondary">
+          {appleAccountHint}
+        </ThemedText>
+      )
+    );
   }
   return (
     <>
@@ -23,7 +30,7 @@ export function SocialSignInButtons({ providers, disabled, onPress }: SocialSign
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-            cornerRadius={Radius.control}
+            cornerRadius={Radius.medium}
             style={styles.appleButton}
             onPress={() => onPress('apple')}
           />
@@ -39,8 +46,7 @@ export function SocialSignInButtons({ providers, disabled, onPress }: SocialSign
       )}
       <ThemedText type="small" themeColor="textSecondary">
         Signed up with email before? Use the same email.
-        {providers.includes('apple') &&
-          ' Signed up with Apple and hid your email? Use the relay address shown in Settings on your iPhone.'}
+        {appleAccountHint && ` ${appleAccountHint}`}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         Or sign in with your email

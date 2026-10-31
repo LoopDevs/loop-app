@@ -21,9 +21,32 @@ export class Account {
   readonly wallet: BalanceJson[];
   readonly payouts: Payout[];
 
+  private readonly json: AccountJson;
+
   constructor(json: AccountJson) {
+    this.json = json;
     this.wallet = json.wallet ?? [];
     this.payouts = (json.payouts ?? []).map((payout) => new Payout(payout));
+  }
+
+  async withoutLandedPayouts(address: string, isLanded: (txHash: string) => Promise<boolean>): Promise<Account> {
+    const landed = await Promise.all(
+      this.payouts.map(
+        (payout) =>
+          payout.isInFlight() &&
+          payout.address === address &&
+          !!payout.txHash &&
+          isLanded(payout.txHash).catch(() => false),
+      ),
+    );
+    const landedIds = new Set(this.payouts.filter((_, index) => landed[index]).map((payout) => payout.id));
+    if (landedIds.size === 0) {
+      return this;
+    }
+    return new Account({
+      ...this.json,
+      payouts: (this.json.payouts ?? []).filter((payout) => !landedIds.has(payout.id)),
+    });
   }
 
   static hasAmount(amount: string): boolean {
@@ -53,6 +76,12 @@ export class Account {
     return [...balances, ...payouts];
   }
 
+  receivedCashback(currencies: ReadonlySet<string>): bigint {
+    return this.payouts
+      .filter((payout) => payout.status === 'complete' && currencies.has(payout.currency))
+      .reduce((sum, payout) => sum + units.parse(payout.netAmount()), 0n);
+  }
+
   private balanceItem(balance: BalanceJson, routing: CashbackRouting): OnTheWayItem {
     const item = {
       key: `balance:${balance.currency}`,
@@ -72,7 +101,7 @@ export class Account {
     if (routing.savesCashback()) {
       return {
         ...item,
-        label: `held: Loop savings holds ${Profile.currencyLabel(Savings.currency)}, switch to Account to receive it`,
+        label: `held: Loop savings holds ${Profile.savingsLabel()}, switch to Account to receive it`,
         heldBySavings: true,
       };
     }

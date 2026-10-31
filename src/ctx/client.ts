@@ -1,6 +1,14 @@
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import Constants from 'expo-constants';
+
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
+import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
+import { OrderKeys, OrderRequest } from '@/ctx/order-request';
+import { signInReportMessage } from '@/ctx/sign-in-report';
+import { OrderWake } from '@/ctx/order-wake';
+import { SocketEvent } from '@/ctx/socket-event';
 import { Deadline } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
 import type { PayoutJson } from '@/ctx/payout';
@@ -11,12 +19,14 @@ import { errorReporting } from '@/ops/error-reporting';
 import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
 import {
   oauthLoginBody,
+  type SocialCredential,
   signInRefusalMessage,
   type SignInMethod,
   type SocialProvider,
 } from '@/session/social-sign-in';
 import { tokenStore } from '@/session/token-store';
 import type { PaymentCurrency } from '@/stellar/network';
+import { holdCriticalReload, runningUpdateId } from '@/updates/update-checker';
 
 export { CtxError };
 
@@ -91,7 +101,7 @@ export type MerchantQuery = {
   name?: string;
   ids?: string[];
   category?: string;
-  order?: 'name';
+  order?: 'name' | '-discount,name';
   page?: number;
   perPage?: number;
 };
@@ -105,7 +115,7 @@ export type GiftCardOrderIn = {
   merchantId: string;
   fiatAmount: string;
   fiatCurrency: string;
-  cryptoCurrency: PaymentCurrency;
+  cryptoCurrency?: PaymentCurrency;
 };
 
 type GiftCardOrderBody = GiftCardOrderIn & {
@@ -123,9 +133,13 @@ export type GiftCard = {
   paymentId: string;
   paymentStatus: 'unpaid' | 'paid' | 'error' | 'refunded' | 'cancelled' | 'expired';
   paymentMethod: string;
+  paymentFiatAmount?: string;
+  paymentFiatCurrency?: string;
   paymentCryptoAmount?: string;
   paymentCryptoCurrency?: string;
+  paymentCryptoAddress?: string;
   paymentCryptoTxId?: string;
+  paymentUrl?: string;
   paymentUrlExpiration?: string;
   number?: string;
   pin?: string;
@@ -135,6 +149,7 @@ export type GiftCard = {
   barcodeUrl?: string;
   barcodeType?: string;
   info?: GiftCardInfo;
+  userDiscountBasisPoints?: number;
   cashbackAmount?: string;
   cashbackCurrency?: string;
   cashbackCredited?: boolean;
@@ -178,6 +193,7 @@ export type OAuthIdentityJson = {
 export type UserJson = {
   id: string;
   email?: string;
+  legalName?: string;
   country?: string;
   stableCurrency?: string;
   cashbackDestination?: CashbackDestination;
@@ -195,7 +211,8 @@ export type MeJson = {
 export type UserUpdate =
   | { country: string }
   | { stableCurrency: string }
-  | { cashbackDestination: CashbackDestination };
+  | { cashbackDestination: CashbackDestination }
+  | { legalName: string };
 
 export type BalanceJson = {
   currency: string;
@@ -223,11 +240,20 @@ export type SponsoredResult = {
 class CtxClient {
   private readonly auth = new SessionAuth(this.send.bind(this), tokenStore);
   private serviceStateListener: ServiceStateListener | null = null;
+  private readonly orderKeys = new OrderKeys(() => bytesToHex(randomBytes(16)));
 
   constructor(
     private readonly baseUrl: string,
     private readonly clientId: string,
+    private readonly catalogUrl: string,
+    private readonly appVersion: string,
   ) {}
+
+  static runningAppVersion(): string {
+    const version = Constants.expoConfig?.version ?? 'unknown';
+    const updateId = runningUpdateId();
+    return updateId ? `${version}+${updateId}` : version;
+  }
 
   onServiceState(listener: ServiceStateListener): () => void {
     this.serviceStateListener = listener;
@@ -243,6 +269,10 @@ class CtxClient {
     return { maintenance: maintenance === true };
   }
 
+  async readCatalogUncached(): Promise<void> {
+    await this.send('GET', '/merchants?enabled=1&perPage=1');
+  }
+
   hasSession(): Promise<boolean> {
     return this.auth.hasSession();
   }
@@ -251,18 +281,29 @@ class CtxClient {
     await this.signInRequest('email', '/login', { email });
   }
 
-  async verifyCode(email: string, code: string): Promise<void> {
-    await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+  verifyCode(email: string, code: string): Promise<void> {
+    return holdCriticalReload(async () => {
+      await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+    });
   }
 
-  async signInWithOAuth(provider: SocialProvider, idToken: string): Promise<void> {
-    await this.auth.startSession(
-      await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, idToken)),
-    );
+  signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
+    return holdCriticalReload(async () => {
+      await this.auth.startSession(
+        await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
+      );
+    });
   }
 
   async isSignedIn(): Promise<boolean> {
     return (await this.auth.accessToken()) !== null;
+  }
+
+  async isSignedInAs(email: string): Promise<boolean> {
+    if (!(await this.isSignedIn())) {
+      return false;
+    }
+    return (await this.me()).isFor(email);
   }
 
   async signOut(): Promise<void> {
@@ -283,7 +324,10 @@ class CtxClient {
   }
 
   async account(): Promise<Account> {
-    return new Account(await this.userRequest<AccountJson>('GET', '/account'));
+    const json = await this.userRequest('GET', '/account');
+    return new Account(
+      this.checked((value) => CtxResponse.account(value, (detail) => errorReporting.reportMessage(detail)), json),
+    );
   }
 
   async merchants({ country, name, ids, category, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
@@ -317,7 +361,7 @@ class CtxClient {
       return new Merchant(json);
     }
     const query = new URLSearchParams({ slug: idOrSlug });
-    const { result } = await this.send<{ result: MerchantJson[] | null }>('GET', `/merchants?${query}`);
+    const { result } = await this.catalogRequest<{ result: MerchantJson[] | null }>(`/merchants?${query}`);
     const json = result?.[0];
     if (!json) {
       throw new Error('We couldn’t find that gift card.');
@@ -325,13 +369,61 @@ class CtxClient {
     return new Merchant(json);
   }
 
-  orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
+  async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
-    return this.auth.sessionRequest('POST', '/gift-cards', body);
+    const idempotencyKey = this.orderKeys.keyFor(order);
+    const card = this.checked(
+      CtxResponse.giftCard,
+      await this.auth.sessionRequest('POST', '/gift-cards', body, true, { 'Idempotency-Key': idempotencyKey }),
+    );
+    if (!new OrderRequest(order).matches(card)) {
+      errorReporting.reportMessage('CTX order does not match the request');
+      throw new Error('CTX order does not match the request');
+    }
+    this.orderKeys.settle(idempotencyKey);
+    return card;
   }
 
-  giftCard(id: string): Promise<GiftCard> {
-    return this.auth.sessionRequest('GET', `/gift-cards/${id}`);
+  async giftCard(id: string): Promise<GiftCard> {
+    return this.checked(
+      CtxResponse.giftCard,
+      await this.auth.sessionRequest('GET', `/gift-cards/${encodeURIComponent(id)}`),
+    );
+  }
+
+  watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
+    return this.openSocket('giftcard', (raw) => {
+      if (OrderWake.concerns(raw, orderId)) {
+        wake.signal();
+      }
+    });
+  }
+
+  watchAccount(onChange: () => void): Promise<() => void> {
+    return this.openSocket('account', (raw) => {
+      if (SocketEvent.parse(raw)?.topic === 'account') {
+        onChange();
+      }
+    });
+  }
+
+  private async openSocket(topic: string, onMessage: (raw: unknown) => void): Promise<() => void> {
+    const accessToken = await this.auth.requireAccessToken();
+    const HeaderSocket = WebSocket as unknown as new (
+      url: string,
+      protocols: undefined,
+      options: { headers: Record<string, string> },
+    ) => WebSocket;
+    const socket = new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Client-Id': this.clientId,
+        'X-App-Version': this.appVersion,
+      },
+    });
+    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic }));
+    socket.onmessage = (message) => onMessage(message.data);
+    return () => socket.close();
   }
 
   async giftCards({ merchantId, status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
@@ -355,10 +447,17 @@ class CtxClient {
       query.set('perPage', String(perPage));
     }
     const { result, pagination } = await this.auth.sessionRequest<{
-      result: GiftCard[] | null;
+      result: unknown;
       pagination: Pagination;
     }>('GET', `/gift-cards?${query}`);
-    return { result: result ?? [], pagination };
+    return {
+      result: this.checked(
+        (cards) =>
+          CtxResponse.listOf('gift cards', cards, CtxResponse.giftCard, (detail) => errorReporting.reportMessage(detail)),
+        result,
+      ),
+      pagination,
+    };
   }
 
   async activeGiftCard(merchantId?: string): Promise<GiftCard | null> {
@@ -368,36 +467,64 @@ class CtxClient {
   }
 
   async wallets(): Promise<WalletLink[]> {
-    const { result } = await this.userRequest<{ result: WalletLink[] }>('GET', '/wallets');
-    return result;
+    const { result } = await this.userRequest<{ result: unknown }>('GET', '/wallets');
+    return this.checked(
+      (links) =>
+        CtxResponse.listOf('wallets', links, CtxResponse.walletLink, (detail) => errorReporting.reportMessage(detail)),
+      result,
+    );
   }
 
-  deployWallet(body: DeployWalletIn): Promise<WalletLink> {
-    return this.userRequest('POST', '/wallets/deploy', body);
+  async deployWallet(userId: string, body: DeployWalletIn): Promise<WalletLink> {
+    return this.checked(CtxResponse.walletLink, await this.requestAs(userId, 'POST', '/wallets/deploy', body));
   }
 
-  buildTransaction(walletId: string, intent: SmartWalletIntent): Promise<BuiltTransaction> {
-    return this.userRequest('POST', `/wallets/${walletId}/stellar/transaction`, intent);
+  async buildTransaction(walletId: string, intent: SmartWalletIntent): Promise<BuiltTransaction> {
+    return this.checked(
+      CtxResponse.builtTransaction,
+      await this.userRequest('POST', `/wallets/${walletId}/stellar/transaction`, intent),
+    );
   }
 
-  sponsorTransaction(
+  async sponsorTransaction(
     walletId: string,
     intent: SmartWalletIntent,
     signed: SignedTransaction,
   ): Promise<SponsoredResult> {
-    return this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed });
+    return this.checked(
+      CtxResponse.sponsored,
+      await this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed }),
+    );
+  }
+
+  private checked<T>(read: (value: unknown) => T, value: unknown): T {
+    try {
+      return read(value);
+    } catch (error) {
+      if (error instanceof UnexpectedResponse) {
+        errorReporting.reportMessage(error.detail);
+      }
+      throw error;
+    }
   }
 
   private async merchantRequest<T>(path: string): Promise<T> {
     if (await this.isSignedIn()) {
       return this.auth.sessionRequest<T>('GET', path);
     }
-    return this.send<T>('GET', path);
+    return this.catalogRequest<T>(path);
+  }
+
+  private catalogRequest<T>(path: string): Promise<T> {
+    return this.send<T>('GET', path, undefined, { baseUrl: this.catalogUrl });
   }
 
   private async userRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const accessToken = await this.auth.requireAccessToken();
-    return this.auth.sessionRequest<T>(method, `/users/${this.userIdFrom(accessToken)}${path}`, body);
+    return this.requestAs<T>(await this.userId(), method, path, body);
+  }
+
+  private requestAs<T>(userId: string, method: string, path: string, body?: unknown): Promise<T> {
+    return this.auth.sessionRequest<T>(method, `/users/${userId}${path}`, body);
   }
 
   private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {
@@ -405,6 +532,10 @@ class CtxClient {
       return await this.send<T>('POST', path, body);
     } catch (error) {
       const refusal = error instanceof CtxError ? signInRefusalMessage(method, error.errorName()) : null;
+      const unexpected = error instanceof CtxError ? signInReportMessage(method, error) : null;
+      if (unexpected) {
+        errorReporting.reportMessage(unexpected);
+      }
       throw refusal ? new Error(refusal, { cause: error }) : error;
     }
   }
@@ -418,14 +549,20 @@ class CtxClient {
     method: string,
     path: string,
     body?: unknown,
-    { headers = {}, reportServiceState = true, timeoutMs = Deadline.requestMs }: SendOptions = {},
+    {
+      headers = {},
+      reportServiceState = true,
+      timeoutMs = Deadline.requestMs,
+      baseUrl = this.baseUrl,
+    }: SendOptions & { baseUrl?: string } = {},
   ): Promise<T> {
     const response = await Deadline.run(timeoutMs, async (signal) => {
-      const answer = await fetch(`${this.baseUrl}${path}`, {
+      const answer = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
           'Content-Type': 'application/json',
           'X-Client-Id': this.clientId,
+          'X-App-Version': this.appVersion,
           ...headers,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -450,4 +587,9 @@ class CtxClient {
   }
 }
 
-export const ctx = new CtxClient(loopEnvironment.ctxApiUrl, process.env.EXPO_PUBLIC_CTX_CLIENT_ID ?? '');
+export const ctx = new CtxClient(
+  loopEnvironment.ctxApiUrl,
+  loopEnvironment.ctxClientId,
+  process.env.EXPO_PUBLIC_CATALOG_URL || loopEnvironment.ctxApiUrl,
+  CtxClient.runningAppVersion(),
+);

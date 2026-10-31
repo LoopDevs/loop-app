@@ -1,3 +1,4 @@
+import { loopLinks } from '../constants/loop-links.ts';
 import { offeredCurrencies, stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { Savings } from '../wallet/savings.ts';
 import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client.ts';
@@ -15,18 +16,24 @@ export type CountryChoice = {
 };
 
 export class Profile {
+  private readonly user: UserJson;
+  readonly id: string;
+  static readonly legalNameMessage = 'Enter your first and last name as they appear on your bank account.';
+
   readonly email?: string;
+  readonly legalName?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
   readonly cashbackDestination: CashbackDestination;
   readonly signInProviders: string[];
   readonly countries: string[];
   readonly stableCurrencies: string[];
-  private readonly user: UserJson;
 
   constructor(user: UserJson, company: MeJson['company']) {
     this.user = user;
+    this.id = user.id;
     this.email = user.email;
+    this.legalName = user.legalName;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
     this.cashbackDestination = user.cashbackDestination ?? 'account';
@@ -69,8 +76,43 @@ export class Profile {
     return null;
   }
 
+  isFor(email: string): boolean {
+    const own = this.email?.trim().toLowerCase();
+    return !!own && own === email.trim().toLowerCase();
+  }
+
+  deletionRequestMail(): string {
+    const body = [
+      'Please delete my Loop account.',
+      '',
+      `Account id: ${this.id}`,
+      `Account email: ${this.email ?? ''}`,
+    ].join('\n');
+    return loopLinks.supportMail('Delete my account', body);
+  }
+
   passkeyLabel(): string {
     return this.email?.trim() || 'Loop wallet';
+  }
+
+  hasBankIdentity(): boolean {
+    return Profile.legalNameProblem(this.legalName ?? '') === null;
+  }
+
+  legalNameUpdate(legalName: string): UserUpdate | null {
+    const trimmed = Profile.trimmedName(legalName);
+    if (Profile.legalNameProblem(trimmed) !== null || trimmed === this.legalName) {
+      return null;
+    }
+    return { legalName: trimmed };
+  }
+
+  static legalNameProblem(legalName: string): string | null {
+    return Profile.trimmedName(legalName).split(' ').length >= 2 ? null : Profile.legalNameMessage;
+  }
+
+  private static trimmedName(legalName: string): string {
+    return legalName.trim().split(/\s+/).filter(Boolean).join(' ');
   }
 
   savesCashback(): boolean {
@@ -105,6 +147,10 @@ export class Profile {
     } catch {
       return code;
     }
+  }
+
+  static savingsLabel(): string {
+    return Savings.currencies.map((currency) => Profile.currencyLabel(currency)).join(' and ');
   }
 
   static countryFlag(country: string): string {

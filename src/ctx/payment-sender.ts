@@ -21,6 +21,7 @@ export type PaymentLock = {
 export type SendOutcome = {
   state: PaymentState;
   resumed: boolean;
+  paidElsewhere?: boolean;
 };
 
 type PaymentRecords = Pick<SentPayments, 'get' | 'sending' | 'sent' | 'alreadySubmitted' | 'forget'>;

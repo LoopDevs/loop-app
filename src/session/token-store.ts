@@ -1,18 +1,27 @@
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const refreshTokenKey = 'ctx.refreshToken';
+import { loopEnvironment } from '@/environment';
+import { InstallScopedToken } from '@/session/install-scoped-token';
+import { secureTokenStorage } from '@/session/secure-token-storage';
+import { holdCriticalReload } from '@/updates/update-checker';
+
+const refreshToken = new InstallScopedToken(
+  secureTokenStorage,
+  AsyncStorage,
+  loopEnvironment.storageKey('ctx.refreshToken'),
+);
 
 export const tokenStore = {
   readRefreshToken(): Promise<string | null> {
-    return SecureStore.getItemAsync(refreshTokenKey);
+    return refreshToken.read();
   },
   writeRefreshToken(token: string): Promise<void> {
-    return SecureStore.setItemAsync(refreshTokenKey, token);
+    return refreshToken.write(token);
   },
   clear(): Promise<void> {
-    return SecureStore.deleteItemAsync(refreshTokenKey);
+    return refreshToken.clear();
   },
   exclusive<T>(task: () => Promise<T>): Promise<T> {
-    return task();
+    return holdCriticalReload(task);
   },
 };

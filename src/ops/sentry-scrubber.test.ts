@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import type { Breadcrumb, ErrorEvent } from '@sentry/react-native';
 
@@ -79,7 +82,7 @@ test('breadcrumbs keep method, status and a route template only', () => {
     },
   };
   const scrubbed = SentryScrubber.scrubBreadcrumb(breadcrumb);
-  assert.deepEqual(scrubbed.data, {
+  assert.deepEqual(scrubbed?.data, {
     method: 'GET',
     status_code: 200,
     url: '/users/:id/gift-cards/:id',
@@ -87,10 +90,75 @@ test('breadcrumbs keep method, status and a route template only', () => {
   assert.ok(!dump(scrubbed).includes('redeem'));
 });
 
+test('breadcrumbs outside the category list are dropped', () => {
+  for (const category of ['console', 'ui.click', 'ui.tap', 'touch', 'sentry.event', 'custom']) {
+    assert.equal(SentryScrubber.scrubBreadcrumb({ category, message: 'Bought Aerie gift card for $25.00' }), null);
+  }
+  assert.equal(SentryScrubber.scrubBreadcrumb({ message: 'no category' }), null);
+});
+
+test('breadcrumb free text and unlisted fields are dropped even in listed categories', () => {
+  const scrubbed = SentryScrubber.scrubBreadcrumb({
+    category: 'navigation',
+    type: 'navigation',
+    level: 'info',
+    timestamp: 1,
+    message: 'Opened Aerie $25.00',
+    event_id: 'abc',
+    data: { from: '/shop/aerie', to: '/wallet/ord_1', note: 'Aerie $25.00' },
+  });
+  assert.deepEqual(scrubbed, {
+    category: 'navigation',
+    type: 'navigation',
+    level: 'info',
+    timestamp: 1,
+    data: { from: '/shop/:id', to: '/wallet/:id' },
+  });
+});
+
+test('the app lifecycle state survives', () => {
+  const scrubbed = SentryScrubber.scrubBreadcrumb({ category: 'app.lifecycle', data: { state: 'background' } });
+  assert.deepEqual(scrubbed?.data, { state: 'background' });
+});
+
 test('route templates drop query strings and unknown segments', () => {
   assert.equal(SentryScrubber.routeTemplate('/users/abc/gift-cards/xyz?x=1'), '/users/:id/gift-cards/:id');
   assert.equal(SentryScrubber.routeTemplate('https://h.example.com/me#frag'), '/me');
   assert.equal(SentryScrubber.routeTemplate('/login/oauth'), '/login/oauth');
+});
+
+test('every static app route segment survives route templating', () => {
+  const segments = new Set<string>();
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const name = entry.name.replace(/\.tsx$/, '');
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name));
+      }
+      if (!/^[[(_+]/.test(name) && name !== 'index') {
+        segments.add(name);
+      }
+    }
+  };
+  walk(fileURLToPath(new URL('../app', import.meta.url)));
+  assert.ok(segments.has('shop'));
+  for (const segment of segments) {
+    assert.equal(SentryScrubber.routeTemplate(`/${segment}`), `/${segment}`, segment);
+  }
+  assert.equal(SentryScrubber.routeTemplate('/shop/aerie'), '/shop/:id');
+});
+
+test('a long run of address-like characters is scrubbed quickly', () => {
+  const started = performance.now();
+  SentryScrubber.scrubString('a.'.repeat(32 * 1024));
+  assert.ok(performance.now() - started < 50);
+});
+
+test('a string over the length cap is cut at a word boundary and marked filtered', () => {
+  const scrubbed = SentryScrubber.scrubString(`${'word '.repeat(1000)}${'x'.repeat(30)}`);
+  assert.ok(scrubbed.length <= 4096 + '[Filtered]'.length);
+  assert.ok(scrubbed.endsWith(' [Filtered]'));
+  assert.ok(!scrubbed.includes('x'));
 });
 
 test('events lose user, request data, headers and unlisted extra keys', () => {
@@ -134,11 +202,46 @@ test('events lose user, request data, headers and unlisted extra keys', () => {
 test('event breadcrumbs are scrubbed too', () => {
   const scrubbed = SentryScrubber.scrubEvent(
     eventWith({
-      breadcrumbs: [{ category: 'console', message: `signed ${signedXdr} for ${email}`, data: { arguments: [jwt] } }],
+      breadcrumbs: [
+        { category: 'console', message: `signed ${signedXdr} for ${email}`, data: { arguments: [jwt] } },
+        { category: 'http', message: `signed ${signedXdr} for ${email}`, data: { url: `/users/${email}`, arguments: [jwt] } },
+      ],
     }),
   );
+  assert.equal(scrubbed.breadcrumbs?.length, 1);
   const everything = dump(scrubbed.breadcrumbs);
   assert.ok(!everything.includes(signedXdr));
   assert.ok(!everything.includes(email));
   assert.ok(!everything.includes(jwt));
+});
+
+test('stack frames, mechanism and threads keep only code location fields', () => {
+  const frame = { filename: 'app.js', function: 'pay', lineno: 3, colno: 9, in_app: true, vars: { pin: '1234', email } };
+  const scrubbed = SentryScrubber.scrubEvent(
+    eventWith({
+      exception: {
+        values: [
+          {
+            type: 'Error',
+            value: 'failed',
+            stacktrace: { frames: [frame] },
+            mechanism: { type: 'onerror', handled: false, data: { redeemUrl } },
+          },
+        ],
+      },
+      threads: { values: [{ id: 1, stacktrace: { frames: [frame] } }] },
+      transaction: '/shop/aerie',
+      modules: { 'secret-module': '1.0.0' },
+      fingerprint: [`card ${email}`],
+    }),
+  );
+  const entry = scrubbed.exception?.values?.[0];
+  assert.deepEqual(entry?.stacktrace?.frames, [{ filename: 'app.js', function: 'pay', lineno: 3, colno: 9, in_app: true }]);
+  assert.deepEqual(entry?.mechanism, { type: 'onerror', handled: false });
+  assert.equal(scrubbed.transaction, undefined);
+  assert.equal(scrubbed.modules, undefined);
+  const everything = dump(scrubbed);
+  for (const leaked of [email, redeemUrl, '1234', 'aerie']) {
+    assert.ok(!everything.includes(leaked), `leaked ${leaked}`);
+  }
 });

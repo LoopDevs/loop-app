@@ -171,6 +171,56 @@ test('the destination follows the saved user', () => {
   assert.equal(saved.savesCashback(), true);
 });
 
+test('a profile is for its own email whatever the case or spacing', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', email: 'Ash@Example.com' }, company });
+  assert.equal(profile.isFor(' ash@example.com '), true);
+});
+
+test('a profile is not for a different email', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', email: 'ash@example.com' }, company });
+  assert.equal(profile.isFor('other@example.com'), false);
+});
+
+test('a profile without an email is for no email', () => {
+  assert.equal(Profile.fromMe(newUser).isFor(''), false);
+});
+
+test('the deletion request carries the account id and email to support', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', email: 'ash@example.com' }, company });
+  const mail = new URL(profile.deletionRequestMail());
+  assert.equal(mail.pathname, 'hello@loopfinance.io');
+  assert.equal(mail.searchParams.get('subject'), 'Delete my account');
+  const body = mail.searchParams.get('body') ?? '';
+  assert.match(body, /^Account id: u1$/m);
+  assert.match(body, /^Account email: ash@example\.com$/m);
+});
+
+test('a legal name needs a first and last name', () => {
+  assert.equal(Profile.legalNameProblem('Jane Doe'), null);
+  assert.equal(Profile.legalNameProblem('  Jane   Mary Doe '), null);
+  assert.equal(Profile.legalNameProblem('Jane'), Profile.legalNameMessage);
+  assert.equal(Profile.legalNameProblem('   '), Profile.legalNameMessage);
+});
+
+test('a user has a bank identity once a full legal name is saved', () => {
+  assert.equal(Profile.fromMe({ user: { id: 'u1' }, company }).hasBankIdentity(), false);
+  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane' }, company }).hasBankIdentity(), false);
+  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' }, company }).hasBankIdentity(), true);
+});
+
+test('a legal name update sends the tidied name and nothing when unchanged or incomplete', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' }, company });
+  assert.deepEqual(profile.legalNameUpdate('  Jane   Doe-Smith '), { legalName: 'Jane Doe-Smith' });
+  assert.equal(profile.legalNameUpdate(' Jane  Doe '), null);
+  assert.equal(profile.legalNameUpdate('Jane'), null);
+});
+
+test('a saved legal name carries over when the user is updated', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1' }, company }).withUser({ id: 'u1', legalName: 'Jane Doe' });
+  assert.equal(profile.legalName, 'Jane Doe');
+  assert.equal(profile.hasBankIdentity(), true);
+});
+
 test('an update applies locally and keeps the rest of the user', () => {
   const profile = Profile.fromMe({
     user: { id: 'u1', email: 'a@b.co', stableCurrency: 'XLM.USDC', oauthIdentities: [{ provider: 'apple' }] },

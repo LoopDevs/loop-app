@@ -7,23 +7,26 @@ import { useCallback, useRef, useState } from "react";
 import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 
+import { AccountDeletion } from "@/components/account-deletion";
+import { AddDevice } from "@/components/add-device";
 import { AppLockToggle } from "@/components/app-lock";
 import { CountryPicker } from "@/components/country-picker";
-import { Button, Notice } from "@/components/form";
+import { Button, Notice } from "@/components/ui/form";
 import { useScrimScroll } from "@/components/home-panel";
-import { ListGroup, ListRow } from "@/components/list-row";
+import { ListGroup, ListRow } from "@/components/ui/list-row";
 import { PageHeader } from "@/components/page-header";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
-import { OrderRowsSkeleton } from "@/components/skeleton";
+import { SiteFooter } from "@/components/site-footer";
+import { OrderRowsSkeleton } from "@/components/ui/skeleton";
 import { SplitLayout } from "@/components/split-layout";
 import { PageWidth } from "@/components/storefront";
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
+import { ThemedText } from "@/components/ui/themed-text";
+import { ThemedView } from "@/components/ui/themed-view";
 import { loopLinks } from "@/constants/loop-links";
 import {
-  BottomTabInset,
   MaxContentWidth,
   Radius,
+  ScrollEndInset,
   Spacing,
 } from "@/constants/theme";
 import { ctx } from "@/ctx/client";
@@ -33,6 +36,8 @@ import { useBusyAction } from "@/hooks/use-busy-action";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
+import { runningUpdateId } from "@/updates/update-checker";
+import { SmartWallet, UnlinkedDevice } from "@/wallet/smart-wallet";
 
 type SettingsSection = "account" | "help" | "data";
 
@@ -45,18 +50,26 @@ const sectionTitles: Record<SettingsSection, string> = {
 export default function SettingsScreen() {
   const router = useRouter();
   const { wide } = usePageLayout();
-  const { busy, message, run } = useBusyAction();
+  const { busy, message, run, load } = useBusyAction();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const { profile, setProfile, applyCountryChoice } = useProfile();
+  const { profile, setProfile, startProfileRead, applyCountryChoice } = useProfile();
   const [changingCountry, setChangingCountry] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [chosenSection, setChosenSection] =
     useState<SettingsSection>("account");
+  const [mailUnavailable, setMailUnavailable] = useState(false);
+  const openMail = (url: string) => {
+    Linking.openURL(url).catch(() => setMailUnavailable(true));
+  };
+  const mailFooter = mailUnavailable
+    ? `Couldn't open your email app. Email ${loopLinks.supportEmail}.`
+    : undefined;
   const profileUserId = useRef<string | null>(null);
   const { scrollRef, onScroll, scrim } = useScrimScroll();
 
   const loadAccount = useCallback(
     () =>
-      run(async () => {
+      load(async () => {
         const isSignedIn = await ctx.isSignedIn();
         setSignedIn(isSignedIn);
         const userId = isSignedIn ? await ctx.userId() : null;
@@ -64,11 +77,16 @@ export default function SettingsScreen() {
           profileUserId.current = userId;
           setProfile(null);
         }
-        if (userId) {
-          setProfile(await ctx.me());
+        if (!userId) {
+          return;
+        }
+        const commitProfile = startProfileRead();
+        const loaded = await ctx.me();
+        if (profileUserId.current === userId) {
+          commitProfile(loaded);
         }
       }),
-    [run, setProfile],
+    [load, setProfile, startProfileRead],
   );
 
   useFocusEffect(
@@ -86,14 +104,17 @@ export default function SettingsScreen() {
       setChangingCountry(false);
     });
 
-  const signOut = () =>
-    run(async () => {
-      await ctx.signOut();
-      setSignedIn(false);
-      setProfile(null);
-      await check();
-      router.navigate("/");
-    });
+  const endSession = async () => {
+    await ctx.signOut();
+    profileUserId.current = null;
+    setSignedIn(false);
+    setProfile(null);
+    setDeletingAccount(false);
+    router.navigate("/");
+    await check();
+  };
+
+  const signOut = () => run(endSession);
 
   const confirmSignOut = () => {
     const prompt = "You can sign back in any time with your email.";
@@ -123,7 +144,22 @@ export default function SettingsScreen() {
     </>
   );
 
-  if (!wide && profile && changingCountry) {
+  const accountDeletion = profile && (
+    <AccountDeletion
+      profile={profile}
+      onCancel={() => setDeletingAccount(false)}
+      onDeleted={endSession}
+    />
+  );
+
+  const narrowPage =
+    profile && changingCountry
+      ? { title: "Change country", content: countryPicker }
+      : profile && deletingAccount
+        ? { title: "Delete account", content: accountDeletion }
+        : null;
+
+  if (!wide && narrowPage) {
     return (
       <ThemedView style={styles.container}>
         <StatusBar style="dark" />
@@ -133,8 +169,9 @@ export default function SettingsScreen() {
           scrollEventThrottle={16}
           contentContainerStyle={styles.scroll}
         >
-          <PageHeader title="Change country" belowNavigationHeader />
-          <View style={styles.body}>{countryPicker}</View>
+          <PageHeader title={narrowPage.title} belowNavigationHeader />
+          <View style={styles.body}>{narrowPage.content}</View>
+          <SiteFooter />
         </Animated.ScrollView>
         <Animated.View pointerEvents="none" style={scrim} />
       </ThemedView>
@@ -221,13 +258,13 @@ export default function SettingsScreen() {
   );
 
   const helpGroup = (
-    <ListGroup title="Help and legal">
+    <ListGroup title="Help and legal" footer={mailFooter}>
       <ListRow
         label="Contact support"
         trailing="external"
         accessibilityRole="link"
         href={loopLinks.supportMail()}
-        onPress={() => Linking.openURL(loopLinks.supportMail())}
+        onPress={() => openMail(loopLinks.supportMail())}
       />
       <ListRow
         label="Terms"
@@ -247,24 +284,19 @@ export default function SettingsScreen() {
   );
 
   const dataGroup = profile && (
-    <ListGroup title="Your data" footer="Both open an email to Loop support.">
+    <ListGroup
+      title="Your data"
+      footer={`Request my data opens an email to ${loopLinks.supportEmail}.`}
+    >
       <ListRow
         label="Request my data"
         trailing="external"
-        onPress={() => Linking.openURL(loopLinks.supportMail("Data request"))}
+        onPress={() => openMail(loopLinks.supportMail("Data request"))}
       />
       <ListRow
         label="Delete my account"
         tone="danger"
-        trailing="external"
-        onPress={() =>
-          Linking.openURL(
-            loopLinks.supportMail(
-              "Delete my account",
-              `Please delete my Loop account.\n\nAccount email: ${profile.email ?? ""}`,
-            ),
-          )
-        }
+        onPress={() => setDeletingAccount(true)}
       />
     </ListGroup>
   );
@@ -281,6 +313,7 @@ export default function SettingsScreen() {
     </ListGroup>
   );
 
+  const updateId = runningUpdateId();
   const version = (
     <ThemedText
       type="small"
@@ -288,6 +321,7 @@ export default function SettingsScreen() {
       style={!wide && styles.version}
     >
       Version {Constants.expoConfig?.version}
+      {updateId && ` (${updateId})`}
     </ThemedText>
   );
 
@@ -307,11 +341,14 @@ export default function SettingsScreen() {
             {accountStatus}
             {accountGroups}
             <AppLockToggle />
+            {profile && <SpendingDevice />}
             {profile && errorText}
           </>
         ),
       help: helpGroup,
-      data: (
+      data: deletingAccount ? (
+        accountDeletion
+      ) : (
         <>
           {dataGroup}
           {errorText}
@@ -346,6 +383,7 @@ export default function SettingsScreen() {
                         onPress={() => {
                           setChosenSection(key);
                           setChangingCountry(false);
+                          setDeletingAccount(false);
                         }}
                       />
                     ))}
@@ -358,6 +396,7 @@ export default function SettingsScreen() {
               <View style={styles.wideSection}>{sectionContent}</View>
             </SplitLayout>
           </PageWidth>
+          <SiteFooter />
         </Animated.ScrollView>
       </ThemedView>
     );
@@ -381,15 +420,88 @@ export default function SettingsScreen() {
           {accountStatus}
           {accountGroups}
           <AppLockToggle />
+          {profile && <SpendingDevice />}
           {helpGroup}
           {dataGroup}
           {signOutGroup}
           {profile && errorText}
           {version}
         </View>
+        <SiteFooter />
       </Animated.ScrollView>
       <Animated.View pointerEvents="none" style={scrim} />
     </ThemedView>
+  );
+}
+
+type SpendingAccess = { wallet: SmartWallet; thisDevice: boolean };
+
+function SpendingDevice() {
+  const [access, setAccess] = useState<SpendingAccess | null>(null);
+  const [moving, setMoving] = useState(false);
+  const { message, load } = useBusyAction();
+
+  const readAccess = useCallback(
+    () =>
+      load(async () => {
+        const next = await SmartWallet.load().then(
+          (wallet): SpendingAccess | null =>
+            wallet && { wallet, thisDevice: true },
+          (error: unknown) => {
+            if (error instanceof UnlinkedDevice) {
+              return { wallet: error.wallet, thisDevice: false };
+            }
+            throw error;
+          },
+        );
+        setAccess(next);
+      }),
+    [load],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      readAccess();
+    }, [readAccess]),
+  );
+
+  if (message !== "") {
+    return (
+      <Notice
+        message={`Couldn't check which device can spend your balance. ${message}`}
+        actionLabel="Try again"
+        onAction={readAccess}
+      />
+    );
+  }
+  if (!access) {
+    return null;
+  }
+  if (moving && !access.thisDevice) {
+    return (
+      <AddDevice
+        wallet={access.wallet}
+        onAdded={async () => {
+          setMoving(false);
+          await readAccess();
+        }}
+      />
+    );
+  }
+  return (
+    <ListGroup
+      title="Devices"
+      footer="Only one device can spend your Loop balance. Setting up Loop on a new device turns spending off on the old one."
+    >
+      <ListRow
+        label="Spending"
+        value={access.thisDevice ? "This device" : "Another device"}
+        detail={
+          access.thisDevice ? undefined : "Lost that device? Move spending here."
+        }
+        onPress={access.thisDevice ? undefined : () => setMoving(true)}
+      />
+    </ListGroup>
   );
 }
 
@@ -435,7 +547,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   body: {
     width: "100%",
@@ -455,7 +568,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   wideScroll: {
-    paddingBottom: Spacing.six,
+    flexGrow: 1,
   },
   wideBody: {
     paddingTop: Spacing.five,
@@ -471,7 +584,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     borderLeftWidth: 3,
     borderColor: "transparent",
   },

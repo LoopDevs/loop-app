@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
-import { Button } from '@/components/form';
-import { MessageScreen } from '@/components/message-screen';
+import { Button } from '@/components/ui/form';
+import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
 import { ctx, CtxError } from '@/ctx/client';
 import {
   blockingServiceState,
@@ -39,6 +39,7 @@ export function ServiceUnavailable({ state, onRecovered }: Props) {
   return (
     <MessageScreen title={serviceStateMessages[state]} message={message}>
       <Button label="Try again" variant="primary" onPress={tryAgain} disabled={busy} />
+      <ContactSupportButton subject="Loop unavailable" />
     </MessageScreen>
   );
 }
@@ -47,5 +48,6 @@ const recoveryChecks: RecoveryChecks = {
   hasSession: () => ctx.hasSession(),
   maintenance: async () => (await ctx.status()).maintenance,
   readProfile: () => ctx.me(),
+  readCatalog: () => ctx.readCatalogUncached(),
   isBlocking: (error) => error instanceof CtxError && blockingServiceState(error.errorName()) !== null,
 };

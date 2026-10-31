@@ -1,7 +1,10 @@
 import '@/global.css';
 
+import { DefaultTheme } from 'expo-router';
 import { Platform } from 'react-native';
 import { Easing } from 'react-native-reanimated';
+
+import { SymbolFont } from '@/components/symbol-codepoints';
 
 export const Colors = {
   light: {
@@ -13,12 +16,14 @@ export const Colors = {
     textSecondary: '#5A6577',
     border: '#E6EAF0',
     borderStrong: '#D3DBE6',
-    accent: '#1A56DB',
-    accentSoft: '#EBF1FE',
+    accent: '#2F6BFF',
+    accentPressed: '#1A56DB',
+    accentSoft: '#EAF0FF',
     onAccent: '#FFFFFF',
     danger: '#B42318',
     success: '#11734B',
     chrome: 'rgba(255, 255, 255, 0.92)',
+    scrim: 'rgba(15, 27, 45, 0.32)',
     inverse: '#0F1B2D',
     onInverse: '#FFFFFF',
     onInverseMuted: '#C3CAD5',
@@ -27,6 +32,18 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light;
 
+export const NavigationTheme: typeof DefaultTheme = {
+  ...DefaultTheme,
+  colors: {
+    primary: Colors.light.accent,
+    background: Colors.light.background,
+    card: Colors.light.background,
+    text: Colors.light.text,
+    border: Colors.light.border,
+    notification: Colors.light.danger,
+  },
+};
+
 export const FontFamily = {
   regular: 'FiraSans-Regular',
   medium: 'FiraSans-Medium',
@@ -34,33 +51,28 @@ export const FontFamily = {
   bold: 'FiraSans-Bold',
 } as const;
 
-export const FontAssets = {
+const nativeFontAssets = {
   [FontFamily.regular]: require('@/assets/fonts/FiraSans-Regular.ttf'),
   [FontFamily.medium]: require('@/assets/fonts/FiraSans-Medium.ttf'),
   [FontFamily.semibold]: require('@/assets/fonts/FiraSans-SemiBold.ttf'),
   [FontFamily.bold]: require('@/assets/fonts/FiraSans-Bold.ttf'),
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    sans: FontFamily.regular,
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: FontFamily.regular,
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
+export const FontAssets =
+  Platform.OS === 'web'
+    ? {
+        ...nativeFontAssets,
+        [SymbolFont.family]: require('@/assets/fonts/MaterialSymbols-Loop.ttf'),
+      }
+    : nativeFontAssets;
+
+export const Fonts = {
+  mono: Platform.select({
+    ios: 'ui-monospace',
+    default: 'monospace',
+    web: 'var(--font-mono)',
+  }),
+};
 
 export const Spacing = {
   half: 2,
@@ -73,10 +85,9 @@ export const Spacing = {
 } as const;
 
 export const Radius = {
-  tile: 12,
-  control: 12,
-  media: 18,
-  card: 22,
+  small: 8,
+  medium: 14,
+  large: 22,
   pill: 999,
 } as const;
 
@@ -89,6 +100,9 @@ export const Elevation = {
   },
   badge: {
     boxShadow: '0 1px 2px rgba(15, 27, 45, 0.12), 0 2px 6px rgba(15, 27, 45, 0.1)',
+  },
+  sheet: {
+    boxShadow: '0 16px 40px rgba(15, 27, 45, 0.24)',
   },
 } as const;
 
@@ -103,13 +117,18 @@ export const Motion = {
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+export const ScrollEndInset = Platform.OS === 'web' ? 0 : BottomTabInset + Spacing.five;
 export const MaxContentWidth = 800;
 
-export const Layout = {
+export const PageMetrics = {
   wideMinWidth: 960,
   pageMaxWidth: 1240,
-  narrowGutter: Spacing.three,
-  wideGutter: Spacing.five,
+  narrowGutter: 16,
+  wideGutter: 32,
+} as const;
+
+export const Layout = {
+  ...PageMetrics,
   headerHeight: 72,
   formMaxWidth: 420,
   sheetWidth: 440,

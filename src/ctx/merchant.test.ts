@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { MerchantJson } from './client.ts';
-import { Merchant } from './merchant.ts';
+import { CashbackRate, Merchant } from './merchant.ts';
 
 const json: MerchantJson = {
   id: 'm1',
@@ -14,6 +14,13 @@ const json: MerchantJson = {
   denominationValues: ['5.00', '500.00'],
   userDiscount: 250,
 };
+
+test('a merchant is sold in its own country, or when the country is not known yet', () => {
+  const merchant = new Merchant(json);
+  assert.equal(merchant.isSoldIn('US'), true);
+  assert.equal(merchant.isSoldIn(undefined), true);
+  assert.equal(merchant.isSoldIn('GB'), false);
+});
 
 test('rate is the merchant default without an override', () => {
   assert.equal(new Merchant(json).cashbackBasisPoints(), 250);
@@ -37,6 +44,52 @@ test('an override of zero is a zero rate', () => {
 
 test('a link without an override keeps the merchant default', () => {
   assert.equal(new Merchant({ ...json, link: {} }).cashbackBasisPoints(), 250);
+  assert.equal(new Merchant({ ...json, link: { userDiscountOverride: true } }).cashbackBasisPoints(), 250);
+});
+
+test('the shown rate, label and estimate all come from the one resolved cashback rate', () => {
+  const merchant = new Merchant({
+    ...json,
+    link: { userDiscountOverride: true, userDiscountBasisPoints: 400 },
+  });
+  assert.equal(merchant.cashback.basisPoints, 400);
+  assert.equal(merchant.rateLabel('en-US'), '4% cashback');
+  assert.equal(merchant.cashbackEstimate('25.00', 'en-US'), '$1.00');
+});
+
+const order = {
+  status: 'unpaid' as const,
+  cardFiatAmount: '25.00',
+  cardFiatCurrency: 'USD',
+  userDiscountBasisPoints: 300,
+};
+
+test('an open order shows the cashback CTX quoted on it, not the merchant rate', () => {
+  assert.equal(CashbackRate.quotedFor(order, 'en-US'), 'About $0.75 (3%)');
+  assert.equal(CashbackRate.quotedFor({ ...order, status: 'paid' }, 'en-US'), 'About $0.75 (3%)');
+});
+
+test('an order without a quoted rate, a zero rate or a closed order shows no quote', () => {
+  assert.equal(CashbackRate.quotedFor({ ...order, userDiscountBasisPoints: undefined }, 'en-US'), null);
+  assert.equal(CashbackRate.quotedFor({ ...order, userDiscountBasisPoints: 0 }, 'en-US'), null);
+  assert.equal(CashbackRate.quotedFor({ ...order, status: 'fulfilled' }, 'en-US'), null);
+  assert.equal(CashbackRate.quotedFor({ ...order, status: 'expired' }, 'en-US'), null);
+});
+
+test('an order shows the cashback amount CTX set on it while that cashback still counts', () => {
+  const withAmount = { ...order, cashbackAmount: '0.80', cashbackCurrency: 'USD' };
+  assert.equal(CashbackRate.shownFor(withAmount, 'en-US'), '$0.80');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'paid' }, 'en-US'), '$0.80');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'fulfilled' }, 'en-US'), '$0.80');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'fulfilled', cashbackCredited: true }, 'en-US'), '$0.80');
+});
+
+test('a zero, reversed or closed-order cashback amount is not shown as cashback', () => {
+  const withAmount = { ...order, cashbackAmount: '0.80', cashbackCurrency: 'USD' };
+  assert.equal(CashbackRate.shownFor({ ...withAmount, cashbackAmount: '0' }, 'en-US'), 'About $0.75 (3%)');
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'fulfilled', cashbackReversed: true }, 'en-US'), null);
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'expired' }, 'en-US'), null);
+  assert.equal(CashbackRate.shownFor({ ...withAmount, status: 'rejected' }, 'en-US'), null);
 });
 
 test('rate label shows up to two decimals', () => {
@@ -154,6 +207,15 @@ test('search matches rank name starts, then word starts, then anywhere', () => {
   );
   assert.deepEqual(Merchant.matching(merchants, 'an', 1).map((merchant) => merchant.id), ['a']);
   assert.deepEqual(Merchant.matching(merchants, '  ', 10), []);
+});
+
+test('search ignores apostrophes and punctuation on either side', () => {
+  const named = (id: string, name: string) => new Merchant({ ...json, id, name });
+  const merchants = [named('a', "Macy's"), named('b', 'H&M'), named('c', 'Toys"R"Us')];
+  assert.deepEqual(Merchant.matching(merchants, 'macys', 10).map((merchant) => merchant.id), ['a']);
+  assert.deepEqual(Merchant.matching(merchants, 'macy’s', 10).map((merchant) => merchant.id), ['a']);
+  assert.deepEqual(Merchant.matching(merchants, 'h&m', 10).map((merchant) => merchant.id), ['b']);
+  assert.deepEqual(Merchant.matching(merchants, 'toysrus', 10).map((merchant) => merchant.id), ['c']);
 });
 
 test('quick amounts fall inside the range', () => {

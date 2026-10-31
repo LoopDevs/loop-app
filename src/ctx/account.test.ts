@@ -52,6 +52,14 @@ test('balances that display as zero are not listed', () => {
   assert.deepEqual(labels(json, nonSaver), ['XLM.USDC waiting for payout']);
 });
 
+test('an amount counts from one cent and malformed amounts do not count', () => {
+  assert.equal(Account.hasAmount('0.01'), true);
+  assert.equal(Account.hasAmount('12.5'), true);
+  for (const amount of ['0.0099999', '-5', '', 'abc', '1e3', 'NaN']) {
+    assert.equal(Account.hasAmount(amount), false, amount);
+  }
+});
+
 test('an XLM balance waits to convert whatever the destination', () => {
   const json = { wallet: [{ currency: 'XLM', amount: '3' }], payouts: [] };
   for (const routing of [saver, nonSaver]) {
@@ -103,6 +111,57 @@ test('a balance with a failed payout in its currency reads delayed', () => {
   }
 });
 
+test('an in-flight payout that has not failed leaves the balance label normal', () => {
+  for (const status of ['pending-approval', 'approved', 'held', 'pending', 'submitted', 'queued'] as const) {
+    const json = { wallet: [{ currency: 'XLM.USDC', amount: '1' }], payouts: [payout({ status })] };
+    assert.deepEqual(
+      new Account(json).onTheWay(nonSaver).map((item) => [item.key, item.label]),
+      [
+        ['balance:XLM.USDC', 'waiting for payout'],
+        ['payout:p1', status === 'queued' ? 'retrying' : 'on the way'],
+      ],
+      status,
+    );
+  }
+});
+
+test('a failed payout in another currency does not delay this balance', () => {
+  const json = {
+    wallet: [{ currency: 'XLM.USDC', amount: '1' }],
+    payouts: [payout({ status: 'failed', currency: 'XLM.EURC' })],
+  };
+  assert.deepEqual(labels(json, nonSaver), ['XLM.USDC waiting for payout', 'XLM.EURC delayed, contact support']);
+});
+
+test('a failed payout delays a savings balance and a held balance alike', () => {
+  const json = {
+    wallet: [
+      { currency: 'XLM.USDC', amount: '1' },
+      { currency: 'XLM.GBPLOOP', amount: '1' },
+    ],
+    payouts: [payout({ status: 'failed', currency: 'XLM.GBPLOOP' })],
+  };
+  assert.deepEqual(
+    new Account(json).onTheWay(profile('XLM.GBPLOOP', 'savings')).map((item) => [item.key, item.label, item.heldBySavings]),
+    [
+      ['balance:XLM.USDC', 'goes to savings when savings is available', false],
+      ['balance:XLM.GBPLOOP', 'delayed, contact support', false],
+      ['payout:p1', 'delayed, contact support', false],
+    ],
+  );
+});
+
+test('an in-flight payout is listed after the balances in the order CTX returned them', () => {
+  const json = {
+    wallet: [{ currency: 'XLM.USDC', amount: '1' }],
+    payouts: [payout({ id: 'p2', status: 'submitted' }), payout({ id: 'p1', status: 'queued' })],
+  };
+  assert.deepEqual(
+    new Account(json).onTheWay(nonSaver).map((item) => item.key),
+    ['balance:XLM.USDC', 'payout:p2', 'payout:p1'],
+  );
+});
+
 test('a queued savings payout is listed as retrying to savings', () => {
   const items = new Account({ wallet: [], payouts: [payout({ kind: 'savings', status: 'queued' })] }).onTheWay(saver);
   assert.deepEqual(
@@ -147,4 +206,57 @@ test('an unreversed failed payout is listed as delayed', () => {
 
 test('a missing wallet and payout list reads as empty', () => {
   assert.deepEqual(labels({ wallet: null, payouts: null }, nonSaver), []);
+});
+
+test('a payout whose transaction already landed leaves the account', async () => {
+  const account = new Account({
+    wallet: [],
+    payouts: [
+      payout({ id: 'landed', status: 'submitted', txHash: 'h1', address: 'GW' }),
+      payout({ id: 'pending', status: 'submitted', txHash: 'h2', address: 'GW' }),
+      payout({ id: 'unsent', address: 'GW' }),
+    ],
+  });
+  const checked: string[] = [];
+  const remaining = await account.withoutLandedPayouts('GW', async (txHash) => {
+    checked.push(txHash);
+    return txHash === 'h1';
+  });
+  assert.deepEqual(
+    remaining.payouts.map((kept) => kept.id),
+    ['pending', 'unsent'],
+  );
+  assert.deepEqual(checked, ['h1', 'h2']);
+});
+
+test('finished payouts are not looked up on the ledger', async () => {
+  const account = new Account({ wallet: [], payouts: [payout({ status: 'complete', txHash: 'h1' })] });
+  const remaining = await account.withoutLandedPayouts('GW', async () => assert.fail('looked up a finished payout'));
+  assert.equal(remaining, account);
+});
+
+test('payouts to another address are not looked up on the ledger', async () => {
+  const account = new Account({ wallet: [], payouts: [payout({ status: 'submitted', txHash: 'h1', address: 'GX' })] });
+  const remaining = await account.withoutLandedPayouts('GW', async () => assert.fail('looked up another address'));
+  assert.equal(remaining, account);
+});
+
+test('a failed ledger lookup keeps the payout and the rest of the account', async () => {
+  const account = new Account({
+    wallet: [],
+    payouts: [
+      payout({ id: 'unknown', status: 'submitted', txHash: 'bad', address: 'GW' }),
+      payout({ id: 'landed', status: 'submitted', txHash: 'h1', address: 'GW' }),
+    ],
+  });
+  const remaining = await account.withoutLandedPayouts('GW', async (txHash) => {
+    if (txHash === 'bad') {
+      throw new Error('rpc unavailable');
+    }
+    return true;
+  });
+  assert.deepEqual(
+    remaining.payouts.map((kept) => kept.id),
+    ['unknown'],
+  );
 });
