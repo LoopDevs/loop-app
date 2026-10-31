@@ -54,8 +54,8 @@ example
 /ios
 /android
 
-# audit reports and recipe
-/docs/audit/
+# audit reports; the recipe and its annex are tracked
+/docs/audit/audit-*/
 
 # design-tool state
 /.impeccable/
