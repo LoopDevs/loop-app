@@ -1,0 +1,21 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["926ZWMBLCZ.io.loopfinance.app"],
+        "components": [
+          { "/": "/shop" },
+          { "/": "/shop/*" },
+          { "/": "/wallet" },
+          { "/": "/wallet/*" },
+          { "/": "/savings" },
+          { "/": "/profile" },
+          { "/": "/profile/*" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["926ZWMBLCZ.io.loopfinance.app"]
+  }
+}

@@ -2,7 +2,7 @@ import type { Account } from '../ctx/account.ts';
 import type { Rates } from '../ctx/rates.ts';
 import { stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
-import { Savings } from './savings.ts';
+import { Savings, type SavingsBalance } from './savings.ts';
 import type { Balances } from './smart-wallet.ts';
 
 export type Holding = {
@@ -10,6 +10,15 @@ export type Holding = {
   amount: bigint;
   estimates?: Readonly<Record<string, string>>;
 };
+
+export type SavingsHolding = {
+  currency: PaymentCurrency;
+  amount: bigint;
+};
+
+type OnTheWayAccount = Pick<Account, 'wallet' | 'payouts' | 'onTheWay'>;
+
+type CashbackRouting = Parameters<Account['onTheWay']>[0];
 
 export type Coverage = { kind: 'wallet' } | { kind: 'savings'; fromSavings: bigint } | { kind: 'short' };
 
@@ -27,14 +36,29 @@ export class Holdings {
     this.rates = rates;
   }
 
-  static onTheWayFrom(account: Pick<Account, 'wallet' | 'payouts'>, address: string): Holding[] {
-    const ledger = account.wallet.flatMap(({ currency, amount, estimates }) =>
-      Holdings.holdingOf(currency, amount, estimates),
+  static onTheWayFrom(account: OnTheWayAccount, address: string, routing: CashbackRouting): Holding[] {
+    const held = new Set(
+      account
+        .onTheWay(routing)
+        .filter((item) => item.heldBySavings)
+        .map((item) => item.currency),
     );
+    const ledger = account.wallet
+      .filter(({ currency }) => !held.has(currency))
+      .flatMap(({ currency, amount, estimates }) => Holdings.holdingOf(currency, amount, estimates));
     const payouts = account.payouts
       .filter((payout) => payout.isInFlight() && payout.address === address)
       .flatMap((payout) => Holdings.holdingOf(payout.currency, payout.netAmount()));
     return [...ledger, ...payouts];
+  }
+
+  static paidElsewhere(account: Pick<Account, 'payouts'>, address: string): boolean {
+    return account.payouts.some(
+      (payout) =>
+        (payout.isInFlight() || payout.status === 'complete') &&
+        payout.address !== undefined &&
+        payout.address !== address,
+    );
   }
 
   static floorOf(value: bigint): bigint {
@@ -54,8 +78,17 @@ export class Holdings {
     return sum - (sum % Holdings.shownUnit);
   }
 
-  savings(): bigint {
-    return Holdings.floorOf(this.balances.vaultValue);
+  savings(currency: string): bigint {
+    const saved = this.balances.savings.find((balance) => balance.currency === currency);
+    return saved ? Holdings.floorOf(saved.value) : 0n;
+  }
+
+  withdrawableSavings(): SavingsBalance[] {
+    return this.balances.savings.filter(({ value }) => Holdings.floorOf(value) > 0n);
+  }
+
+  savingsHoldings(): SavingsHolding[] {
+    return this.withdrawableSavings().map(({ currency, value }) => ({ currency, amount: Holdings.floorOf(value) }));
   }
 
   inWallet(currency: string): bigint {
@@ -64,7 +97,7 @@ export class Holdings {
 
   spendable(currency: string): bigint {
     const inWallet = this.inWallet(currency);
-    return currency === Savings.currency ? inWallet + this.savings() : inWallet;
+    return Savings.takes(currency) ? inWallet + this.savings(currency) : inWallet;
   }
 
   coverage(currency: string, price: bigint): Coverage {
@@ -72,7 +105,7 @@ export class Holdings {
     if (inWallet >= price) {
       return { kind: 'wallet' };
     }
-    if (currency === Savings.currency &&this.spendable(currency) >= price) {
+    if (Savings.takes(currency) && this.spendable(currency) >= price) {
       return { kind: 'savings', fromSavings: price - inWallet };
     }
     return { kind: 'short' };
@@ -132,7 +165,7 @@ export class Holdings {
     const funded = currencies.filter((currency) => !refused.has(currency) && this.spendable(currency) > 0n);
     let best: { currency: PaymentCurrency; value: bigint } | null = null;
     for (const currency of funded) {
-      const value = this.valueIn(this.spendable(currency), currency, stable);
+      const value = this.rankingValue(currency, stable);
       if (value === null) {
         continue;
       }
@@ -143,10 +176,17 @@ export class Holdings {
     return (
       best?.currency ??
       funded.find((currency) => currency === stable) ??
-      funded.find((currency) => currency === Savings.currency) ??
+      funded.find((currency) => Savings.takes(currency)) ??
       funded[0] ??
       null
     );
+  }
+
+  private rankingValue(currency: PaymentCurrency, stable: string): bigint | null {
+    const amount = this.spendable(currency);
+    const value = this.valueIn(amount, currency, stable);
+    const comparableByPeg = stablePeg[currency] !== null && this.rates.usdPrice(currency) !== null;
+    return value ?? (comparableByPeg ? amount : null);
   }
 
   private estimateIn(holding: Holding, stable: string): bigint | null {

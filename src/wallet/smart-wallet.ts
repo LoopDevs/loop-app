@@ -1,17 +1,21 @@
-import { MuxedAccount, scValToNative, StrKey, xdr } from '@stellar/stellar-sdk';
+import { xdr } from '@stellar/stellar-sdk';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 import {
   ctx,
   type BuiltTransaction,
   type GiftCard,
   type SmartWalletIntent,
-  type SponsoredResult,
 } from '@/ctx/client';
+import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
-import { network, type Token } from '@/stellar/network';
+import type { TokenStorage } from '@/session/install-scoped-token';
+import { secureTokenStorage } from '@/session/secure-token-storage';
+import { network, type PaymentCurrency, type Token } from '@/stellar/network';
+import { holdCriticalReload } from '@/updates/update-checker';
 import { i128, soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { base64 } from '@/wallet/base64';
@@ -19,11 +23,12 @@ import { MissingDeviceSecret } from '@/wallet/device-key';
 import { DeviceLink } from '@/wallet/device-link';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
-import { passkey } from '@/wallet/passkey';
-import { PaymentSearch } from '@/wallet/payment-search';
-import { Savings } from '@/wallet/savings';
-import { SavingsTopUp, type SentWithdrawal } from '@/wallet/savings-top-up';
+import { passkey, type Passkey } from '@/wallet/passkey';
+import { PaymentSearch, type OrderPayment } from '@/wallet/payment-search';
+import { Savings, type SavingsBalance } from '@/wallet/savings';
+import { SavingsTopUp, type SentWithdrawal, type SignedWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
+import { WalletCreation } from '@/wallet/wallet-creation';
 import { WalletPin } from '@/wallet/wallet-pin';
 import { WalletRules, type ContextRule, type WalletCheck } from '@/wallet/wallet-rules';
 
@@ -34,8 +39,7 @@ export type TokenBalance = {
 
 export type Balances = {
   tokens: TokenBalance[];
-  vaultShares: bigint;
-  vaultValue: bigint;
+  savings: SavingsBalance[];
 };
 
 export class UnlinkedDevice extends Error {
@@ -54,9 +58,20 @@ export class SmartWallet {
     readonly userId: string,
   ) {}
 
+  private static readonly creation = new WalletCreation<SmartWallet>();
+  private static readonly pinStorage: TokenStorage = Platform.OS === 'web' ? AsyncStorage : secureTokenStorage;
+
+  private static pinFor(userId: string): WalletPin {
+    return new WalletPin(SmartWallet.pinStorage, userId, () => ctx.userId());
+  }
+
   static async load(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
-    const pin = new WalletPin(AsyncStorage, userId);
+    await SmartWallet.creation.settled(userId);
+    if ((await ctx.userId()) !== userId) {
+      return SmartWallet.load();
+    }
+    const pin = SmartWallet.pinFor(userId);
     const [links, pinned] = await Promise.all([ctx.wallets(), pin.read()]);
     const link = WalletPin.choose(links, pinned);
     if (!link) {
@@ -64,13 +79,14 @@ export class SmartWallet {
     }
     const wallet = new SmartWallet(link.id, link.address, userId);
     const checked = await wallet.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
-    if (checked.thisDevice === 'unlinked') {
+    if (!(await pin.admits(pinned, wallet.address, checked))) {
       throw new UnlinkedDevice(wallet);
     }
-    if (!pinned) {
-      await pin.write({ address: wallet.address, passkeyPublicKey: base64.encode(checked.passkeyPublicKey) });
-    }
     return wallet;
+  }
+
+  sameAs(other: SmartWallet | null): boolean {
+    return other !== null && other.id === this.id && other.address === this.address && other.userId === this.userId;
   }
 
   static unlessUnlinked(error: unknown): null {
@@ -80,15 +96,33 @@ export class SmartWallet {
     throw error;
   }
 
-  static async create(label: string): Promise<SmartWallet> {
-    const existing = await SmartWallet.load();
-    if (existing) {
-      return existing;
+  static async create(label: string): Promise<void> {
+    if (await SmartWallet.load()) {
+      return;
     }
     const userId = await ctx.userId();
+    const pin = SmartWallet.pinFor(userId);
     const devicePublicKey = await deviceSigner.create(userId);
-    const created = await passkey.create(label);
-    const link = await ctx.deployWallet({
+    await holdCriticalReload(async () => {
+      const created = await pin.passkeyForSetup(
+        () => passkey.create(label),
+        (challenge) => passkey.sign(challenge),
+      );
+      SmartWallet.creation.start(
+        userId,
+        holdCriticalReload(() => SmartWallet.deploy(pin, userId, devicePublicKey, created)),
+      );
+    });
+  }
+
+  private static async deploy(
+    pin: WalletPin,
+    userId: string,
+    devicePublicKey: string,
+    created: Passkey,
+  ): Promise<SmartWallet> {
+    await pin.requireCurrentUser();
+    const link = await ctx.deployWallet(userId, {
       credentialId: created.credentialId,
       passkeyPublicKey: base64.encode(created.publicKey),
       devicePublicKey,
@@ -97,7 +131,7 @@ export class SmartWallet {
     if ((await wallet.verify(created.publicKey)).thisDevice !== 'linked') {
       throw new Error('The new wallet does not hold this device key');
     }
-    await new WalletPin(AsyncStorage, userId).write({
+    await pin.write({
       address: wallet.address,
       passkeyPublicKey: base64.encode(created.publicKey),
     });
@@ -120,25 +154,24 @@ export class SmartWallet {
   }
 
   async addThisDevice(signal?: AbortSignal): Promise<void> {
-    const pin = new WalletPin(AsyncStorage, this.userId);
+    const pin = SmartWallet.pinFor(this.userId);
     const pinned = await pin.read();
     const checked = await this.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
-    const { passkeyPublicKey } = checked;
-    if (checked.thisDevice === 'linked') {
-      await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
-      return;
-    }
-    await this.deviceLink().add(this.address, passkeyPublicKey, signal);
-    await pin.write({ address: this.address, passkeyPublicKey: base64.encode(passkeyPublicKey) });
+    await pin.confirmThisDevice(
+      pinned,
+      this.address,
+      checked,
+      () => holdCriticalReload(() => this.deviceLink().add(this.address, checked.passkeyPublicKey, signal)),
+      (challenge) => passkey.sign(challenge),
+    );
   }
 
   async balances(): Promise<Balances> {
-    const [tokens, vaultShares] = await Promise.all([
+    const [tokens, savings] = await Promise.all([
       Promise.all(network.tokens.map((token) => this.tokenBalance(token))),
-      soroban.balance(network.usdcVault, this.address),
+      Promise.all(Savings.currencies.map((currency) => this.savingsBalance(currency))),
     ]);
-    const vaultValue = vaultShares === 0n ? 0n : await this.valueOf(vaultShares);
-    return { tokens, vaultShares, vaultValue };
+    return { tokens, savings };
   }
 
   async fundWithFriendbot(): Promise<void> {
@@ -151,64 +184,91 @@ export class SmartWallet {
     }
   }
 
-  async pay(giftCard: GiftCard): Promise<SignedPayment> {
+  async pay(giftCard: GiftCard, timer: BuyTimer | null = null): Promise<SignedPayment> {
     const token = network.tokens.find((candidate) => candidate.currency === giftCard.paymentCryptoCurrency);
     if (!token || !giftCard.paymentCryptoAmount) {
       throw new Error('The order has no Stellar price this wallet can pay');
     }
     const intent: SmartWalletIntent = { intent: 'pay', paymentId: giftCard.paymentId };
     const built = await ctx.buildTransaction(this.id, intent);
+    timer?.mark('payment built');
     const call = await this.verifiedCall(built);
-    const transfer = this.requirePayment(call, token, units.parse(giftCard.paymentCryptoAmount));
+    timer?.mark('ledger read');
+    const transfer = call.requirePayment({
+      from: this.address,
+      token,
+      amount: units.parse(giftCard.paymentCryptoAmount),
+      orderAddress: giftCard.paymentCryptoAddress,
+    });
     const signed = await this.sign(call);
+    timer?.mark('signed');
     return {
       expiryLedger: built.expiryLedger,
       transfer,
-      sponsor: () => ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed }),
+      sponsor: async () => {
+        const result = await ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed });
+        timer?.mark('submitted');
+        return result;
+      },
     };
   }
 
-  paymentLanded(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
-    return new PaymentSearch(soroban, this.address, network.payee).landed(token.contract, expected, expiryLedger);
+  paymentMissing(token: Token, expected: SignedTransfer | null, expiryLedger: number): Promise<boolean> {
+    return new PaymentSearch(soroban, this.address, network.payee).missing(token.contract, expected, expiryLedger);
   }
 
-  async withdraw(shares: bigint): Promise<SentWithdrawal> {
+  orderPaid(giftCard: GiftCard): Promise<OrderPayment> {
+    return new PaymentSearch(soroban, this.address, network.payee).orderPaid(giftCard, Date.now());
+  }
+
+  async transactionLanded(hash: string): Promise<boolean> {
+    return (await soroban.transaction(hash)).status === 'SUCCESS';
+  }
+
+  async withdraw(currency: PaymentCurrency, shares: bigint): Promise<SentWithdrawal> {
+    return SavingsTopUp.send(await this.signWithdrawal(currency, shares));
+  }
+
+  savingsTopUp(currency: PaymentCurrency): SavingsTopUp {
+    return new SavingsTopUp(
+      {
+        balances: () => this.balances(),
+        valueOf: (shares) => this.valueOf(currency, shares),
+        signWithdrawal: (shares) => this.signWithdrawal(currency, shares),
+      transaction: (hash) => soroban.transaction(hash),
+        latestLedger: () => soroban.latestLedger(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        now: () => Date.now(),
+      },
+      currency,
+    );
+  }
+
+  private signWithdrawal(currency: PaymentCurrency, shares: bigint): Promise<SignedWithdrawal> {
+    return holdCriticalReload(() => this.buildSignedWithdrawal(currency, shares));
+  }
+
+  private async buildSignedWithdrawal(currency: PaymentCurrency, shares: bigint): Promise<SignedWithdrawal> {
     const intent: SmartWalletIntent = {
       intent: 'vault_withdraw',
-      currency: Savings.currency,
+      currency,
       shares: shares.toString(),
     };
     const built = await ctx.buildTransaction(this.id, intent);
     const call = await this.verifiedCall(built);
-    await this.requireWithdraw(call, shares);
-    const result = await this.signAndSponsor(intent, built.transaction, call);
-    return { ...result, expiryLedger: built.expiryLedger };
-  }
-
-  savingsTopUp(): SavingsTopUp {
-    return new SavingsTopUp({
-      balances: () => this.balances(),
-      valueOf: (shares) => this.valueOf(shares),
-      withdraw: (shares) => this.withdraw(shares),
-      transaction: (hash) => soroban.transaction(hash),
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      now: () => Date.now(),
-    });
+    await this.requireWithdraw(call, currency, shares);
+    const signed = await this.sign(call);
+    return {
+      expiryLedger: built.expiryLedger,
+      sponsor: () =>
+        holdCriticalReload(() =>
+          ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed }),
+        ),
+    };
   }
 
   private async verifiedCall(built: BuiltTransaction): Promise<SponsoredCall> {
     return SponsoredCall.verify(built, this.address, [SmartWallet.deviceRuleId], await soroban.latestLedger());
-  }
-
-  private async signAndSponsor(
-    intent: SmartWalletIntent,
-    transaction: string,
-    call: SponsoredCall,
-  ): Promise<SponsoredResult> {
-    return ctx.sponsorTransaction(this.id, intent, {
-      transaction,
-      ...(await this.sign(call)),
-    });
   }
 
   private async sign(call: SponsoredCall): Promise<{ signature: string; devicePublicKey: string }> {
@@ -224,35 +284,6 @@ export class SmartWallet {
 
   private async tokenBalance(token: Token): Promise<TokenBalance> {
     return { token, amount: await soroban.balance(token.contract, this.address) };
-  }
-
-  private static accountOf(address: string): string {
-    if (StrKey.isValidMed25519PublicKey(address)) {
-      return MuxedAccount.fromAddress(address, '0').baseAccount().accountId();
-    }
-    return address;
-  }
-
-  private static muxedIdOf(address: string): bigint | undefined {
-    if (!StrKey.isValidMed25519PublicKey(address)) {
-      return undefined;
-    }
-    return BigInt(MuxedAccount.fromAddress(address, '0').id());
-  }
-
-  private requirePayment(call: SponsoredCall, token: Token, amount: bigint): SignedTransfer {
-    if (call.contract !== token.contract || call.method !== 'transfer' || call.args.length !== 3) {
-      throw new Error(`The transaction is not a ${token.symbol} transfer`);
-    }
-    const [from, to, transferred] = call.args.map((arg) => scValToNative(arg)) as [string, string, bigint];
-    if (from !== this.address || SmartWallet.accountOf(to) !== network.payee) {
-      throw new Error('The payment goes to an unexpected address');
-    }
-    if (transferred !== amount) {
-      throw new Error('The payment amount does not match the order');
-    }
-    const muxedId = SmartWallet.muxedIdOf(to);
-    return muxedId === undefined ? { amount } : { amount, muxedId };
   }
 
   private async rule(id: number): Promise<ContextRule> {
@@ -271,25 +302,21 @@ export class SmartWallet {
     });
   }
 
-  private async requireWithdraw(call: SponsoredCall, shares: bigint): Promise<void> {
-    if (call.contract !== network.usdcVault || call.method !== 'withdraw' || call.args.length !== 3) {
-      throw new Error('The transaction is not a withdrawal from the savings vault');
-    }
-    const [amount, minimums, from] = call.args.map((arg) => scValToNative(arg)) as [
-      bigint,
-      bigint[],
-      string,
-    ];
-    if (amount !== shares || from !== this.address || minimums.length !== 1) {
-      throw new Error('The withdrawal does not match the request');
-    }
-    if (minimums[0] < Holdings.floorOf(await this.valueOf(shares))) {
+  private async requireWithdraw(call: SponsoredCall, currency: PaymentCurrency, shares: bigint): Promise<void> {
+    const minimum = call.requireWithdrawal({ from: this.address, vault: Savings.vault(currency), shares });
+    if (minimum < Holdings.floorOf(await this.valueOf(currency, shares))) {
       throw new Error('The withdrawal minimum is too low');
     }
   }
 
-  private async valueOf(shares: bigint): Promise<bigint> {
-    const [value] = (await soroban.read(network.usdcVault, 'get_asset_amounts_per_shares', [
+  private async savingsBalance(currency: PaymentCurrency): Promise<SavingsBalance> {
+    const shares = await soroban.balance(Savings.vault(currency), this.address);
+    const value = shares === 0n ? 0n : await this.valueOf(currency, shares);
+    return { currency, shares, value };
+  }
+
+  private async valueOf(currency: PaymentCurrency, shares: bigint): Promise<bigint> {
+    const [value] = (await soroban.read(Savings.vault(currency), 'get_asset_amounts_per_shares', [
       i128(shares),
     ])) as bigint[];
     return value;

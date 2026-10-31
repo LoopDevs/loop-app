@@ -1,5 +1,5 @@
 import * as Linking from "expo-linking";
-import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useRef, useState } from "react";
@@ -16,24 +16,26 @@ import Animated, {
   useReducedMotion,
 } from "react-native-reanimated";
 
-import { Button, Notice } from "@/components/form";
+import { Button, Notice } from "@/components/ui/form";
 import { statusTone } from "@/components/gift-card-details";
-import { useScrimScroll } from "@/components/home-panel";
+import { useScrimScroll, useScrollToTopOnFocus } from "@/components/home-panel";
+import { MerchantDisc } from "@/components/merchant-mark";
 import { PageHeader } from "@/components/page-header";
-import { PressScale } from "@/components/press-scale";
+import { PressScale } from "@/components/ui/press-scale";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
-import { OrderRowsSkeleton } from "@/components/skeleton";
+import { SiteFooter } from "@/components/site-footer";
+import { OrderRowsSkeleton } from "@/components/ui/skeleton";
 import { SplitLayout } from "@/components/split-layout";
 import { PageWidth } from "@/components/storefront";
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
+import { ThemedText } from "@/components/ui/themed-text";
+import { ThemedView } from "@/components/ui/themed-view";
 import { WalletSummary } from "@/components/wallet-summary";
 import { loopLinks } from "@/constants/loop-links";
 import {
-  BottomTabInset,
   MaxContentWidth,
   Motion,
   Radius,
+  ScrollEndInset,
   Spacing,
 } from "@/constants/theme";
 import { ctx, type GiftCard } from "@/ctx/client";
@@ -44,6 +46,7 @@ import {
   unpaidStatuses,
 } from "@/ctx/gift-card-status";
 import { useAppRefresh } from "@/hooks/use-app-refresh";
+import { paymentCheck } from "@/hooks/use-sent-payment";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useSessionOwner } from "@/hooks/use-session-owner";
 import { useTheme } from "@/hooks/use-theme";
@@ -51,6 +54,7 @@ import { dates, money } from "@/money";
 
 const ordersPerPage = 20;
 const staggeredRows = 8;
+const tableMarkSize = 36;
 
 export default function WalletScreen() {
   const router = useRouter();
@@ -60,8 +64,11 @@ export default function WalletScreen() {
   const { scrollRef, onScroll, scrim } =
     useScrimScroll<FlatList<GiftCard>>();
   const wideScrollRef = useRef<ScrollViewInstance>(null);
-  useScrollToTop(wideScrollRef);
+  useScrollToTopOnFocus(wideScrollRef);
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
+  const [sentPaymentIds, setSentPaymentIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -81,6 +88,7 @@ export default function WalletScreen() {
         const { userId, changed } = await readSession();
         if (changed || !userId) {
           setGiftCards([]);
+          setSentPaymentIds(new Set());
           setPage(0);
           setPages(0);
           loadedPages.current = 0;
@@ -92,20 +100,46 @@ export default function WalletScreen() {
         if (keepPaged && !changed && loadedPages.current > 1) {
           return;
         }
-        const next = changed ? 1 : requested;
-        const { result, pagination } = await ctx.giftCards({
-          notStatus: unpaidStatuses,
-          perPage: ordersPerPage,
-          page: next,
-        });
-        const shownResult = result.filter(
-          (giftCard) => !isHiddenFromHistory(giftCard),
-        );
+        const first = changed ? 1 : requested;
+        let next = first;
+        let pageCount = 0;
+        const shownResult: GiftCard[] = [];
+        const sentIds: string[] = [];
+        const check = paymentCheck();
+        for (;;) {
+          const { result, pagination } = await ctx.giftCards({
+            notStatus: unpaidStatuses,
+            perPage: ordersPerPage,
+            page: next,
+          });
+          const payments = await Promise.all(
+            result.map((giftCard) => check.sent(giftCard)),
+          );
+          const sent = payments.map((payment) => payment.kind !== "notSent");
+          shownResult.push(
+            ...result.filter(
+              (giftCard, index) => !isHiddenFromHistory(giftCard, sent[index]),
+            ),
+          );
+          sentIds.push(
+            ...result
+              .filter((_, index) => sent[index])
+              .map((giftCard) => giftCard.paymentId),
+          );
+          pageCount = pagination.pages;
+          if (shownResult.length > 0 || next >= pageCount) {
+            break;
+          }
+          next += 1;
+        }
         setGiftCards((shown) =>
-          next === 1 ? shownResult : [...shown, ...shownResult],
+          first === 1 ? shownResult : [...shown, ...shownResult],
+        );
+        setSentPaymentIds(
+          (ids) => new Set(first === 1 ? sentIds : [...ids, ...sentIds]),
         );
         setPage(next);
-        setPages(pagination.pages);
+        setPages(pageCount);
         loadedPages.current = next;
       } catch (error) {
         setFailure({
@@ -205,13 +239,18 @@ export default function WalletScreen() {
             >
               {giftCardsTitle}
               {giftCards.length > 0 ? (
-                <OrdersTable giftCards={giftCards} onOpen={openOrder} />
+                <OrdersTable
+                  giftCards={giftCards}
+                  sentPaymentIds={sentPaymentIds}
+                  onOpen={openOrder}
+                />
               ) : (
                 <View style={styles.wideEmpty}>{emptyState}</View>
               )}
               {footer}
             </SplitLayout>
           </PageWidth>
+          <SiteFooter />
         </Animated.ScrollView>
       </ThemedView>
     );
@@ -248,7 +287,10 @@ export default function WalletScreen() {
         }
         ListEmptyComponent={<View style={styles.body}>{emptyState}</View>}
         ListFooterComponent={
-          <View style={[styles.body, styles.footer]}>{footer}</View>
+          <>
+            <View style={[styles.body, styles.footer]}>{footer}</View>
+            <SiteFooter />
+          </>
         }
         renderItem={({ item, index }) => (
           <Animated.View
@@ -265,7 +307,11 @@ export default function WalletScreen() {
             }
             style={styles.body}
           >
-            <OrderRow giftCard={item} onPress={() => openOrder(item)} />
+            <OrderRow
+              giftCard={item}
+              sent={sentPaymentIds.has(item.paymentId)}
+              onPress={() => openOrder(item)}
+            />
           </Animated.View>
         )}
       />
@@ -276,9 +322,11 @@ export default function WalletScreen() {
 
 function OrdersTable({
   giftCards,
+  sentPaymentIds,
   onOpen,
 }: {
   giftCards: GiftCard[];
+  sentPaymentIds: ReadonlySet<string>;
   onOpen: (giftCard: GiftCard) => void;
 }) {
   const theme = useTheme();
@@ -297,6 +345,7 @@ function OrdersTable({
           { borderColor: theme.border },
         ]}
       >
+        <View style={styles.markCell} />
         <ThemedText
           type="smallBold"
           themeColor="textSecondary"
@@ -331,6 +380,7 @@ function OrdersTable({
         <OrderTableRow
           key={giftCard.id}
           giftCard={giftCard}
+          sent={sentPaymentIds.has(giftCard.paymentId)}
           last={index === giftCards.length - 1}
           onPress={() => onOpen(giftCard)}
         />
@@ -341,16 +391,18 @@ function OrdersTable({
 
 function OrderTableRow({
   giftCard,
+  sent,
   last,
   onPress,
 }: {
   giftCard: GiftCard;
+  sent: boolean;
   last: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
-  const outcome = outcomeText(giftCard);
+  const outcome = outcomeText(giftCard, sent);
   const amount = money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency);
   const status = giftCardStatusLabel(giftCard.status);
   const tone = statusTone(giftCard.status);
@@ -369,6 +421,7 @@ function OrderTableRow({
         (hovered || pressed) && { backgroundColor: theme.backgroundSelected },
       ]}
     >
+      <MerchantDisc merchantId={giftCard.merchantId} name={giftCard.merchantName} size={tableMarkSize} />
       <View style={styles.cellMain}>
         <ThemedText type="smallBold">{giftCard.merchantName}</ThemedText>
         {outcome && (
@@ -431,13 +484,15 @@ function WalletHelp() {
 
 function OrderRow({
   giftCard,
+  sent,
   onPress,
 }: {
   giftCard: GiftCard;
+  sent: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const outcome = outcomeText(giftCard);
+  const outcome = outcomeText(giftCard, sent);
   const amount = money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency);
   const status = giftCardStatusLabel(giftCard.status);
   return (
@@ -450,6 +505,7 @@ function OrderRow({
         { backgroundColor: theme.backgroundElement, borderColor: theme.border },
       ]}
     >
+      <MerchantDisc merchantId={giftCard.merchantId} name={giftCard.merchantName} size={44} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <ThemedText type="smallBold" style={styles.rowName}>
@@ -536,7 +592,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    paddingBottom: ScrollEndInset,
     gap: Spacing.two,
   },
   body: {
@@ -555,7 +611,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   wideContent: {
-    paddingBottom: Spacing.six,
+    flexGrow: 1,
   },
   wideBody: {
     paddingTop: Spacing.five,
@@ -565,7 +621,7 @@ const styles = StyleSheet.create({
   },
   table: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     overflow: "hidden",
   },
   tableRow: {
@@ -584,6 +640,9 @@ const styles = StyleSheet.create({
   },
   lastRow: {
     borderBottomWidth: 0,
+  },
+  markCell: {
+    width: tableMarkSize,
   },
   cellMain: {
     flex: 2.2,
@@ -612,7 +671,7 @@ const styles = StyleSheet.create({
   },
   asideCard: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     padding: Spacing.four,
     gap: Spacing.two,
   },
@@ -623,7 +682,7 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     minHeight: 72,
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
   },
   rowMain: {
     flex: 1,
@@ -648,7 +707,7 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width: 48,
     height: 48,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: Spacing.one,

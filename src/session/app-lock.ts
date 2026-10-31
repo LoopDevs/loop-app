@@ -9,6 +9,8 @@ const deviceWithoutScreenLockErrors: readonly string[] = ['not_enrolled', 'passc
 const cancelErrors: readonly string[] = ['user_cancel', 'system_cancel', 'app_cancel'];
 
 export class AppLock {
+  static readonly notConfirmedMessage = "Couldn't confirm it's you. Try again.";
+
   readonly status: AppLockStatus;
   readonly backgroundedAt: number | null;
 
@@ -70,6 +72,10 @@ export class AppLock {
 
   isOn(): boolean {
     return this.status === 'locked' || this.status === 'unlocked';
+  }
+
+  closesBrowser(): boolean {
+    return this.status === 'locked';
   }
 
   covers(): boolean {

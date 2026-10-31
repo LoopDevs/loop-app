@@ -6,24 +6,29 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { useScrimScroll } from '@/components/home-panel';
 import { coverClearance, MerchantCover } from '@/components/merchant-card';
-import { PressScale } from '@/components/press-scale';
-import { Skeleton } from '@/components/skeleton';
+import { PressScale } from '@/components/ui/press-scale';
+import { Skeleton } from '@/components/ui/skeleton';
 import { SplitLayout } from '@/components/split-layout';
 import { SiteFooter } from '@/components/site-footer';
 import { cachedMerchant, loadMerchant, PageWidth, WhyShopWithLoop } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { BottomTabInset, FontFamily, Layout, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx } from '@/ctx/client';
+import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
+import type { Profile } from '@/ctx/profile';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useFavourites } from '@/hooks/use-favourites';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { SmartWallet } from '@/wallet/smart-wallet';
@@ -39,34 +44,44 @@ export default function MerchantScreen() {
   const router = useRouter();
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const { busy, message, run } = useBusyAction();
+  const { busy, message, load: track } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
 
   const loadedSlug = useRef<string | undefined>(undefined);
+  const readSession = useSessionOwner();
 
   const load = useCallback(
     () =>
-      run(async () => {
+      track(async () => {
         if (loadedSlug.current !== slug) {
           loadedSlug.current = slug;
           setMerchant(cachedMerchant(slug));
           setSignedIn(null);
         }
-        const isSignedIn = await ctx.isSignedIn();
-        const [loadedMerchant, loadedWallet] = await Promise.all([
-          loadMerchant(slug),
-          isSignedIn ? SmartWallet.load().catch(SmartWallet.unlessUnlinked) : null,
-        ]);
-        setMerchant(loadedMerchant);
-        setWallet(loadedWallet);
-        setSignedIn(isSignedIn);
+        const merchantLoad = loadMerchant(slug).then(setMerchant);
+        const walletLoad = readSession().then(async ({ userId, changed }) => {
+          if (changed) {
+            setWallet(null);
+            setProfile(null);
+            setSignedIn(null);
+          }
+          const isSignedIn = userId !== null;
+          const [loadedWallet, loadedProfile] = isSignedIn
+            ? await Promise.all([SmartWallet.load().catch(SmartWallet.unlessUnlinked), ctx.me()])
+            : [null, null];
+          setWallet((current) => (loadedWallet?.sameAs(current) ? current : loadedWallet));
+          setProfile(loadedProfile);
+          setSignedIn(isSignedIn);
+        });
+        await Promise.all([merchantLoad, walletLoad]);
       }),
-    [run, slug],
+    [track, slug, readSession],
   );
 
   useFocusEffect(
@@ -82,7 +97,7 @@ export default function MerchantScreen() {
   if (!merchant) {
     return (
       <ThemedView style={styles.container}>
-        <StatusBar style="auto" />
+        <StatusBar style="dark" />
         <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scroll}>
           <MerchantLayout
             wide={wide}
@@ -98,10 +113,23 @@ export default function MerchantScreen() {
   const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and earn ${merchant.rateLabel()}` : '';
   const cardStyle = [styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
-  const buyCard = wallet ? (
-    <GiftCardPurchase merchant={merchant} wallet={wallet} />
+  const rail = BankPayment.rail(merchant.currency);
+  const payCopy = rail
+    ? `Pay from your ${rail.bankLabel} or your Loop wallet.`
+    : 'Pay from your Loop wallet.';
+  const buyCard = wallet && profile && !merchant.isSoldIn(profile.country) ? (
+    <View style={cardStyle}>
+      <ThemedText type="heading">Not sold in your country</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {merchant.name} gift cards are sold in {Market.countryName(merchant.country)}. Change your country in Settings to
+        buy one.
+      </ThemedText>
+      <Button label="Open Settings" variant="secondary" onPress={() => router.navigate('/profile/settings')} />
+    </View>
+  ) : wallet && profile ? (
+    <GiftCardPurchase merchant={merchant} wallet={wallet} profile={profile} onProfile={setProfile} />
   ) : signedIn === null ? (
-    <BuySkeleton />
+    retry ? null : <BuySkeleton />
   ) : signedIn ? (
     <View style={cardStyle}>
       <ThemedText type="heading">Finish setting up Loop</ThemedText>
@@ -114,7 +142,7 @@ export default function MerchantScreen() {
     <View style={cardStyle}>
       <ThemedText type="heading">Buy a {merchant.name} gift card</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Sign in to choose an amount{earnLine}. Pay with XLM, USDC or EURC.
+        Sign in to choose an amount{earnLine}. {payCopy}
       </ThemedText>
       <Button
         label="Sign in to buy"
@@ -126,8 +154,9 @@ export default function MerchantScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Stack.Screen options={{ title: merchant.name }} />
+      <KeyboardAvoid>
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -160,6 +189,7 @@ export default function MerchantScreen() {
         <WhyShopWithLoop />
         <SiteFooter />
       </Animated.ScrollView>
+      </KeyboardAvoid>
     </ThemedView>
   );
 }
@@ -445,7 +475,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingTop: Spacing.two,
-    paddingBottom: BottomTabInset + Spacing.five,
+    paddingBottom: ScrollEndInset,
   },
   narrowPage: {
     width: '100%',
@@ -480,7 +510,7 @@ const styles = StyleSheet.create({
   },
   coverPlaceholder: {
     aspectRatio: coverAspect,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
   },
   heroText: {
     gap: Spacing.two,
@@ -524,7 +554,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     padding: Spacing.three,
     gap: Spacing.three,
   },
@@ -544,7 +574,7 @@ const styles = StyleSheet.create({
   factIcon: {
     width: 44,
     height: 44,
-    borderRadius: Radius.tile,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },

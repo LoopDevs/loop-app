@@ -14,6 +14,10 @@ test('above maximum names the maximum', () => {
   assert.equal(amountErrorMessage('ErrAmountAboveMaximum', range), 'Maximum is 500.00 GBP');
 });
 
+test('above maximum names the largest fixed denomination', () => {
+  assert.equal(amountErrorMessage('ErrAmountAboveMaximum', fixed), 'Maximum is 50 USD');
+});
+
 test('invalid denomination lists the choices', () => {
   assert.equal(amountErrorMessage('ErrAmountDenominationInvalid', fixed), 'Choose one of 10, 25, 50');
 });

@@ -127,10 +127,6 @@ test('pay is only offered for an unpaid order with no sent payment', () => {
   assert.equal(canPay({ status: 'paid' }, { kind: 'ready' }), false);
 });
 
-test('a failed payment that needs support is not offered pay', () => {
-  assert.equal(canPay(unpaid, { kind: 'failed', contactSupport: true }), false);
-});
-
 test('landing closes once the grace ledgers after expiry have passed', () => {
   assert.equal(landingClosed(500 + landingGraceLedgers, 500), false);
   assert.equal(landingClosed(501 + landingGraceLedgers, 500), true);

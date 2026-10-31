@@ -1,17 +1,17 @@
-import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Children, Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Notice } from '@/components/form';
-import { PressScale } from '@/components/press-scale';
-import { Skeleton } from '@/components/skeleton';
-import { cachedMerchant } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
+import { MerchantDisc } from '@/components/merchant-mark';
+import { Notice } from '@/components/ui/form';
+import { PressScale } from '@/components/ui/press-scale';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { Merchant } from '@/ctx/merchant';
+import { Rates } from '@/ctx/rates';
 import { errorMessage } from '@/hooks/use-busy-action';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,15 +19,9 @@ import { dates, money } from '@/money';
 import { stablePeg, type PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { haptics } from '@/native/haptics';
-import { Savings } from '@/wallet/savings';
+import type { SavingsHolding } from '@/wallet/holdings';
 
 const recentShown = 4;
-
-const pegNames: Record<'USD' | 'EUR' | 'GBP', { name: string; symbol: string }> = {
-  USD: { name: 'US dollars', symbol: '$' },
-  EUR: { name: 'Euros', symbol: '€' },
-  GBP: { name: 'British pounds', symbol: '£' },
-};
 
 const amountStyle = { fontVariant: ['tabular-nums' as const] };
 
@@ -127,87 +121,12 @@ function Disc({ children, ground }: { children: ReactNode; ground?: string }) {
   return <View style={[styles.disc, { backgroundColor: ground ?? theme.backgroundSelected }]}>{children}</View>;
 }
 
-function SymbolDisc({ symbol }: { symbol: string }) {
-  const theme = useTheme();
-  return (
-    <Disc>
-      <Text style={[styles.discSymbol, { color: theme.accent }]} maxFontSizeMultiplier={1.2}>
-        {symbol}
-      </Text>
-    </Disc>
-  );
-}
-
 function IconDisc({ icon }: { icon: SymbolViewProps['name'] }) {
   const theme = useTheme();
   return (
     <Disc>
       <SymbolView name={icon} size={20} tintColor={theme.accent} />
     </Disc>
-  );
-}
-
-export function SpendingBalances({ view }: { view: HoldingsView | null }) {
-  if (!view) {
-    return (
-      <OverviewCard title="Spending balance">
-        <RowSkeleton />
-      </OverviewCard>
-    );
-  }
-  const { holdings, stable } = view;
-  const stableCode = stable && Object.hasOwn(stablePeg, stable) ? stablePeg[stable as PaymentCurrency] : stable;
-  const pegged = holdings.balances.tokens.filter(
-    ({ token, amount }) =>
-      stablePeg[token.currency] !== null && (amount > 0n || stablePeg[token.currency] === stableCode),
-  );
-  const others = holdings.balances.tokens.filter(
-    ({ token, amount }) => stablePeg[token.currency] === null && amount > 0n,
-  );
-  const otherValue =
-    stable && others.length > 0
-      ? others.reduce<bigint | null>((sum, { token, amount }) => {
-          const value = holdings.valueIn(amount, token.currency, stable);
-          return sum === null || value === null ? null : sum + value;
-        }, 0n)
-      : null;
-  const rows =
-    pegged.length > 0 || otherValue !== null
-      ? pegged
-      : holdings.balances.tokens.filter(({ token }) => stablePeg[token.currency] !== null).slice(0, 1);
-  return (
-    <OverviewCard title="Spending balance">
-      {rows.map(({ token, amount }) => {
-        const peg = stablePeg[token.currency];
-        const named = peg ? pegNames[peg] : null;
-        return (
-          <MoneyRow
-            key={token.currency}
-            leading={<SymbolDisc symbol={named?.symbol ?? '¤'} />}
-            label={named?.name ?? 'Balance'}
-            detail={peg === stableCode ? 'Main balance' : 'Ready to spend'}
-            amount={money.token(amount, token.currency)}
-            amountDetail={peg ?? undefined}
-          />
-        );
-      })}
-      {otherValue !== null && stable && (
-        <MoneyRow
-          leading={
-            <IconDisc
-              icon={{
-                ios: 'arrow.triangle.2.circlepath',
-                android: 'sync',
-                web: 'sync',
-              }}
-            />
-          }
-          label="Other money"
-          detail="Valued at today's rate"
-          amount={money.ctx(units.format(otherValue, units.decimals), stable)}
-        />
-      )}
-    </OverviewCard>
   );
 }
 
@@ -227,7 +146,7 @@ export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: 
     );
   }
   const { holdings, stable } = view;
-  const savings = holdings.savings();
+  const savings = holdings.savingsHoldings();
   const onTheWay = stable ? holdings.onTheWayIn(stable) : null;
   return (
     <>
@@ -239,13 +158,13 @@ export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: 
         withdrawDisabled={withdrawDisabled}
         onCashback={onCashback}
       />
-      {savings === 0n && <SavingsPromo onPress={onCashback} />}
+      {savings.length === 0 && <SavingsPromo onPress={onCashback} />}
     </>
   );
 }
 
 type SavingsOverviewProps = {
-  savings: bigint;
+  savings: SavingsHolding[];
   onTheWay: bigint | null;
   stable: HoldingsView['stable'];
   onWithdraw: () => void;
@@ -262,11 +181,16 @@ function SavingsOverview({
   onCashback,
 }: SavingsOverviewProps) {
   const theme = useTheme();
+  const leaf = (
+    <Disc ground={theme.accent}>
+      <SymbolView name={{ ios: 'leaf', android: 'savings', web: 'savings' }} size={20} tintColor={theme.onAccent} />
+    </Disc>
+  );
   return (
     <OverviewCard
       title="Savings"
       accessory={
-        savings > 0n ? (
+        savings.length > 0 ? (
           <PressScale
             onPress={onWithdraw}
             disabled={withdrawDisabled}
@@ -279,20 +203,23 @@ function SavingsOverview({
           </PressScale>
         ) : null
       }>
-      <MoneyRow
-        leading={
-          <Disc ground={theme.accent}>
-            <SymbolView
-              name={{ ios: 'leaf', android: 'savings', web: 'savings' }}
-              size={20}
-              tintColor={theme.onAccent}
-            />
-          </Disc>
-        }
-        label="Savings"
-        detail={savings > 0n ? 'Earning interest' : 'Cashback lands here and earns interest'}
-        amount={money.token(savings, Savings.currency)}
-      />
+      {savings.length === 0 && (
+        <MoneyRow
+          leading={leaf}
+          label="Savings"
+          detail="Cashback lands here and earns interest"
+          amount={money.ctx('0', stable ?? Rates.usd)}
+        />
+      )}
+      {savings.map(({ currency, amount }) => (
+        <MoneyRow
+          key={currency}
+          leading={leaf}
+          label="Savings"
+          detail="Earning interest"
+          amount={money.token(amount, currency)}
+        />
+      ))}
       {onTheWay !== null && onTheWay > 0n && stable && (
         <MoneyRow
           leading={<IconDisc icon={{ ios: 'clock', android: 'schedule', web: 'schedule' }} />}
@@ -552,23 +479,6 @@ function cashbackLine({ cashbackAmount, cashbackCurrency }: GiftCard): string | 
   return `+${money.ctx(cashbackAmount, cashbackCurrency)} cashback`;
 }
 
-function MerchantDisc({ merchantId, name }: { merchantId: string; name: string }) {
-  const merchant = cachedMerchant(merchantId);
-  if (merchant?.logoUrl) {
-    return (
-      <Disc ground="#FFFFFF">
-        <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.discImage} accessible={false} />
-      </Disc>
-    );
-  }
-  const hue = merchant?.tileHue() ?? 225;
-  return (
-    <Disc ground={`hsl(${hue}, 42%, 34%)`}>
-      <Text style={styles.discInitial}>{name.trim().charAt(0).toUpperCase()}</Text>
-    </Disc>
-  );
-}
-
 function RowSkeleton() {
   return (
     <View style={styles.row}>
@@ -598,7 +508,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   card: {
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
@@ -637,19 +547,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  discSymbol: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 18,
-  },
-  discImage: {
-    width: '72%',
-    height: '72%',
-  },
-  discInitial: {
-    color: '#FFFFFF',
-    fontFamily: FontFamily.bold,
-    fontSize: 16,
-  },
   textButton: {
     minHeight: 32,
     justifyContent: 'center',
@@ -663,7 +560,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.three,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     minHeight: 80,
   },
@@ -677,7 +574,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.four,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
   },
   promoText: {

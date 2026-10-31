@@ -4,16 +4,19 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Button, Field } from '@/components/form';
-import { ListGroup, ListRow } from '@/components/list-row';
+import { Button, Field } from '@/components/ui/form';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
+import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { PageHeader } from '@/components/page-header';
-import { PreviewBadge } from '@/components/preview-badge';
+import { PreviewBadge } from '@/components/ui/preview-badge';
+import { SiteFooter } from '@/components/site-footer';
 import { StatusTracker } from '@/components/status-tracker';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Layout, Motion, Spacing } from '@/constants/theme';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
+import { Layout, Motion, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { money } from '@/money';
+import { strings } from '@/strings';
 
 type Step = 'bank' | 'amount' | 'review' | 'status';
 
@@ -52,6 +55,7 @@ export default function CashOutScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <KeyboardAvoid>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <PageHeader title="Cash out to your bank" belowNavigationHeader accessory={<PreviewBadge />} />
         <View style={styles.body}>
@@ -64,25 +68,22 @@ export default function CashOutScreen() {
                 A UK bank account in your name.
               </ThemedText>
               <Field
-                placeholder="Name on the account"
+                label={strings.field.accountName}
                 value={name}
                 onChangeText={setName}
                 autoComplete="name"
-                accessibilityLabel="Name on the account"
               />
               <Field
-                placeholder="Sort code, 6 digits"
+                label={strings.field.sortCode}
                 value={shownSortCode(sortCode)}
                 onChangeText={(text) => setSortCode(digits(text, 6))}
                 keyboardType="number-pad"
-                accessibilityLabel="Sort code, 6 digits"
               />
               <Field
-                placeholder="Account number, 8 digits"
+                label={strings.field.accountNumber}
                 value={accountNumber}
                 onChangeText={(text) => setAccountNumber(digits(text, 8))}
                 keyboardType="number-pad"
-                accessibilityLabel="Account number, 8 digits"
               />
               <Button label="Continue" variant="primary" onPress={() => setStep('amount')} disabled={!bankReady} />
             </Animated.View>
@@ -97,11 +98,10 @@ export default function CashOutScreen() {
                 {`You can cash out ${range} at a time.`}
               </ThemedText>
               <Field
-                placeholder="Amount in dollars"
+                label={strings.field.amountInDollars}
                 value={input}
                 onChangeText={setInput}
                 keyboardType="decimal-pad"
-                accessibilityLabel="Amount in dollars"
               />
               {input !== '' && !amountReady && (
                 <ThemedText type="small" themeColor="danger">
@@ -142,7 +142,9 @@ export default function CashOutScreen() {
             </Animated.View>
           )}
         </View>
+        <SiteFooter />
       </ScrollView>
+      </KeyboardAvoid>
     </ThemedView>
   );
 }
@@ -152,7 +154,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   body: {
     width: '100%',

@@ -2,6 +2,12 @@ import { rateLimitedMessage } from './payment-state.ts';
 import { serviceState, serviceStateMessages } from './service-state.ts';
 
 export class CtxError extends Error {
+  static readonly serverFailedMessage = 'Something went wrong on our side. Try again in a moment.';
+  static readonly requestFailedMessage = "That didn't go through. Try again.";
+  static readonly knownMessages: Readonly<Record<string, string>> = {
+    ErrInvalidCode: "That code didn't work. Check it and try again, or send a new one.",
+  };
+
   readonly status: number;
   readonly body: string;
 
@@ -23,8 +29,15 @@ export class CtxError extends Error {
     if (status === 429) {
       return rateLimitedMessage;
     }
-    const state = serviceState(CtxError.field(body, 'error'));
-    return state ? serviceStateMessages[state] : `CTX ${status}: ${body}`;
+    const name = CtxError.field(body, 'error');
+    const state = serviceState(name);
+    if (state) {
+      return serviceStateMessages[state];
+    }
+    if (name && Object.hasOwn(CtxError.knownMessages, name)) {
+      return CtxError.knownMessages[name];
+    }
+    return status >= 500 ? CtxError.serverFailedMessage : CtxError.requestFailedMessage;
   }
 
   private static field(body: string, name: string): string | undefined {

@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import type { ConfigContext } from 'expo/config';
+
+import appConfig from '../../app.config.ts';
 import {
   hasErrorCode,
+  newSignInNonce,
   oauthLoginBody,
   signInRefusalMessage,
   SocialSignInConfig,
@@ -47,6 +51,15 @@ test('iOS needs the iOS client id for Google', () => {
   assert.deepEqual(noIosId.providers('ios'), ['apple']);
 });
 
+test('iOS hides Google when the iOS client id gives no URL scheme', () => {
+  const malformedIosId = new SocialSignInConfig({
+    appleSignIn: 'true',
+    googleWebClientId: '111-web.apps.googleusercontent.com',
+    googleIosClientId: '222-ios',
+  });
+  assert.deepEqual(malformedIosId.providers('ios'), ['apple']);
+});
+
 test('Android shows Google with the web client id and never Apple', () => {
   assert.deepEqual(allIds.providers('android'), ['google']);
   const appleOnly = new SocialSignInConfig({ appleSignIn: 'true' });
@@ -67,10 +80,48 @@ test('the Google iOS URL scheme is the reversed iOS client id', () => {
   );
 });
 
-test('the OAuth login body carries provider and token and no nonce', () => {
-  const body = oauthLoginBody('apple', 'header.payload.signature');
-  assert.deepEqual(body, { provider: 'apple', idToken: 'header.payload.signature' });
-  assert.equal('nonce' in body, false);
+test('Android and web point Apple accounts to iPhone whatever the build sets for Apple', () => {
+  for (const appleSignIn of ['true', 'false', undefined]) {
+    const config = new SocialSignInConfig({ appleSignIn });
+    for (const platform of ['android', 'web']) {
+      assert.match(config.appleAccountHint(platform) ?? '', /Signed up with Apple on an iPhone/);
+    }
+  }
+});
+
+test('iOS shows the relay address hint only beside the Apple button', () => {
+  assert.match(allIds.appleAccountHint('ios') ?? '', /relay address/);
+  assert.equal(new SocialSignInConfig({ appleSignIn: 'false' }).appleAccountHint('ios'), null);
+});
+
+test('the app config is the same whatever the social sign-in env', () => {
+  const keys = ['EXPO_PUBLIC_APPLE_SIGN_IN', 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID'];
+  const saved = keys.map((key) => process.env[key]);
+  const configWith = (value: string | undefined) => {
+    for (const key of keys) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    return appConfig({ config: {} } as ConfigContext);
+  };
+  try {
+    const bare = configWith(undefined);
+    assert.deepEqual(configWith('true'), bare);
+    assert.deepEqual(configWith('333-ios.apps.googleusercontent.com'), bare);
+    assert.equal(bare.ios?.usesAppleSignIn, true);
+    assert.ok(bare.plugins?.includes('expo-apple-authentication'));
+  } finally {
+    keys.forEach((key, index) => {
+      if (saved[index] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = saved[index];
+      }
+    });
+  }
 });
 
 test('social refusals point to email sign-in', () => {
@@ -111,4 +162,25 @@ test('error codes match as strings', () => {
   assert.equal(hasErrorCode({ code: 12501 }, '12501'), true);
   assert.equal(hasErrorCode(new Error('x'), 'ERR_REQUEST_CANCELED'), false);
   assert.equal(hasErrorCode(null, 'ERR_REQUEST_CANCELED'), false);
+});
+
+test('oauthLoginBody carries the nonce the provider was given', () => {
+  const nonce = newSignInNonce();
+  assert.deepEqual(oauthLoginBody('apple', { idToken: 'token', nonce }), {
+    provider: 'apple',
+    idToken: 'token',
+    nonce,
+  });
+});
+
+test('oauthLoginBody omits the nonce when the provider took none', () => {
+  assert.deepEqual(oauthLoginBody('google', { idToken: 'token' }), { provider: 'google', idToken: 'token' });
+});
+
+test('newSignInNonce is 64 hex characters and differs on every call', () => {
+  const nonces = new Set(Array.from({ length: 50 }, () => newSignInNonce()));
+  assert.equal(nonces.size, 50);
+  for (const nonce of nonces) {
+    assert.match(nonce, /^[0-9a-f]{64}$/);
+  }
 });

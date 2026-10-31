@@ -2,7 +2,25 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { GiftCard } from './client.ts';
-import { cashbackState, giftCardStatusLabel, isHiddenFromHistory, outcomeText } from './gift-card-status.ts';
+import {
+  cashbackState,
+  cashbackStateLabel,
+  giftCardStatusLabel,
+  isHiddenFromHistory,
+  needsPaymentSearch,
+  outcomeText,
+  pollDelayMs,
+} from './gift-card-status.ts';
+
+test('order polling starts at 3s, doubles every 10 polls and stops growing at 30s', () => {
+  assert.equal(pollDelayMs(0), 3000);
+  assert.equal(pollDelayMs(9), 3000);
+  assert.equal(pollDelayMs(10), 6000);
+  assert.equal(pollDelayMs(20), 12000);
+  assert.equal(pollDelayMs(30), 24000);
+  assert.equal(pollDelayMs(40), 30000);
+  assert.equal(pollDelayMs(500), 30000);
+});
 
 test('every gift card status has a plain label', () => {
   assert.equal(giftCardStatusLabel('unpaid'), 'Waiting for payment');
@@ -29,6 +47,11 @@ const card = (fields: Partial<GiftCard>): GiftCard => ({
 
 test('a card without a cashback amount has no cashback', () => {
   assert.equal(cashbackState(card({ cashbackCredited: true })), 'none');
+});
+
+test('a zero cashback amount has no cashback', () => {
+  assert.equal(cashbackState(card({ cashbackAmount: '0' })), 'none');
+  assert.equal(cashbackState(card({ cashbackAmount: '0.00', cashbackCredited: true })), 'none');
 });
 
 test('reversed wins over credited', () => {
@@ -136,10 +159,24 @@ test('fulfilled orders are shown in history', () => {
   assert.equal(isHiddenFromHistory(card({ status: 'fulfilled' })), false);
 });
 
-test('open and fulfilled cards have no outcome text', () => {
+test('unpaid and fulfilled cards have no outcome text', () => {
   assert.equal(outcomeText(card({ status: 'fulfilled' })), null);
-  assert.equal(outcomeText(card({ status: 'paid' })), null);
   assert.equal(outcomeText(card({ status: 'unpaid', paymentStatus: 'unpaid' })), null);
+});
+
+test('a processing card says the card is also emailed', () => {
+  assert.equal(outcomeText(card({ status: 'paid' })), "We'll also email your card when it's ready.");
+});
+
+test('a processing card with a cancelled or failed payment keeps the payment outcome', () => {
+  assert.equal(
+    outcomeText(card({ status: 'paid', paymentStatus: 'cancelled' })),
+    `This order was cancelled. If you were charged, ${refundLine}`,
+  );
+  assert.equal(
+    outcomeText(card({ status: 'paid', paymentStatus: 'error' })),
+    "This order didn't go through. You weren't charged.",
+  );
 });
 
 test('a card CTX marks paid is never described as not charged or possibly charged', () => {
@@ -148,4 +185,25 @@ test('a card CTX marks paid is never described as not charged or possibly charge
     assert.ok(!text.includes("weren't charged"));
     assert.ok(!text.includes('If you were charged'));
   }
+});
+
+test('only an expired order CTX did not record as charged needs a search for its payment', () => {
+  assert.equal(needsPaymentSearch(card({ status: 'expired', paymentStatus: 'expired' })), true);
+  assert.equal(needsPaymentSearch(card({ status: 'expired', paymentStatus: 'paid' })), false);
+  assert.equal(
+    needsPaymentSearch(card({ status: 'expired', paymentStatus: 'expired', paymentCryptoTxId: txId })),
+    false,
+  );
+  assert.equal(needsPaymentSearch(card({ status: 'unpaid', paymentStatus: 'unpaid' })), false);
+  assert.equal(needsPaymentSearch(card({ status: 'fulfilled' })), false);
+});
+
+test('an expired order with a sent payment is shown in history', () => {
+  assert.equal(isHiddenFromHistory(card({ status: 'expired', paymentStatus: 'expired' }), true), false);
+  assert.equal(isHiddenFromHistory(card({ status: 'unpaid', paymentStatus: 'unpaid' }), true), true);
+});
+
+test('cashback CTX has credited reads on the way, as the Cashback screen does until the payout lands', () => {
+  assert.equal(cashbackStateLabel('pending'), 'pending');
+  assert.equal(cashbackStateLabel('credited'), 'on the way');
 });

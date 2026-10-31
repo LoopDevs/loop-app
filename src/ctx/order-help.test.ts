@@ -54,3 +54,14 @@ test('the mail draft never contains the number, PIN or any token-bearing URL', (
     assert.ok(!draft.includes(secret), secret);
   }
 });
+
+test('the mail body carries the payment transaction CTX recorded', () => {
+  const body = orderHelp.body({ ...fulfilled, paymentCryptoTxId: 'ctx-tx' }, 'device-tx');
+  assert.match(body, /Payment transaction: ctx-tx/);
+  assert.doesNotMatch(body, /device-tx/);
+});
+
+test('the mail body carries the transaction this device sent when CTX has none', () => {
+  assert.match(orderHelp.body(fulfilled, 'device-tx'), /Payment transaction: device-tx/);
+  assert.doesNotMatch(orderHelp.body(fulfilled), /Payment transaction/);
+});

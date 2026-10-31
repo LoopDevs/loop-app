@@ -1,9 +1,10 @@
 import type { SponsoredResult } from '../ctx/client.ts';
+import { CtxError } from '../ctx/ctx-error.ts';
 import { chainOutcome } from '../ctx/payment-state.ts';
 import type { PriceWindow } from '../ctx/price-window.ts';
 import { money } from '../money.ts';
+import type { PaymentCurrency } from '../stellar/network.ts';
 import { Holdings } from './holdings.ts';
-import { Savings } from './savings.ts';
 import type { Balances } from './smart-wallet.ts';
 
 export type PendingWithdrawal = {
@@ -13,6 +14,11 @@ export type PendingWithdrawal = {
 
 export type SentWithdrawal = SponsoredResult & { expiryLedger: number };
 
+export type SignedWithdrawal = {
+  expiryLedger: number;
+  sponsor(): Promise<SponsoredResult>;
+};
+
 export type ChainTransaction = {
   status: string;
   latestLedger: number;
@@ -21,43 +27,63 @@ export type ChainTransaction = {
 export type TopUpChain = {
   balances(): Promise<Balances>;
   valueOf(shares: bigint): Promise<bigint>;
-  withdraw(shares: bigint): Promise<SentWithdrawal>;
+  signWithdrawal(shares: bigint): Promise<SignedWithdrawal>;
   transaction(hash: string): Promise<ChainTransaction>;
+  latestLedger(): Promise<number>;
   sleep(ms: number): Promise<void>;
   now(): number;
 };
 
 export type TopUpOutcome =
-  | { kind: 'covered' }
+  | { kind: 'covered'; withdrawal?: PendingWithdrawal }
   | { kind: 'priceClosing' }
   | { kind: 'notEnough' }
   | { kind: 'withdrawFailed' }
   | { kind: 'stillMoving'; withdrawal: PendingWithdrawal }
   | { kind: 'priceExpired' }
-  | { kind: 'stillShort'; moved: bigint };
+  | { kind: 'stillShort'; moved: bigint; currency: PaymentCurrency };
 
 type ChainOutcome = 'pending' | 'success' | 'failed';
 
+export class UnansweredWithdrawal extends Error {
+  readonly expiryLedger: number;
+
+  constructor(expiryLedger: number, cause: unknown) {
+    super("We couldn't confirm the move from savings. Check your balance in a few minutes.", { cause });
+    this.name = 'UnansweredWithdrawal';
+    this.expiryLedger = expiryLedger;
+  }
+
+  static rethrow(error: unknown, expiryLedger: number): never {
+    if (error instanceof CtxError && error.status >= 400 && error.status < 500) {
+      throw error;
+    }
+    throw new UnansweredWithdrawal(expiryLedger, error);
+  }
+}
+
 export class SavingsTopUp {
-  static readonly currency = Savings.currency;
   static readonly requiredWindowMs = 90_000;
   static readonly confirmTimeoutMs = 30_000;
   static readonly confirmPollMs = 2_000;
+  static readonly withdrawAttempts = 2;
 
   readonly chain: TopUpChain;
+  readonly currency: PaymentCurrency;
 
-  constructor(chain: TopUpChain) {
+  constructor(chain: TopUpChain, currency: PaymentCurrency) {
     this.chain = chain;
+    this.currency = currency;
   }
 
-  static estimatedShares(shortfall: bigint, vaultShares: bigint, vaultValue: bigint): bigint {
-    if (shortfall <= 0n || vaultShares <= 0n || vaultValue <= 0n) {
+  static estimatedShares(shortfall: bigint, savedShares: bigint, savedValue: bigint): bigint {
+    if (shortfall <= 0n || savedShares <= 0n || savedValue <= 0n) {
       return 0n;
     }
-    const numerator = shortfall * 10_000n * vaultShares;
-    const denominator = (10_000n - Holdings.withdrawSlippageBasisPoints) * vaultValue;
+    const numerator = shortfall * 10_000n * savedShares;
+    const denominator = (10_000n - Holdings.withdrawSlippageBasisPoints) * savedValue;
     const shares = (numerator + denominator - 1n) / denominator;
-    return shares < vaultShares ? shares : vaultShares;
+    return shares < savedShares ? shares : savedShares;
   }
 
   static outcomeOf(transaction: ChainTransaction, withdrawal: PendingWithdrawal): ChainOutcome {
@@ -65,6 +91,20 @@ export class SavingsTopUp {
       return 'failed';
     }
     return chainOutcome(transaction.status);
+  }
+
+  static async send(signed: SignedWithdrawal): Promise<SentWithdrawal> {
+    const result = await signed
+      .sponsor()
+      .catch((error: unknown) => UnansweredWithdrawal.rethrow(error, signed.expiryLedger));
+    return { ...result, expiryLedger: signed.expiryLedger };
+  }
+
+  static refusedWithdrawal(error: unknown): SentWithdrawal {
+    if (error instanceof CtxError && error.status === 400) {
+      return { hash: '', status: 'failed', error: error.message, expiryLedger: 0 };
+    }
+    throw error;
   }
 
   static notEnough(symbol: string): string {
@@ -86,20 +126,32 @@ export class SavingsTopUp {
       case 'priceExpired':
         return 'This price expired; the funds are in your wallet';
       case 'stillShort':
-        return `Moved ${money.token(outcome.moved, SavingsTopUp.currency)} to your wallet, not enough to pay`;
+        return `Moved ${money.token(outcome.moved, outcome.currency)} to your wallet, not enough to pay`;
     }
   }
 
-  private static inWallet(balances: Balances): bigint {
-    return balances.tokens.find(({ token }) => token.currency === SavingsTopUp.currency)?.amount ?? 0n;
+  private inWallet(balances: Balances): bigint {
+    return balances.tokens.find(({ token }) => token.currency === this.currency)?.amount ?? 0n;
+  }
+
+  private saved(balances: Balances): { shares: bigint; value: bigint } {
+    return balances.savings.find((saved) => saved.currency === this.currency) ?? { shares: 0n, value: 0n };
   }
 
   async run(price: bigint, window: PriceWindow | null, pending?: PendingWithdrawal): Promise<TopUpOutcome> {
-    if (pending && (await this.confirm(pending)) === 'pending') {
-      return { kind: 'stillMoving', withdrawal: pending };
+    let balances = await this.chain.balances();
+    if (this.inWallet(balances) >= price) {
+      return pending && (await this.status(pending)) === 'pending'
+        ? { kind: 'covered', withdrawal: pending }
+        : { kind: 'covered' };
     }
-    const balances = await this.chain.balances();
-    const before = SavingsTopUp.inWallet(balances);
+    if (pending) {
+      if ((await this.confirm(pending)) === 'pending') {
+        return { kind: 'stillMoving', withdrawal: pending };
+      }
+      balances = await this.chain.balances();
+    }
+    const before = this.inWallet(balances);
     if (before >= price) {
       return { kind: 'covered' };
     }
@@ -114,23 +166,24 @@ export class SavingsTopUp {
     if (status === 'pending') {
       return { kind: 'stillMoving', withdrawal: started.withdrawal };
     }
-    const after = SavingsTopUp.inWallet(await this.chain.balances());
+    const after = this.inWallet(await this.chain.balances());
     if (!window || window.isClosed(this.chain.now())) {
       return { kind: 'priceExpired' };
     }
     if (after < price) {
-      return { kind: 'stillShort', moved: after > before ? after - before : 0n };
+      return { kind: 'stillShort', moved: after > before ? after - before : 0n, currency: this.currency };
     }
     return { kind: 'covered' };
   }
 
-  async sharesCovering(shortfall: bigint, { vaultShares, vaultValue }: Balances): Promise<bigint | null> {
-    const estimate = SavingsTopUp.estimatedShares(shortfall, vaultShares, vaultValue);
+  async sharesCovering(shortfall: bigint, balances: Balances): Promise<bigint | null> {
+    const saved = this.saved(balances);
+    const estimate = SavingsTopUp.estimatedShares(shortfall, saved.shares, saved.value);
     if (estimate === 0n) {
       return null;
     }
     for (const shares of [estimate, estimate + 1n]) {
-      if (shares > vaultShares) {
+      if (shares > saved.shares) {
         return null;
       }
       if (Holdings.floorOf(await this.chain.valueOf(shares)) >= shortfall) {
@@ -145,31 +198,60 @@ export class SavingsTopUp {
     balances: Balances,
     window: PriceWindow | null,
   ): Promise<{ kind: 'sent'; withdrawal: PendingWithdrawal } | TopUpOutcome> {
-    if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
-      return { kind: 'priceClosing' };
+    let vault = balances;
+    for (let attempt = 1; ; attempt += 1) {
+      if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
+        return { kind: 'priceClosing' };
+      }
+      const shares = await this.sharesCovering(shortfall, vault);
+      if (shares === null) {
+        return { kind: 'notEnough' };
+      }
+      let result: SentWithdrawal;
+      try {
+        result = await SavingsTopUp.send(await this.chain.signWithdrawal(shares));
+      } catch (error) {
+        if (error instanceof UnansweredWithdrawal) {
+          return { kind: 'stillMoving', withdrawal: { hash: '', expiryLedger: error.expiryLedger } };
+        }
+        result = SavingsTopUp.refusedWithdrawal(error);
+      }
+      if (result.hash && !result.error && result.status !== 'failed') {
+        return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
+      }
+      if (result.hash || attempt >= SavingsTopUp.withdrawAttempts) {
+        return { kind: 'withdrawFailed' };
+      }
+      vault = await this.chain.balances();
     }
-    const shares = await this.sharesCovering(shortfall, balances);
-    if (shares === null) {
-      return { kind: 'notEnough' };
-    }
-    const result = await this.chain.withdraw(shares);
-    if (result.error || result.status === 'failed' || !result.hash) {
-      return { kind: 'withdrawFailed' };
-    }
-    return { kind: 'sent', withdrawal: { hash: result.hash, expiryLedger: result.expiryLedger } };
   }
 
   private async confirm(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
     const deadline = this.chain.now() + SavingsTopUp.confirmTimeoutMs;
     for (;;) {
-      const status = await this.chain.transaction(withdrawal.hash).then(
-        (transaction) => SavingsTopUp.outcomeOf(transaction, withdrawal),
-        () => 'pending' as const,
-      );
+      const status = await this.status(withdrawal);
       if (status !== 'pending' || this.chain.now() >= deadline) {
         return status;
       }
       await this.chain.sleep(SavingsTopUp.confirmPollMs);
+    }
+  }
+
+  private status(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
+    if (!withdrawal.hash) {
+      return this.unansweredStatus(withdrawal);
+    }
+    return this.chain.transaction(withdrawal.hash).then(
+      (transaction) => SavingsTopUp.outcomeOf(transaction, withdrawal),
+      () => 'pending' as const,
+    );
+  }
+
+  private async unansweredStatus(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
+    try {
+      return (await this.chain.latestLedger()) > withdrawal.expiryLedger ? 'failed' : 'pending';
+    } catch {
+      return 'pending';
     }
   }
 }

@@ -10,7 +10,7 @@
     "ios": {
       "bundleIdentifier": "io.loopfinance.app",
       "icon": "./assets/images/icon.png",
-      "associatedDomains": ["webcredentials:loopfinance.io"],
+      "associatedDomains": ["webcredentials:loopfinance.io", "applinks:loopfinance.io"],
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -39,6 +39,18 @@
           {
             "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeOtherFinancialInfo",
             "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeCrashData",
+            "NSPrivacyCollectedDataTypeLinked": false,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeOtherDiagnosticData",
+            "NSPrivacyCollectedDataTypeLinked": false,
             "NSPrivacyCollectedDataTypeTracking": false,
             "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
           }
@@ -71,6 +83,34 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "loopfinance.io", "path": "/shop" },
+            {
+              "scheme": "https",
+              "host": "loopfinance.io",
+              "pathPrefix": "/shop/"
+            },
+            { "scheme": "https", "host": "loopfinance.io", "path": "/wallet" },
+            {
+              "scheme": "https",
+              "host": "loopfinance.io",
+              "pathPrefix": "/wallet/"
+            },
+            { "scheme": "https", "host": "loopfinance.io", "path": "/savings" },
+            { "scheme": "https", "host": "loopfinance.io", "path": "/profile" },
+            {
+              "scheme": "https",
+              "host": "loopfinance.io",
+              "pathPrefix": "/profile/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -78,7 +118,7 @@
       ]
     },
     "web": {
-      "output": "server",
+      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -104,7 +144,12 @@
       "policy": "fingerprint"
     },
     "updates": {
-      "checkAutomatically": "NEVER"
+      "checkAutomatically": "NEVER",
+      "codeSigningCertificate": "./certs/certificate.pem",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      }
     },
     "extra": {
       "criticalIndex": 0

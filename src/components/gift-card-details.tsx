@@ -1,22 +1,26 @@
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
-import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 
-import { Button } from '@/components/form';
-import { PressScale } from '@/components/press-scale';
-import { ThemedText } from '@/components/themed-text';
-import { useToast } from '@/components/toast';
+import { externalUrl, useOpenExternal } from '@/components/external-link';
+import { Button, Notice } from '@/components/ui/form';
+import { PressScale } from '@/components/ui/press-scale';
+import { ThemedText } from '@/components/ui/themed-text';
+import { useToast } from '@/components/ui/toast';
 import { Collapsible } from '@/components/ui/collapsible';
 import { Elevation, FontFamily, Fonts, Radius, Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
+import { useBusyAction } from '@/hooks/use-busy-action';
 import { useTheme } from '@/hooks/use-theme';
+import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
 import { useBlockScreenCapture } from '@/native/screen-privacy';
+import { AppLock } from '@/session/app-lock';
 
 const clipboardLifetimeMs = 60_000;
+const maskedSecret = '•'.repeat(12);
 const copiedResetMs = 2000;
 
 export function statusTone(status: GiftCard['status']): 'success' | 'danger' | 'accent' | 'textSecondary' {
@@ -33,14 +37,69 @@ export function statusTone(status: GiftCard['status']): 'success' | 'danger' | '
   }
 }
 
+function useSecretReveal() {
+  const toast = useToast();
+  const { busy, run } = useBusyAction();
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'background') {
+        setRevealed(false);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const reveal = useCallback(async (): Promise<boolean> => {
+    if (revealed) {
+      return true;
+    }
+    let confirmed = false;
+    await run(async () => {
+      const result = await biometrics.confirmUser('Show gift card details');
+      if (AppLock.unlocksWith(result)) {
+        setRevealed(true);
+        confirmed = true;
+        return;
+      }
+      if (!AppLock.isCancel(result)) {
+        haptics.error();
+        toast(AppLock.notConfirmedMessage);
+      }
+    });
+    return confirmed;
+  }, [revealed, run, toast]);
+
+  const hide = useCallback(() => setRevealed(false), []);
+
+  return { revealed, reveal, hide, confirming: busy };
+}
+
 export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
   useBlockScreenCapture();
   const theme = useTheme();
+  const secrets = useSecretReveal();
+  const openExternal = useOpenExternal();
+  const redeemUrl = giftCard.redeemUrl && externalUrl.isWeb(giftCard.redeemUrl) ? giftCard.redeemUrl : null;
   const hasCode = Boolean(
     giftCard.barcodeUrl || giftCard.number || giftCard.pin || giftCard.redeemUrlChallenge,
   );
+  const openRedeemPage = async (url: string) => {
+    if (process.env.EXPO_OS !== 'web' && !(await secrets.reveal())) {
+      return;
+    }
+    openExternal(url);
+  };
+  const awaitingCode = giftCard.status === 'fulfilled' && !hasCode && !redeemUrl;
   return (
     <View style={styles.section}>
+      {awaitingCode && (
+        <Notice
+          tone="neutral"
+          message="Your card is bought, but its code hasn't come through yet. Check back in a few minutes, or get help below."
+        />
+      )}
       {hasCode && (
         <View
           style={[
@@ -48,8 +107,8 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
             { backgroundColor: theme.backgroundElement, borderColor: theme.border },
             Elevation.card,
           ]}>
-          {giftCard.barcodeUrl && (
-            <View style={styles.barcodeFrame}>
+          {giftCard.barcodeUrl && secrets.revealed && (
+            <View style={[styles.barcodeFrame, { backgroundColor: theme.backgroundElement }]}>
               <Image
                 source={{ uri: giftCard.barcodeUrl }}
                 style={styles.barcode}
@@ -59,18 +118,26 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
               />
             </View>
           )}
-          {giftCard.number ? <CopyableSecret label="Card number" value={giftCard.number} /> : null}
-          {giftCard.pin ? <CopyableSecret label="PIN" value={giftCard.pin} /> : null}
+          {giftCard.number ? (
+            <CopyableSecret label="Card number" value={giftCard.number} secrets={secrets} />
+          ) : null}
+          {giftCard.pin ? <CopyableSecret label="PIN" value={giftCard.pin} secrets={secrets} /> : null}
           {giftCard.redeemUrlChallenge && (
-            <CopyableSecret label="Code" value={giftCard.redeemUrlChallenge} />
+            <CopyableSecret label="Code" value={giftCard.redeemUrlChallenge} secrets={secrets} />
           )}
+          <Button
+            label={secrets.revealed ? 'Hide details' : 'Show details'}
+            disabled={secrets.confirming}
+            onPress={secrets.revealed ? secrets.hide : () => void secrets.reveal()}
+          />
         </View>
       )}
-      {giftCard.redeemUrl && (
+      {redeemUrl && (
         <Button
           label="Open redeem page"
           variant="primary"
-          onPress={() => WebBrowser.openBrowserAsync(giftCard.redeemUrl as string)}
+          disabled={secrets.confirming}
+          onPress={() => void openRedeemPage(redeemUrl)}
         />
       )}
       {giftCard.info?.instructions && (
@@ -87,16 +154,29 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
   );
 }
 
-function CopyableSecret({ label, value }: { label: string; value: string }) {
+type CopyableSecretProps = {
+  label: string;
+  value: string;
+  secrets: ReturnType<typeof useSecretReveal>;
+};
+
+function CopyableSecret({ label, value, secrets }: CopyableSecretProps) {
   const toast = useToast();
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
-    await Clipboard.setStringAsync(value, {
+    if (!(await secrets.reveal())) {
+      return;
+    }
+    const copiedToClipboard = await Clipboard.setStringAsync(value, {
       android: { isSensitive: true },
       ios: { localOnly: true, expiresAt: new Date(Date.now() + clipboardLifetimeMs) },
     });
+    if (!copiedToClipboard) {
+      toast(`${label} not copied. Select it and copy it instead.`);
+      return;
+    }
     haptics.tap();
     setCopied(true);
     setTimeout(() => setCopied(false), copiedResetMs);
@@ -109,8 +189,12 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
         <Text style={[styles.secretLabel, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
           {label}
         </Text>
-        <Text selectable style={[styles.secretValue, { color: theme.text }]} maxFontSizeMultiplier={1.6}>
-          {value}
+        <Text
+          selectable={secrets.revealed}
+          accessibilityLabel={secrets.revealed ? undefined : `${label} hidden`}
+          style={[styles.secretValue, { color: theme.text }]}
+          maxFontSizeMultiplier={1.6}>
+          {secrets.revealed ? value : maskedSecret}
         </Text>
       </View>
       <PressScale
@@ -138,13 +222,12 @@ const styles = StyleSheet.create({
   },
   panel: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.three,
     gap: Spacing.three,
   },
   barcodeFrame: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: Radius.tile,
+    borderRadius: Radius.medium,
     padding: Spacing.three,
   },
   barcode: {

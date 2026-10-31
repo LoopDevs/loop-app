@@ -1,0 +1,7 @@
+name = "loopfinance"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-10-01"
+
+[vars]
+CTX_API_URL = "https://spend.ctx.com"
+CTX_CLIENT_ID = "loopapp"

@@ -69,6 +69,7 @@ type Sponsor = 'accepted' | 'closed' | 'paidElsewhere';
 class FakeShop implements BuySteps {
   readonly created: GiftCard[] = [];
   readonly sponsored: string[] = [];
+  readonly refetches: boolean[] = [];
   readonly records = new SentPayments(memoryStorage(), () => now);
   readonly sender = new PaymentSender(
     this.records,
@@ -85,8 +86,9 @@ class FakeShop implements BuySteps {
     return order;
   }
 
-  async paymentStarted(order: GiftCard): Promise<GiftCard | null> {
-    const fetched = { ...order, ...this.ctxOrders.get(order.id) };
+  async paymentStarted(order: GiftCard, refetch: boolean): Promise<GiftCard | null> {
+    this.refetches.push(refetch);
+    const fetched = refetch ? { ...order, ...this.ctxOrders.get(order.id) } : order;
     const sentHere = (await this.sender.recorded(order.paymentId)) !== null;
     return OneTapBuy.paymentStarted(fetched, sentHere) ? fetched : null;
   }
@@ -128,6 +130,15 @@ test('an order priced more than the tolerance above the shown price is not paid'
   const result = await new OneTapBuy().start(shop, quote);
   assert.deepEqual(result, { kind: 'confirm', order: shop.created[0], price: units.parse('25.26') });
   assert.deepEqual(shop.sponsored, []);
+});
+
+test('a just created order is not fetched again, a confirmed one is', async () => {
+  const shop = new FakeShop();
+  await new OneTapBuy().start(shop, quote);
+  assert.deepEqual(shop.refetches, [false]);
+  const confirmShop = new FakeShop();
+  await new OneTapBuy().confirm(confirmShop, giftCard(7), quote);
+  assert.deepEqual(confirmShop.refetches, [true]);
 });
 
 test('a confirmed price pays the same order without creating another', async () => {
@@ -248,6 +259,33 @@ test('a sent payment shows as confirming and is followed with its chain record',
   });
 });
 
+test('before a savings top-up, an expired order stops, a paid order is not paid again and an unpaid order goes ahead', () => {
+  const unpaid = { status: 'unpaid', paymentStatus: 'unpaid' } as const;
+  assert.deepEqual(OneTapBuy.beforeTopUp({ ...unpaid, status: 'expired' }), {
+    state: { kind: 'priceExpired' },
+    resumed: false,
+  });
+  assert.deepEqual(OneTapBuy.beforeTopUp({ ...unpaid, paymentCryptoTxId: 'tx-elsewhere' }), {
+    state: { kind: 'confirming', txId: 'tx-elsewhere' },
+    resumed: true,
+    paidElsewhere: true,
+  });
+  assert.equal(OneTapBuy.beforeTopUp({ status: 'paid', paymentStatus: 'paid' })?.paidElsewhere, true);
+  assert.equal(OneTapBuy.beforeTopUp(unpaid), null);
+});
+
+test('an order paid from elsewhere is followed with a notice and no celebration', () => {
+  const order = giftCard(1, { paymentCryptoTxId: 'tx-elsewhere' });
+  const outcome = OneTapBuy.beforeTopUp(order);
+  assert.ok(outcome);
+  assert.deepEqual(OneTapBuy.view({ kind: 'payment', order, outcome }, null), {
+    kind: 'show',
+    shown: { order, payment: outcome.state, follow: true, sent: { txId: 'tx-elsewhere', expiryLedger: undefined } },
+    celebrate: false,
+    notice: OneTapBuy.paidElsewhereMessage,
+  });
+});
+
 test('a payment that was not sent rolls back with its reason or the not-bought message', () => {
   const order = giftCard(1);
   const notSent = (detail: string) =>
@@ -333,4 +371,12 @@ test('an already paying order shown after a sent record keeps its chain record',
     shown: { order: paid, payment: { kind: 'confirming' }, follow: true, sent: null },
     celebrate: false,
   });
+});
+
+test('a send with no transaction hash shows as confirming without celebrating', () => {
+  const view = OneTapBuy.view(
+    { kind: 'payment', order: giftCard(1), outcome: { state: { kind: 'confirming' }, resumed: false } },
+    null,
+  );
+  assert.equal(view.kind === 'show' && view.celebrate, false);
 });

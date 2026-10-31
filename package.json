@@ -4,20 +4,18 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/fingerprint": "~0.21.6",
-    "@expo/ui": "~58.0.23",
-    "@noble/curves": "^1.9.7",
-    "@noble/hashes": "^1.8.0",
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
     "@react-native-google-signin/google-signin": "^16.1.5",
     "@sentry/react-native": "~8.28.0",
-    "@stellar/stellar-sdk": "^17.4.0",
+    "@stellar/stellar-sdk": "17.4.0",
     "expo": "~58.0.19",
     "expo-apple-authentication": "~58.0.2",
     "expo-blur": "~58.0.5",
     "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.13",
-    "expo-device": "~58.0.5",
     "expo-font": "~58.0.10",
     "expo-glass-effect": "~58.0.5",
     "expo-haptics": "~58.0.7",
@@ -39,7 +37,7 @@
     "react-native": "0.88.0",
     "react-native-gesture-handler": "~3.3.0",
     "react-native-get-random-values": "^2.0.0",
-    "react-native-passkeys": "^0.4.2",
+    "react-native-passkeys": "0.4.2",
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
@@ -59,7 +57,15 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "EXPO_PUBLIC_LOOP_ENV=staging node --test 'src/**/*.test.ts'"
+    "test": "TZ=UTC LC_ALL=en_US.UTF-8 EXPO_PUBLIC_LOOP_ENV=staging node --disable-warning=ExperimentalWarning --import ./test/alias-loader.mjs --test 'src/**/*.test.ts' 'edge/**/*.test.ts' '.claude/hooks/*.test.mjs'",
+    "export:web": "rm -rf dist && export EXPO_PUBLIC_LOOP_ENV=production EXPO_PUBLIC_CATALOG_URL=/api/catalog && expo export --platform web &&cp dist/+not-found.html dist/404.html && node -p \"JSON.stringify({ criticalIndex: require('./app.json').expo.extra.criticalIndex })\" > dist/app-version.json &&mv dist/assets/node_modules dist/assets/vendor && grep -rl assets/node_modules/ dist | xargs perl -pi -e 's#assets/node_modules/#assets/vendor/#g' && node scripts/content-security-policy.ts dist",
+    "deploy:web": "npm run export:web && npx --yes wrangler@4.152.0 pages deploy --branch main"
   },
-  "private": true
+  "engines": {
+    "node": ">=22.18"
+  },
+  "private": true,
+  "overrides": {
+    "zod": "4.6.7"
+  }
 }

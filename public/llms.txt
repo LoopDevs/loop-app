@@ -1,0 +1,31 @@
+# Loop
+
+> Loop is a gift card cashback app: buy gift cards for shops you already use, earn cashback, and grow your savings. It works in 23 countries (US, UK, Canada and 20 euro countries), and you can pay with XLM, USDC or EURC.
+
+## Shop and save
+
+- [Home](https://loopfinance.io/): Search gift cards and see your balances.
+- [Shop](https://loopfinance.io/shop): Browse gift cards from hundreds of shops, restaurants and services, with cashback shown before you pay.
+- [Savings](https://loopfinance.io/savings): Move your cashback into savings and let it grow.
+
+## About Loop
+
+- [About](https://loopfinance.io/about): What Loop does and where it is available.
+- [How it works](https://loopfinance.io/how-it-works): Buy a gift card, get money back, then spend it or save it.
+- [FAQ](https://loopfinance.io/faq): Quick answers about buying gift cards, cashback and your account.
+- [Security](https://loopfinance.io/security): How Loop keeps your account and money safe.
+- [Support](https://loopfinance.io/support): Contact the team for help.
+
+## Company and press
+
+- [Careers](https://loopfinance.io/careers): Work with a small team building a simpler way to earn money back.
+- [Press](https://loopfinance.io/press): News, background and brand assets for journalists and creators.
+- [Affiliates](https://loopfinance.io/affiliates): Earn with Loop by sending shoppers or brands our way.
+
+## Legal
+
+- [Privacy](https://loopfinance.io/privacy): What personal information Loop collects and your choices.
+- [Terms](https://loopfinance.io/terms): The terms for using Loop and buying gift cards.
+- [Cookies](https://loopfinance.io/cookies): Which cookies Loop uses on the web and why.
+- [Accessibility](https://loopfinance.io/accessibility): Our commitment to making Loop usable for everyone.
+- [Complaints](https://loopfinance.io/complaints): How to tell us if something went wrong.
