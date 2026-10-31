@@ -273,6 +273,54 @@ test('an order is sent as a cashback order and a matching card is returned', asy
   assert.deepEqual(reported, []);
 });
 
+test('an order whose answer is lost is recovered from the unpaid orders placed since it was asked', async () => {
+  await signIn('user-42');
+  const placed = { ...card({}), created: new Date().toISOString() };
+  respond = (request) => {
+    if (request.method === 'POST') {
+      throw new TypeError('Network request failed');
+    }
+    return request.url.startsWith(`${apiUrl}/gift-cards?`)
+      ? json({ result: [placed], pagination: { page: 1, pages: 1, perPage: 5, total: 1 } })
+      : json(placed);
+  };
+  const recovered = await ctx.orderGiftCard(order);
+  assert.equal(recovered.id, 'g1');
+  assert.deepEqual(
+    sent.map((request) => request.method),
+    ['POST', 'GET', 'GET'],
+  );
+  assert.equal(new URL(sent[1].url).searchParams.get('status'), 'unpaid');
+  assert.deepEqual(reported, ['CTX order recovered after a lost answer']);
+});
+
+test('a lost answer with no order placed since fails and keeps the idempotency key for the retry', async () => {
+  await signIn('user-42');
+  respond = (request) => {
+    if (request.method === 'POST') {
+      throw new TypeError('Network request failed');
+    }
+    return json({ result: [], pagination: { page: 1, pages: 0, perPage: 5, total: 0 } });
+  };
+  await assert.rejects(ctx.orderGiftCard(order), TypeError);
+  respond = () => json(card({}));
+  await ctx.orderGiftCard(order);
+  const posts = sent.filter((request) => request.method === 'POST');
+  assert.equal(posts.length, 2);
+  assert.equal(posts[1].headers['Idempotency-Key'], posts[0].headers['Idempotency-Key']);
+  assert.deepEqual(reported, []);
+});
+
+test('a refused order is not looked up', async () => {
+  await signIn('user-42');
+  respond = () => json({ error: 'ErrAmountTooLow' }, 400);
+  await assert.rejects(ctx.orderGiftCard(order), CtxError);
+  assert.deepEqual(
+    sent.map((request) => request.method),
+    ['POST'],
+  );
+});
+
 test('a card that differs from the order is rejected and reported', async () => {
   await signIn('user-42');
   for (const wrong of [{ cardFiatAmount: '250.00' }, { merchantId: 'm2' }, { cardFiatCurrency: 'USD' }]) {

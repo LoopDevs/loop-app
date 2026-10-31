@@ -11,6 +11,7 @@ const request = new OrderRequest({
 });
 
 const card = { merchantId: 'm-1', cardFiatAmount: '25.00', cardFiatCurrency: 'USD' };
+const askedAt = Date.parse('2026-10-31T12:00:00Z');
 
 test('an order for the asked merchant, amount and currency matches', () => {
   assert.equal(request.matches(card), true);
@@ -37,7 +38,10 @@ test('a lowercase requested currency matches the uppercase order', () => {
 
 const counted = () => {
   let made = 0;
-  return new OrderKeys(() => `key-${(made += 1)}`);
+  return new OrderKeys(
+    () => `key-${(made += 1)}`,
+    () => askedAt,
+  );
 };
 
 test('a retried order for the same request reuses its idempotency key until an order is settled', () => {
@@ -63,4 +67,33 @@ test('settling an earlier key keeps the key of the current request', () => {
   keys.keyFor({ ...request.asked, fiatAmount: '30' });
   keys.settle('key-1');
   assert.equal(keys.keyFor({ ...request.asked, fiatAmount: '30' }), 'key-2');
+});
+
+test('the request behind a pending key is known until the key is settled', () => {
+  const keys = counted();
+  const key = keys.keyFor(request.asked);
+  assert.equal(keys.requestFor(key)?.askedAt, askedAt);
+  assert.equal(keys.requestFor('other'), null);
+  keys.settle(key);
+  assert.equal(keys.requestFor(key), null);
+});
+
+const placedCard = { ...card, status: 'unpaid' as const, created: '2026-10-31T12:00:05Z' };
+
+test('an unpaid matching card created since the request was asked was placed by it', () => {
+  const asked = new OrderRequest(request.asked, askedAt);
+  assert.equal(asked.placed(placedCard), true);
+  assert.equal(asked.placed({ ...placedCard, created: '2026-10-31T11:56:00Z' }), true);
+});
+
+test('a card created before the request, allowing for clock skew, was not placed by it', () => {
+  const asked = new OrderRequest(request.asked, askedAt);
+  assert.equal(asked.placed({ ...placedCard, created: '2026-10-31T11:54:00Z' }), false);
+  assert.equal(asked.placed({ ...placedCard, created: 'unknown' }), false);
+});
+
+test('a paid or differing card was not placed by the request', () => {
+  const asked = new OrderRequest(request.asked, askedAt);
+  assert.equal(asked.placed({ ...placedCard, status: 'paid' as const }), false);
+  assert.equal(asked.placed({ ...placedCard, cardFiatAmount: '30.00' }), false);
 });
