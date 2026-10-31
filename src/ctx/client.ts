@@ -240,7 +240,10 @@ export type SponsoredResult = {
 class CtxClient {
   private readonly auth = new SessionAuth(this.send.bind(this), tokenStore);
   private serviceStateListener: ServiceStateListener | null = null;
-  private readonly orderKeys = new OrderKeys(() => bytesToHex(randomBytes(16)));
+  private readonly orderKeys = new OrderKeys(
+    () => bytesToHex(randomBytes(16)),
+    () => Date.now(),
+  );
 
   constructor(
     private readonly baseUrl: string,
@@ -372,16 +375,42 @@ class CtxClient {
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
     const idempotencyKey = this.orderKeys.keyFor(order);
-    const card = this.checked(
-      CtxResponse.giftCard,
-      await this.auth.sessionRequest('POST', '/gift-cards', body, true, { 'Idempotency-Key': idempotencyKey }),
-    );
+    const card = await this.sentOrder(body, idempotencyKey);
     if (!new OrderRequest(order).matches(card)) {
       errorReporting.reportMessage('CTX order does not match the request');
       throw new Error('CTX order does not match the request');
     }
     this.orderKeys.settle(idempotencyKey);
     return card;
+  }
+
+  private async sentOrder(body: GiftCardOrderBody, idempotencyKey: string): Promise<GiftCard> {
+    try {
+      return this.checked(
+        CtxResponse.giftCard,
+        await this.auth.sessionRequest('POST', '/gift-cards', body, true, { 'Idempotency-Key': idempotencyKey }),
+      );
+    } catch (error) {
+      if (error instanceof CtxError) {
+        throw error;
+      }
+      const placed = await this.placedOrder(idempotencyKey).catch(() => null);
+      if (!placed) {
+        throw error;
+      }
+      errorReporting.reportMessage('CTX order recovered after a lost answer');
+      return placed;
+    }
+  }
+
+  private async placedOrder(idempotencyKey: string): Promise<GiftCard | null> {
+    const request = this.orderKeys.requestFor(idempotencyKey);
+    if (!request) {
+      return null;
+    }
+    const { result } = await this.giftCards({ merchantId: request.asked.merchantId, status: ['unpaid'], perPage: 5 });
+    const placed = result.find((card) => request.placed(card));
+    return placed ? this.giftCard(placed.id) : null;
   }
 
   async giftCard(id: string): Promise<GiftCard> {
