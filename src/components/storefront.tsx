@@ -73,7 +73,6 @@ export function cachedMerchant(idOrSlug: string): Merchant | null {
 export async function loadMerchant(idOrSlug: string): Promise<Merchant> {
   const merchant = await ctx.merchant(idOrSlug);
   rememberMerchants([merchant]);
-  loadedMerchants.set(idOrSlug, merchant);
   return merchant;
 }
 

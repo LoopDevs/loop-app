@@ -1,3 +1,5 @@
+import { SecurityHeaders } from './security-headers.ts';
+
 export type CatalogEnv = {
   CTX_API_URL: string;
   CTX_CLIENT_ID: string;
@@ -18,7 +20,17 @@ type MerchantJson = Record<string, unknown> & { logoUrl?: string; cardImageUrl?:
 const storedAtHeader = 'x-catalog-stored-at';
 
 export class CatalogQuery {
-  static readonly allowedParams = ['enabled', 'order', 'country', 'name', 'ids', 'category', 'page', 'perPage', 'slug'];
+  static readonly shapes: Readonly<Record<string, RegExp>> = {
+    enabled: /^[01]$/,
+    order: /^-?[a-z]+(,-?[a-z]+)*$/i,
+    country: /^[A-Z]{2}$/,
+    name: /^[^\n\r]+$/,
+    ids: /^\^[A-Za-z0-9_-]+\$(,\^[A-Za-z0-9_-]+\$)*$/,
+    category: /^[^\n\r]+$/,
+    page: /^[1-9][0-9]{0,3}$/,
+    perPage: /^[1-9][0-9]{0,3}$/,
+    slug: /^\^[a-z0-9-]+\$$/,
+  };
   static readonly maxValueLength = 512;
 
   readonly params: URLSearchParams;
@@ -27,16 +39,32 @@ export class CatalogQuery {
     this.params = params;
   }
 
-  static from(url: URL): CatalogQuery {
+  static from(url: URL): CatalogQuery | null {
     const params = new URLSearchParams();
-    for (const name of CatalogQuery.allowedParams) {
+    for (const [name, shape] of Object.entries(CatalogQuery.shapes)) {
       const value = url.searchParams.get(name);
-      if (value !== null && value.length <= CatalogQuery.maxValueLength) {
-        params.set(name, value);
+      if (value === null) {
+        continue;
       }
+      if (!CatalogQuery.accepts(value, shape)) {
+        return null;
+      }
+      params.set(name, value);
     }
     params.sort();
     return new CatalogQuery(params);
+  }
+
+  private static accepts(value: string, shape: RegExp): boolean {
+    if (value.length > CatalogQuery.maxValueLength || !shape.test(value)) {
+      return false;
+    }
+    try {
+      new RegExp(value);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   upstreamUrl(ctxApiUrl: string): string {
@@ -50,6 +78,8 @@ export class CatalogQuery {
 
 export class CatalogImage {
   static readonly source = 'https://ctx-spend.s3.us-west-2.amazonaws.com/';
+  static readonly keyShape = /^(\/[A-Za-z0-9._-]+)+$/;
+  static readonly types = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif', 'image/svg+xml'];
   static readonly widths = { logo: 256, card: 960 } as const;
   static readonly path = '/api/catalog/image';
 
@@ -62,13 +92,33 @@ export class CatalogImage {
   }
 
   static from(url: URL): CatalogImage | null {
-    const src = url.searchParams.get('src') ?? '';
+    const src = CatalogImage.sourceOf(url.searchParams.get('src') ?? '');
     const width = Number(url.searchParams.get('w'));
     const widths: readonly number[] = Object.values(CatalogImage.widths);
-    if (!src.startsWith(CatalogImage.source) || src.includes('..') || !widths.includes(width)) {
+    if (src === null || !widths.includes(width)) {
       return null;
     }
     return new CatalogImage(src, width);
+  }
+
+  static isImage(contentType: string | null): boolean {
+    const type = contentType?.split(';')[0].trim().toLowerCase() ?? '';
+    return CatalogImage.types.includes(type);
+  }
+
+  private static sourceOf(src: string): string | null {
+    let parsed: URL;
+    try {
+      parsed = new URL(src);
+    } catch {
+      return null;
+    }
+    if (parsed.search || parsed.hash || parsed.username || parsed.password) {
+      return null;
+    }
+    const canonical = `${parsed.origin}${parsed.pathname}`;
+    const inBucket = canonical.startsWith(CatalogImage.source) && CatalogImage.keyShape.test(parsed.pathname);
+    return inBucket ? canonical : null;
   }
 
   static url(src: string | undefined, width: number): string | undefined {
@@ -98,8 +148,16 @@ export class CatalogImage {
 }
 
 export class CatalogPage {
-  static withEdgeImages(body: string): string {
-    const page = JSON.parse(body) as { result?: MerchantJson[] | null };
+  static withEdgeImages(body: string): string | null {
+    let page: { result?: MerchantJson[] | null };
+    try {
+      page = JSON.parse(body);
+    } catch {
+      return null;
+    }
+    if (!page || typeof page !== 'object') {
+      return null;
+    }
     for (const merchant of page.result ?? []) {
       merchant.logoUrl = CatalogImage.url(merchant.logoUrl, CatalogImage.widths.logo);
       merchant.cardImageUrl = CatalogImage.url(merchant.cardImageUrl, CatalogImage.widths.card);
@@ -108,21 +166,26 @@ export class CatalogPage {
   }
 }
 
+export type CacheWindow = {
+  freshMs: number;
+  staleMs: number;
+};
+
 export class EdgeCache {
-  static readonly catalogFreshMs = 60_000;
-  static readonly imageFreshMs = 24 * 60 * 60_000;
   static readonly keepSeconds = 7 * 24 * 60 * 60;
+  static readonly catalog: CacheWindow = { freshMs: 60_000, staleMs: 60 * 60_000 };
+  static readonly image: CacheWindow = { freshMs: 24 * 60 * 60_000, staleMs: EdgeCache.keepSeconds * 1000 };
   static readonly browserCacheControl = 'public, max-age=30, stale-while-revalidate=600';
   private static readonly refreshing = new Map<string, Promise<Response>>();
 
   private readonly cache: Cache;
   private readonly waitUntil: (promise: Promise<unknown>) => void;
-  private readonly freshMs: number;
+  private readonly window: CacheWindow;
 
-  constructor(cache: Cache, waitUntil: (promise: Promise<unknown>) => void, freshMs: number) {
+  constructor(cache: Cache, waitUntil: (promise: Promise<unknown>) => void, window: CacheWindow) {
     this.cache = cache;
     this.waitUntil = waitUntil;
-    this.freshMs = freshMs;
+    this.window = window;
   }
 
   static default(): Cache {
@@ -130,16 +193,25 @@ export class EdgeCache {
   }
 
   isFresh(storedAt: number, now: number): boolean {
-    return now - storedAt < this.freshMs;
+    return now - storedAt < this.window.freshMs;
+  }
+
+  isServable(storedAt: number, now: number): boolean {
+    return now - storedAt < this.window.staleMs;
+  }
+
+  async evict(key: string): Promise<void> {
+    await this.cache.delete(key);
   }
 
   async serve(key: string, load: () => Promise<Response>): Promise<Response> {
     const cached = await this.cache.match(key);
-    if (!cached) {
+    const storedAt = Number(cached?.headers.get(storedAtHeader));
+    const now = Date.now();
+    if (!cached || !this.isServable(storedAt, now)) {
       return EdgeCache.toClient(await this.refresh(key, load), 'MISS');
     }
-    const storedAt = Number(cached.headers.get(storedAtHeader));
-    if (this.isFresh(storedAt, Date.now())) {
+    if (this.isFresh(storedAt, now)) {
       return EdgeCache.toClient(cached, 'HIT');
     }
     this.waitUntil(this.refresh(key, load).catch(() => undefined));
@@ -198,7 +270,10 @@ export async function serveMerchants({ request, env, waitUntil }: EdgeContext): 
   }
   const url = new URL(request.url);
   const query = CatalogQuery.from(url);
-  const edge = new EdgeCache(EdgeCache.default(), waitUntil, EdgeCache.catalogFreshMs);
+  if (!query) {
+    return new Response('Unsupported catalogue query', { status: 400 });
+  }
+  const edge = new EdgeCache(EdgeCache.default(), waitUntil, EdgeCache.catalog);
   return edge.serve(query.cacheKey(url.origin), async () => {
     const upstream = await fetch(query.upstreamUrl(env.CTX_API_URL), {
       headers: { accept: 'application/json', 'x-client-id': env.CTX_CLIENT_ID },
@@ -206,13 +281,19 @@ export async function serveMerchants({ request, env, waitUntil }: EdgeContext): 
     if (!upstream.ok) {
       return upstream;
     }
-    return new Response(CatalogPage.withEdgeImages(await upstream.text()), {
-      headers: { 'content-type': 'application/json; charset=UTF-8' },
-    });
+    const page = CatalogPage.withEdgeImages(await upstream.text());
+    if (page === null) {
+      return new Response(null, { status: 502 });
+    }
+    return new Response(page, { headers: { 'content-type': 'application/json; charset=UTF-8' } });
   });
 }
 
-export async function serveImage({ request, waitUntil }: EdgeContext): Promise<Response> {
+export async function serveImage(context: EdgeContext): Promise<Response> {
+  return SecurityHeaders.applied(await loadImage(context), SecurityHeaders.image);
+}
+
+async function loadImage({ request, waitUntil }: EdgeContext): Promise<Response> {
   if (request.method !== 'GET') {
     return new Response(null, { status: 405, headers: { allow: 'GET' } });
   }
@@ -222,14 +303,24 @@ export async function serveImage({ request, waitUntil }: EdgeContext): Promise<R
     return new Response('Unsupported image', { status: 400 });
   }
   const format = CatalogImage.format(request.headers.get('accept'));
-  const edge = new EdgeCache(EdgeCache.default(), waitUntil, EdgeCache.imageFreshMs);
-  const response = await edge.serve(image.cacheKey(url.origin, format), async () => {
+  const edge = new EdgeCache(EdgeCache.default(), waitUntil, EdgeCache.image);
+  const key = image.cacheKey(url.origin, format);
+  const response = await edge.serve(key, async () => {
     const resized = await fetch(image.src, image.fetchInit(format) as RequestInit);
-    return resized.ok ? resized : fetch(image.src);
+    const loaded = resized.ok ? resized : await fetch(image.src);
+    if (!loaded.ok) {
+      return new Response(null, { status: loaded.status });
+    }
+    return CatalogImage.isImage(loaded.headers.get('content-type')) ? loaded : new Response(null, { status: 415 });
   });
-  if (response.ok) {
-    response.headers.set('cache-control', 'public, max-age=604800, stale-while-revalidate=2592000');
-    response.headers.set('vary', 'Accept');
+  if (!response.ok) {
+    return response;
   }
+  if (!CatalogImage.isImage(response.headers.get('content-type'))) {
+    waitUntil(edge.evict(key));
+    return new Response(null, { status: 415 });
+  }
+  response.headers.set('cache-control', 'public, max-age=604800, stale-while-revalidate=2592000');
+  response.headers.set('vary', 'Accept');
   return response;
 }
