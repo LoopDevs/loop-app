@@ -22,6 +22,13 @@ test('a card in another currency is shown in dollars rounded up to the cent', ()
   assert.equal(BuyPrice.shown('20', units.parse('1.2731005')), units.parse('25.47'));
 });
 
+test('the shown price converts to the payment token, rounded up to its smallest unit', () => {
+  assert.equal(BuyPrice.inTokens(units.parse('50.80'), units.parse('1.27')), units.parse('40'));
+  assert.equal(BuyPrice.inTokens(units.parse('25'), units.parse('3')), units.parse('8.3333334'));
+  assert.equal(BuyPrice.inTokens(shown, Rates.one), shown);
+  assert.equal(BuyPrice.inTokens(shown, 0n), null);
+});
+
 test('a card with no exchange rate or no amount has no shown price', () => {
   assert.equal(BuyPrice.shown('20', null), null);
   assert.equal(BuyPrice.shown('', Rates.one), null);
