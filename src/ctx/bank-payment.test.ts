@@ -73,9 +73,17 @@ test('the open link ignores time and only needs an unpaid bank order with a link
   assert.equal(BankPayment.openLink(bankOrder({ paymentMethod: 'crypto' })), null);
 });
 
-test('a link without a readable expiry counts as expired', () => {
-  assert.equal(BankPayment.linkExpired(bankOrder({ paymentUrlExpiration: undefined }), now), true);
-  assert.equal(BankPayment.link(bankOrder({ paymentUrlExpiration: 'soon' }), now), null);
+test('a link without a readable expiry stays open', () => {
+  assert.equal(BankPayment.linkExpired(bankOrder({ paymentUrlExpiration: undefined }), now), false);
+  assert.equal(BankPayment.link(bankOrder({ paymentUrlExpiration: 'soon' }), now), 'https://secure.plaid.com/hl/abc');
+});
+
+test('only an https link on a plaid host is offered for approval', () => {
+  assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: 'http://secure.plaid.com/hl/abc' })), null);
+  assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: 'https://secure.plaid.com.example/hl/abc' })), null);
+  assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: 'https://example.com/plaid.com' })), null);
+  assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: 'hl/abc' })), null);
+  assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: 'https://plaid.com/hl/abc' })), 'https://plaid.com/hl/abc');
 });
 
 test('a paid or settled order has no link and is never expired', () => {
@@ -93,14 +101,27 @@ test('a crypto order never offers a bank link', () => {
 test('an unpaid order with a live link resumes waiting for the bank', () => {
   assert.deepEqual(BankPayment.resumed(bankOrder(), now), {
     order: bankOrder(),
-    payment: { kind: 'bank' },
+    payment: { kind: 'bank', linkOpen: true },
     follow: true,
     sent: null,
   });
 });
 
-test('an unpaid order with an expired link is dropped', () => {
-  assert.equal(BankPayment.resumed(bankOrder({ paymentUrlExpiration: earlier }), now), null);
+test('an unpaid order is followed until CTX settles it, whether or not its link is still open', () => {
+  const linkClosed = bankOrder({ paymentUrlExpiration: earlier });
+  assert.deepEqual(BankPayment.resumed(linkClosed, now), {
+    order: linkClosed,
+    payment: { kind: 'bank', linkOpen: false },
+    follow: true,
+    sent: null,
+  });
+  const noLink = bankOrder({ paymentMethod: 'plaid-vrp', paymentUrl: undefined, paymentUrlExpiration: undefined });
+  assert.deepEqual(BankPayment.resumed(noLink, now), {
+    order: noLink,
+    payment: { kind: 'bank', linkOpen: false },
+    follow: true,
+    sent: null,
+  });
 });
 
 test('a paid order resumes and is followed, a settled one is shown still', () => {
