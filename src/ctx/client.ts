@@ -45,6 +45,7 @@ export type DeployWalletIn = {
 };
 
 export type SmartWalletIntent =
+  | { intent: 'vault_deposit'; currency: string; amount: string }
   | { intent: 'vault_withdraw'; currency: string; shares: string }
   | { intent: 'pay'; paymentId: string }
   | { intent: 'rotate_device'; newDevicePublicKey: string };

@@ -14,7 +14,7 @@ import { MissingDeviceSecret } from './device-key.ts';
 import { deviceSigner } from './device-signer.ts';
 import { Holdings } from './holdings.ts';
 import { passkey } from './passkey.ts';
-import { Savings } from './savings.ts';
+import { Savings, UnansweredDeposit } from './savings.ts';
 import { SmartWallet, UnlinkedDevice } from './smart-wallet.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 import { WalletPin } from './wallet-pin.ts';
@@ -455,6 +455,62 @@ test('another signing failure is passed on unchanged', async () => {
     throw new Error('identity not confirmed');
   });
   await assert.rejects(wallet.pay(giftCard), /identity not confirmed/);
+});
+
+function fakeDeposit(requireDeposit: (expected: unknown) => void) {
+  const fakes = fakePayment();
+  const ruleIds: number[][] = [];
+  const intents: unknown[] = [];
+  replace(SponsoredCall, 'verify', (_built: unknown, _wallet: string, ids: number[]) => {
+    ruleIds.push(ids);
+    return { digest: new Uint8Array([9]), requireDeposit };
+  });
+  replace(ctx, 'buildTransaction', async (_id: string, intent: unknown) => {
+    intents.push(intent);
+    return { transaction: 'xdr-3', digest: 'ef', contextRuleIds: [1, 1], expiryLedger: 1_030 };
+  });
+  return { ...fakes, ruleIds, intents };
+}
+
+test('a deposit asks CTX for the vault deposit of exactly that amount and sponsors it only once checked', async () => {
+  const wallet = (await SmartWallet.load()) as SmartWallet;
+  const required: unknown[] = [];
+  const fakes = fakeDeposit((expected) => required.push(expected));
+  const sent = await wallet.deposit('XLM.USDC', 250n);
+  assert.deepEqual(fakes.intents, [{ intent: 'vault_deposit', currency: 'XLM.USDC', amount: '0.0000250' }]);
+  assert.deepEqual(fakes.ruleIds, [[SmartWallet.deviceRuleId, SmartWallet.deviceRuleId]]);
+  assert.deepEqual(required, [{ from: address, vault: Savings.vault('XLM.USDC'), token: network.tokens[1], amount: 250n }]);
+  assert.deepEqual(sent, { hash: 'tx-1', status: 'PENDING', expiryLedger: 1_030 });
+  assert.deepEqual(fakes.sponsored, [
+    {
+      intent: { intent: 'vault_deposit', currency: 'XLM.USDC', amount: '0.0000250' },
+      signed: { transaction: 'xdr-3', signature: 'sig-1', devicePublicKey: base64.encode(deviceKey) },
+    },
+  ]);
+});
+
+test('a deposit that fails its check is never signed or sponsored', async () => {
+  const wallet = (await SmartWallet.load()) as SmartWallet;
+  const fakes = fakeDeposit(() => {
+    throw new Error('The deposit amount does not match the request');
+  });
+  let signed = false;
+  replace(deviceSigner, 'sign', async () => {
+    signed = true;
+    return 'sig-1';
+  });
+  await assert.rejects(wallet.deposit('XLM.USDC', 250n), /does not match the request/);
+  assert.equal(signed, false);
+  assert.deepEqual(fakes.sponsored, []);
+});
+
+test('a deposit whose sponsor reply is lost reads as unanswered', async () => {
+  const wallet = (await SmartWallet.load()) as SmartWallet;
+  fakeDeposit(() => undefined);
+  replace(ctx, 'sponsorTransaction', async () => {
+    throw new TypeError('Network request failed');
+  });
+  await assert.rejects(wallet.deposit('XLM.USDC', 250n), (error: unknown) => error instanceof UnansweredDeposit);
 });
 
 test('a withdrawal asks CTX for the vault withdraw of exactly those shares and sponsors it signed', async () => {

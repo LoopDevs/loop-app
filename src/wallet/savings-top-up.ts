@@ -1,49 +1,33 @@
 import type { SponsoredResult } from '../ctx/client.ts';
 import { CtxError } from '../ctx/ctx-error.ts';
-import { chainOutcome } from '../ctx/payment-state.ts';
 import type { PriceWindow } from '../ctx/price-window.ts';
 import { money } from '../money.ts';
 import type { PaymentCurrency } from '../stellar/network.ts';
 import { Holdings } from './holdings.ts';
 import type { Balances } from './smart-wallet.ts';
-
-export type PendingWithdrawal = {
-  hash: string;
-  expiryLedger: number;
-};
-
-export type SentWithdrawal = SponsoredResult & { expiryLedger: number };
+import { VaultCall, type PendingVaultCall, type SentVaultCall } from './vault-call.ts';
 
 export type SignedWithdrawal = {
   expiryLedger: number;
   sponsor(): Promise<SponsoredResult>;
 };
 
-export type ChainTransaction = {
-  status: string;
-  latestLedger: number;
-};
-
 export type TopUpChain = {
   balances(): Promise<Balances>;
   valueOf(shares: bigint): Promise<bigint>;
   signWithdrawal(shares: bigint): Promise<SignedWithdrawal>;
-  transaction(hash: string): Promise<ChainTransaction>;
-  latestLedger(): Promise<number>;
-  sleep(ms: number): Promise<void>;
+  vaultCall: VaultCall;
   now(): number;
 };
 
 export type TopUpOutcome =
-  | { kind: 'covered'; withdrawal?: PendingWithdrawal }
+  | { kind: 'covered'; withdrawal?: PendingVaultCall }
   | { kind: 'priceClosing' }
   | { kind: 'notEnough' }
   | { kind: 'withdrawFailed' }
-  | { kind: 'stillMoving'; withdrawal: PendingWithdrawal }
+  | { kind: 'stillMoving'; withdrawal: PendingVaultCall }
   | { kind: 'priceExpired' }
   | { kind: 'stillShort'; moved: bigint; currency: PaymentCurrency };
-
-type ChainOutcome = 'pending' | 'success' | 'failed';
 
 export class UnansweredWithdrawal extends Error {
   readonly expiryLedger: number;
@@ -55,7 +39,7 @@ export class UnansweredWithdrawal extends Error {
   }
 
   static rethrow(error: unknown, expiryLedger: number): never {
-    if (error instanceof CtxError && error.status >= 400 && error.status < 500) {
+    if (VaultCall.refusedBySponsor(error)) {
       throw error;
     }
     throw new UnansweredWithdrawal(expiryLedger, error);
@@ -64,8 +48,6 @@ export class UnansweredWithdrawal extends Error {
 
 export class SavingsTopUp {
   static readonly requiredWindowMs = 90_000;
-  static readonly confirmTimeoutMs = 30_000;
-  static readonly confirmPollMs = 2_000;
   static readonly withdrawAttempts = 2;
 
   readonly chain: TopUpChain;
@@ -86,21 +68,14 @@ export class SavingsTopUp {
     return shares < savedShares ? shares : savedShares;
   }
 
-  static outcomeOf(transaction: ChainTransaction, withdrawal: PendingWithdrawal): ChainOutcome {
-    if (transaction.status === 'NOT_FOUND' && transaction.latestLedger > withdrawal.expiryLedger) {
-      return 'failed';
-    }
-    return chainOutcome(transaction.status);
-  }
-
-  static async send(signed: SignedWithdrawal): Promise<SentWithdrawal> {
+  static async send(signed: SignedWithdrawal): Promise<SentVaultCall> {
     const result = await signed
       .sponsor()
       .catch((error: unknown) => UnansweredWithdrawal.rethrow(error, signed.expiryLedger));
     return { ...result, expiryLedger: signed.expiryLedger };
   }
 
-  static refusedWithdrawal(error: unknown): SentWithdrawal {
+  static refusedWithdrawal(error: unknown): SentVaultCall {
     if (error instanceof CtxError && error.status === 400) {
       return { hash: '', status: 'failed', error: error.message, expiryLedger: 0 };
     }
@@ -138,15 +113,16 @@ export class SavingsTopUp {
     return balances.savings.find((saved) => saved.currency === this.currency) ?? { shares: 0n, value: 0n };
   }
 
-  async run(price: bigint, window: PriceWindow | null, pending?: PendingWithdrawal): Promise<TopUpOutcome> {
+  async run(price: bigint, window: PriceWindow | null, pending?: PendingVaultCall): Promise<TopUpOutcome> {
+    const { vaultCall } = this.chain;
     let balances = await this.chain.balances();
     if (this.inWallet(balances) >= price) {
-      return pending && (await this.status(pending)) === 'pending'
+      return pending && (await vaultCall.status(pending)) === 'pending'
         ? { kind: 'covered', withdrawal: pending }
         : { kind: 'covered' };
     }
     if (pending) {
-      if ((await this.confirm(pending)) === 'pending') {
+      if ((await vaultCall.confirm(pending)) === 'pending') {
         return { kind: 'stillMoving', withdrawal: pending };
       }
       balances = await this.chain.balances();
@@ -159,7 +135,7 @@ export class SavingsTopUp {
     if (started.kind !== 'sent') {
       return started;
     }
-    const status = await this.confirm(started.withdrawal);
+    const status = await vaultCall.confirm(started.withdrawal);
     if (status === 'failed') {
       return { kind: 'withdrawFailed' };
     }
@@ -197,7 +173,7 @@ export class SavingsTopUp {
     shortfall: bigint,
     balances: Balances,
     window: PriceWindow | null,
-  ): Promise<{ kind: 'sent'; withdrawal: PendingWithdrawal } | TopUpOutcome> {
+  ): Promise<{ kind: 'sent'; withdrawal: PendingVaultCall } | TopUpOutcome> {
     let vault = balances;
     for (let attempt = 1; ; attempt += 1) {
       if (!window || window.expiresAt - this.chain.now() < SavingsTopUp.requiredWindowMs) {
@@ -207,7 +183,7 @@ export class SavingsTopUp {
       if (shares === null) {
         return { kind: 'notEnough' };
       }
-      let result: SentWithdrawal;
+      let result: SentVaultCall;
       try {
         result = await SavingsTopUp.send(await this.chain.signWithdrawal(shares));
       } catch (error) {
@@ -223,35 +199,6 @@ export class SavingsTopUp {
         return { kind: 'withdrawFailed' };
       }
       vault = await this.chain.balances();
-    }
-  }
-
-  private async confirm(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
-    const deadline = this.chain.now() + SavingsTopUp.confirmTimeoutMs;
-    for (;;) {
-      const status = await this.status(withdrawal);
-      if (status !== 'pending' || this.chain.now() >= deadline) {
-        return status;
-      }
-      await this.chain.sleep(SavingsTopUp.confirmPollMs);
-    }
-  }
-
-  private status(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
-    if (!withdrawal.hash) {
-      return this.unansweredStatus(withdrawal);
-    }
-    return this.chain.transaction(withdrawal.hash).then(
-      (transaction) => SavingsTopUp.outcomeOf(transaction, withdrawal),
-      () => 'pending' as const,
-    );
-  }
-
-  private async unansweredStatus(withdrawal: PendingWithdrawal): Promise<ChainOutcome> {
-    try {
-      return (await this.chain.latestLedger()) > withdrawal.expiryLedger ? 'failed' : 'pending';
-    } catch {
-      return 'pending';
     }
   }
 }

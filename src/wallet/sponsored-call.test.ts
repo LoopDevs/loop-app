@@ -41,6 +41,8 @@ type Shape = {
   extraOperation?: boolean;
   payment?: boolean;
   call?: xdr.InvokeContractArgs;
+  nestedCalls?: xdr.InvokeContractArgs[];
+  ids?: number[];
 };
 
 function transferArgs(amount: bigint, to: string = network.payee): xdr.InvokeContractArgs {
@@ -81,7 +83,17 @@ function authEntry(shape: Shape): xdr.SorobanAuthorizationEntry {
     credentials,
     rootInvocation: new xdr.SorobanAuthorizedInvocation({
       function: fn,
-      subInvocations: shape.nested ? [nestedInvocation] : [],
+      subInvocations: shape.nestedCalls
+        ? shape.nestedCalls.map(
+            (nestedCall) =>
+              new xdr.SorobanAuthorizedInvocation({
+                function: xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(nestedCall),
+                subInvocations: shape.nested ? [nestedInvocation] : [],
+              }),
+          )
+        : shape.nested
+          ? [nestedInvocation]
+          : [],
     }),
   });
 }
@@ -124,8 +136,8 @@ function build(shape: Shape = {}, overrides: Partial<BuiltTransaction> = {}): Bu
   const transaction = builder.setTimeout(30).build().toXDR();
   return {
     transaction,
-    digest: shape.credentials === 'source' ? '00'.repeat(32) : independentDigest(entry, ruleIds),
-    contextRuleIds: ruleIds,
+    digest: shape.credentials === 'source' ? '00'.repeat(32) : independentDigest(entry, shape.ids ?? ruleIds),
+    contextRuleIds: shape.ids ?? ruleIds,
     expiryLedger: expiry,
     ...overrides,
   };
@@ -170,7 +182,7 @@ test('an authorization for another wallet is refused', () => {
   rejects(build({ signer: otherWallet }), /different wallet/);
 });
 
-test('an authorization covering nested calls is refused', () => {
+test('a one-rule authorization covering nested calls is refused', () => {
   rejects(build({ nested: true }), /nested calls/);
 });
 
@@ -343,4 +355,135 @@ test('withdrawal minimums that are not i128 values are refused', () => {
   );
   assert.throws(() => call.requireWithdrawal(expectedWithdrawal), /does not match/);
   assert.throws(() => stringMinimum.requireWithdrawal(expectedWithdrawal), /not a withdrawal/);
+});
+
+const usdc = network.tokens[1];
+const depositIds = [1, 1];
+
+type DepositShape = {
+  vault?: string;
+  method?: string;
+  desired?: bigint[];
+  minimums?: bigint[];
+  from?: string;
+  invest?: boolean;
+  transfers?: xdr.InvokeContractArgs[];
+};
+
+type TransferShape = { from?: string; to?: string; amount?: bigint; contract?: string };
+
+function depositTransfer(shape: TransferShape = {}): xdr.InvokeContractArgs {
+  return new xdr.InvokeContractArgs({
+    contractAddress: new Address(shape.contract ?? usdc.contract).toScAddress(),
+    functionName: 'transfer',
+    args: [
+      new Address(shape.from ?? wallet).toScVal(),
+      new Address(shape.to ?? usdcVault).toScVal(),
+      nativeToScVal(shape.amount ?? 40n, { type: 'i128' }),
+    ],
+  });
+}
+
+function depositShape(shape: DepositShape = {}): Shape {
+  return {
+    call: new xdr.InvokeContractArgs({
+      contractAddress: new Address(shape.vault ?? usdcVault).toScAddress(),
+      functionName: shape.method ?? 'deposit',
+      args: [
+        nativeToScVal(shape.desired ?? [40n], { type: 'i128' }),
+        nativeToScVal(shape.minimums ?? [39n], { type: 'i128' }),
+        new Address(shape.from ?? wallet).toScVal(),
+        nativeToScVal(shape.invest ?? true),
+      ],
+    }),
+    nestedCalls: shape.transfers ?? [depositTransfer()],
+    ids: depositIds,
+  };
+}
+
+function verifiedDeposit(shape: DepositShape = {}): SponsoredCall {
+  return SponsoredCall.verify(build(depositShape(shape)), wallet, depositIds, latestLedger);
+}
+
+const expectedDeposit = { from: wallet, vault: usdcVault, token: usdc, amount: 40n };
+
+function depositRejected(shape: DepositShape, message: RegExp): void {
+  assert.throws(() => verifiedDeposit(shape).requireDeposit(expectedDeposit), message);
+}
+
+test('a vault deposit verifies with two device rules and exposes its nested transfer', () => {
+  const built = build(depositShape());
+  const call = SponsoredCall.verify(built, wallet, depositIds, latestLedger);
+  assert.equal(call.contract, usdcVault);
+  assert.equal(call.method, 'deposit');
+  assert.equal(call.nested.length, 1);
+  assert.equal(call.nested[0].contract, usdc.contract);
+  assert.equal(call.nested[0].method, 'transfer');
+  assert.equal(bytesToHex(call.digest), built.digest);
+});
+
+test('a vault deposit naming wallet rules other than [1, 1] is refused', () => {
+  for (const contextRuleIds of [[1], [1, 0], [0, 1], [1, 1, 1]]) {
+    assert.throws(
+      () => SponsoredCall.verify(build(depositShape(), { contextRuleIds }), wallet, depositIds, latestLedger),
+      /unexpected wallet rules/,
+    );
+  }
+});
+
+test('a vault deposit verified against one rule is refused', () => {
+  rejects(build(depositShape()), /nested calls/);
+});
+
+test('a two-rule authorization without a nested call is refused', () => {
+  assert.throws(() => SponsoredCall.verify(build({ ids: depositIds }), wallet, depositIds, latestLedger), /nested calls/);
+});
+
+test('a nested call with its own nested calls is refused', () => {
+  assert.throws(
+    () => SponsoredCall.verify(build({ ...depositShape(), nested: true }), wallet, depositIds, latestLedger),
+    /nested calls inside nested calls/,
+  );
+});
+
+test('a deposit of the amount from this wallet into the savings vault is accepted', () => {
+  assert.doesNotThrow(() => verifiedDeposit().requireDeposit(expectedDeposit));
+  assert.doesNotThrow(() => verifiedDeposit({ minimums: [40n] }).requireDeposit(expectedDeposit));
+  assert.doesNotThrow(() => verifiedDeposit({ minimums: [0n] }).requireDeposit(expectedDeposit));
+});
+
+test('a deposit into another contract or by another vault method is refused', () => {
+  depositRejected({ vault: otherWallet }, /not a deposit/);
+  depositRejected({ method: 'withdraw' }, /not a deposit/);
+});
+
+test('a deposit whose desired amounts differ from the amount is refused', () => {
+  depositRejected({ desired: [41n] }, /amount does not match/);
+  depositRejected({ desired: [40n, 40n] }, /amount does not match/);
+  depositRejected({ desired: [] }, /amount does not match/);
+});
+
+test('a deposit whose minimum is above the amount is refused', () => {
+  depositRejected({ minimums: [41n] }, /minimum is above/);
+  depositRejected({ minimums: [] }, /minimum is above/);
+});
+
+test('a deposit from another address or that does not invest is refused', () => {
+  depositRejected({ from: otherWallet }, /does not match the request/);
+  depositRejected({ invest: false }, /does not match the request/);
+});
+
+test('a deposit must authorize exactly one transfer of the amount from the wallet to the vault', () => {
+  const twoTransfers = { transfers: [depositTransfer(), depositTransfer()] };
+  depositRejected(twoTransfers, /nested calls the wallet rules do not/);
+  const threeRules = [1, 1, 1];
+  const built = build({ ...depositShape(twoTransfers), ids: threeRules });
+  assert.throws(
+    () => SponsoredCall.verify(built, wallet, threeRules, latestLedger).requireDeposit(expectedDeposit),
+    /exactly one USDC transfer/,
+  );
+  depositRejected({ transfers: [depositTransfer({ from: otherWallet })] }, /transfer does not match/);
+  depositRejected({ transfers: [depositTransfer({ to: otherWallet })] }, /transfer does not match/);
+  depositRejected({ transfers: [depositTransfer({ amount: 41n })] }, /transfer does not match/);
+  depositRejected({ transfers: [depositTransfer({ contract: network.tokens[0].contract })] }, /not a USDC transfer/);
 });
