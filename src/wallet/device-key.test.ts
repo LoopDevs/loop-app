@@ -123,6 +123,19 @@ test('creating again keeps the existing key so a wallet deployed with it stays u
   assert.equal(await key.sign(digest), signature);
 });
 
+test('creates started together for one user share one key', async () => {
+  const storage = new MemoryStorage();
+  const [first, second] = await Promise.all([
+    new DeviceKey(storage, 'a').create(),
+    new DeviceKey(storage, 'a').create(),
+  ]);
+  const key = new DeviceKey(storage, 'a');
+
+  assert.equal(second, first);
+  assert.ok(ed25519.verify(base64.decode(await key.sign(digest)), digest, base64.decode(first)));
+  assert.deepEqual(storage.touched, [key.secretName, key.secretName, key.publicKeyName]);
+});
+
 test('creating after the OS dropped the secret makes a new key', async () => {
   const storage = new MemoryStorage();
   const key = new DeviceKey(storage, 'a');
