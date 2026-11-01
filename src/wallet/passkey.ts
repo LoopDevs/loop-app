@@ -63,7 +63,7 @@ async function signChallenge(challenge: Uint8Array): Promise<PasskeyAssertion> {
   if (!signed) {
     throw new UserCancelled('The confirmation was cancelled');
   }
-  return PasskeyAssertion.fromResponse(signed.response);
+  return PasskeyAssertion.fromCredential(signed);
 }
 
 const providerHelp: Partial<Record<typeof Platform.OS, string>> = {

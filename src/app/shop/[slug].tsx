@@ -73,7 +73,7 @@ export default function MerchantScreen() {
           }
           const isSignedIn = userId !== null;
           const [loadedWallet, loadedProfile] = isSignedIn
-            ? await Promise.all([SmartWallet.load().catch(SmartWallet.unlessUnlinked), ctx.me()])
+            ? await Promise.all([SmartWallet.load().catch(SmartWallet.unlessBlocked), ctx.me()])
             : [null, null];
           setWallet((current) => (loadedWallet?.sameAs(current) ? current : loadedWallet));
           setProfile(loadedProfile);

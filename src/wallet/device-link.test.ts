@@ -1,36 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { p256 } from '@noble/curves/nist';
-import { sha256 } from '@noble/hashes/sha2';
-import { concatBytes, randomBytes } from '@noble/hashes/utils';
 import { xdr } from '@stellar/stellar-sdk';
 
 import type { SignedTransaction, SmartWalletIntent } from '../ctx/client.ts';
 import { network } from '../stellar/network.ts';
 import { base64 } from './base64.ts';
 import { DeviceLink, type DeviceLinkDeps } from './device-link.ts';
-import { PasskeyAssertion } from './passkey-assertion.ts';
+import { passkeyHolder, type PasskeyHolder } from './passkey-holder.fixture.ts';
 import { expiry, latestLedger, otherWallet, rotationBuilt, wallet, type RotationShape } from './rotation.fixture.ts';
 import type { ContextRule } from './wallet-rules.ts';
 
-const passkeySecret = p256.utils.randomPrivateKey();
-const passkeyPublicKey = p256.getPublicKey(passkeySecret, false);
+const holder = passkeyHolder();
+const passkeyPublicKey = holder.publicKey;
 const newKey = new Uint8Array(32).fill(7);
 const oldKey = new Uint8Array(32).fill(3);
-
-function signedBy(secret: Uint8Array, challenge: Uint8Array): PasskeyAssertion {
-  const authenticatorData = randomBytes(37);
-  const clientDataJson = new TextEncoder().encode(
-    JSON.stringify({ type: 'webauthn.get', challenge: PasskeyAssertion.challengeOf(challenge) }),
-  );
-  const signature = p256.sign(concatBytes(authenticatorData, sha256(clientDataJson)), secret, { lowS: true });
-  return PasskeyAssertion.fromResponse({
-    authenticatorData: base64.encodeUrl(authenticatorData),
-    clientDataJSON: base64.encodeUrl(clientDataJson),
-    signature: base64.encodeUrl(signature.toBytes('der')),
-  });
-}
 
 function deviceRule(key: Uint8Array): ContextRule {
   return { id: 1, signers: [['External', network.ed25519Verifier, key]], valid_until: undefined };
@@ -39,8 +23,9 @@ function deviceRule(key: Uint8Array): ContextRule {
 type Options = {
   shape?: RotationShape;
   builtKey?: Uint8Array;
-  passkeySecret?: Uint8Array;
+  passkey?: PasskeyHolder;
   ledgers?: number[];
+  rpcDownAfterBuild?: boolean;
 };
 
 function harness(options: Options = {}) {
@@ -49,6 +34,7 @@ function harness(options: Options = {}) {
     challenges: [] as Uint8Array[],
     sponsored: [] as SignedTransaction[],
     ruleReads: 0,
+    ledgerReads: 0,
   };
   const ledgers = [...(options.ledgers ?? [])];
   const deps: DeviceLinkDeps = {
@@ -65,14 +51,18 @@ function harness(options: Options = {}) {
     },
     async signWithPasskey(challenge) {
       calls.challenges.push(challenge);
-      return signedBy(options.passkeySecret ?? passkeySecret, challenge);
+      return (options.passkey ?? holder).sign(challenge);
     },
     async latestLedger() {
+      calls.ledgerReads += 1;
+      if (options.rpcDownAfterBuild && calls.ledgerReads > 1) {
+        throw new Error('rpc unavailable');
+      }
       return ledgers.shift() ?? latestLedger;
     },
     async deviceRule() {
       calls.ruleReads += 1;
-      if (calls.ruleReads === 1) {
+      if (calls.ruleReads === 1 || options.rpcDownAfterBuild) {
         throw new Error('rpc unavailable');
       }
       return deviceRule(calls.ruleReads >= 3 ? newKey : oldKey);
@@ -113,7 +103,7 @@ test('the passkey is never asked to sign a call on another wallet or another fun
 });
 
 test('a signature by another passkey is checked before anything is sponsored', async () => {
-  const { link, calls } = harness({ passkeySecret: p256.utils.randomPrivateKey() });
+  const { link, calls } = harness({ passkey: passkeyHolder() });
   await assert.rejects(link.add(wallet, passkeyPublicKey), /sign-in you set Loop up with/);
   assert.equal(calls.challenges.length, 1);
   assert.equal(calls.sponsored.length, 0);
@@ -122,6 +112,13 @@ test('a signature by another passkey is checked before anything is sponsored', a
 test('the wait fails once the authorization has expired', async () => {
   const { link } = harness({ ledgers: [latestLedger, expiry + 1] });
   await assert.rejects(link.add(wallet, passkeyPublicKey), /timed out/);
+});
+
+test('the wait gives up once the ledger cannot be read any more', async () => {
+  const { link, calls } = harness({ rpcDownAfterBuild: true });
+  await assert.rejects(link.add(wallet, passkeyPublicKey), /timed out/);
+  assert.equal(calls.sponsored.length, 1);
+  assert.equal(calls.ledgerReads, 1 + DeviceLink.maxLedgerFailures);
 });
 
 test('the wait stops when it is aborted', async () => {

@@ -1,3 +1,4 @@
+import { randomBytes } from '@noble/hashes/utils';
 import { xdr } from '@stellar/stellar-sdk';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,11 +25,13 @@ import { DeviceLink } from '@/wallet/device-link';
 import { deviceSigner } from '@/wallet/device-signer';
 import { Holdings } from '@/wallet/holdings';
 import { passkey, type Passkey } from '@/wallet/passkey';
+import type { PasskeyAssertion } from '@/wallet/passkey-assertion';
 import { PaymentSearch, type OrderPayment } from '@/wallet/payment-search';
 import { Savings, type SavingsBalance } from '@/wallet/savings';
 import { SavingsTopUp, type SentWithdrawal, type SignedWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 import { WalletCreation } from '@/wallet/wallet-creation';
+import { WalletIdentity } from '@/wallet/wallet-identity';
 import { WalletPin } from '@/wallet/wallet-pin';
 import { WalletRules, type ContextRule, type WalletCheck } from '@/wallet/wallet-rules';
 
@@ -42,9 +45,24 @@ export type Balances = {
   savings: SavingsBalance[];
 };
 
-export class UnlinkedDevice extends Error {
-  constructor(readonly wallet: SmartWallet) {
-    super('Loop is not set up on this device yet. Open Home to set it up.');
+export class WalletBlocked extends Error {
+  constructor(
+    readonly wallet: SmartWallet,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export class UnlinkedDevice extends WalletBlocked {
+  constructor(wallet: SmartWallet) {
+    super(wallet, 'Loop is not set up on this device yet. Open Home to set it up.');
+  }
+}
+
+export class UnconfirmedIdentity extends WalletBlocked {
+  constructor(wallet: SmartWallet) {
+    super(wallet, 'Confirm it’s you on Home to use your balance here.');
   }
 }
 
@@ -59,10 +77,15 @@ export class SmartWallet {
   ) {}
 
   private static readonly creation = new WalletCreation<SmartWallet>();
+  private static readonly confirmed = new Set<string>();
   private static readonly pinStorage: TokenStorage = Platform.OS === 'web' ? AsyncStorage : secureTokenStorage;
 
   private static pinFor(userId: string): WalletPin {
     return new WalletPin(SmartWallet.pinStorage, userId, () => ctx.userId());
+  }
+
+  static forgetConfirmations(): void {
+    SmartWallet.confirmed.clear();
   }
 
   static async load(): Promise<SmartWallet | null> {
@@ -78,9 +101,13 @@ export class SmartWallet {
       return null;
     }
     const wallet = new SmartWallet(link.id, link.address, userId);
-    const checked = await wallet.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
-    if (!(await pin.admits(pinned, wallet.address, checked))) {
+    const checked = await wallet.verify();
+    const held = WalletPin.current(pinned, wallet.address, checked.passkeyPublicKey);
+    if (!(await pin.admits(held, wallet.address, checked, (credentialId) => wallet.walletAddressOf(credentialId)))) {
       throw new UnlinkedDevice(wallet);
+    }
+    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(wallet.confirmedKey())) {
+      throw new UnconfirmedIdentity(wallet);
     }
     return wallet;
   }
@@ -89,8 +116,8 @@ export class SmartWallet {
     return other !== null && other.id === this.id && other.address === this.address && other.userId === this.userId;
   }
 
-  static unlessUnlinked(error: unknown): null {
-    if (error instanceof UnlinkedDevice) {
+  static unlessBlocked(error: unknown): null {
+    if (error instanceof WalletBlocked) {
       return null;
     }
     throw error;
@@ -128,9 +155,13 @@ export class SmartWallet {
       devicePublicKey,
     });
     const wallet = new SmartWallet(link.id, link.address, userId);
+    if ((await wallet.walletAddressOf(base64.decode(created.credentialId))) !== wallet.address) {
+      throw new Error("Loop couldn't confirm the new wallet is yours. Try again.");
+    }
     if ((await wallet.verify(created.publicKey)).thisDevice !== 'linked') {
       throw new Error('The new wallet does not hold this device key');
     }
+    SmartWallet.confirmed.add(wallet.confirmedKey());
     await pin.write({
       address: wallet.address,
       passkeyPublicKey: base64.encode(created.publicKey),
@@ -156,14 +187,34 @@ export class SmartWallet {
   async addThisDevice(signal?: AbortSignal): Promise<void> {
     const pin = SmartWallet.pinFor(this.userId);
     const pinned = await pin.read();
-    const checked = await this.verify(pinned ? base64.decode(pinned.passkeyPublicKey) : undefined);
+    const checked = await this.verify();
+    const held = WalletPin.current(pinned, this.address, checked.passkeyPublicKey);
     await pin.confirmThisDevice(
-      pinned,
+      held,
       this.address,
       checked,
-      () => holdCriticalReload(() => this.deviceLink().add(this.address, checked.passkeyPublicKey, signal)),
-      (challenge) => passkey.sign(challenge),
+      () =>
+        holdCriticalReload(() =>
+          this.deviceLink(checked.passkeyPublicKey).add(this.address, checked.passkeyPublicKey, signal),
+        ),
+      this.proof(checked.passkeyPublicKey),
     );
+    await this.requireConfirmed(checked.passkeyPublicKey);
+  }
+
+  async confirmIdentity(): Promise<void> {
+    const checked = await this.verify();
+    await this.proof(checked.passkeyPublicKey)(randomBytes(32));
+  }
+
+  private async requireConfirmed(passkeyPublicKey: Uint8Array): Promise<void> {
+    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(this.confirmedKey())) {
+      await this.proof(passkeyPublicKey)(randomBytes(32));
+    }
+  }
+
+  private confirmedKey(): string {
+    return `${this.userId}:${this.address}`;
   }
 
   async balances(): Promise<Balances> {
@@ -272,6 +323,9 @@ export class SmartWallet {
   }
 
   private async sign(call: SponsoredCall): Promise<{ signature: string; devicePublicKey: string }> {
+    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(this.address)) {
+      throw new UnconfirmedIdentity(this);
+    }
     const devicePublicKey = await deviceSigner.publicKey(this.userId);
     if (!devicePublicKey) {
       throw new Error('This device has no wallet key');
@@ -290,16 +344,32 @@ export class SmartWallet {
     return (await soroban.read(this.address, 'get_context_rule', [xdr.ScVal.scvU32(id)])) as ContextRule;
   }
 
-  private deviceLink(): DeviceLink {
+  private deviceLink(passkeyPublicKey: Uint8Array): DeviceLink {
     return new DeviceLink({
       createDeviceKey: () => deviceSigner.create(this.userId),
       buildTransaction: (intent) => ctx.buildTransaction(this.id, intent),
       sponsorTransaction: (intent, signed) => ctx.sponsorTransaction(this.id, intent, signed),
-      signWithPasskey: (challenge) => passkey.sign(challenge),
+      signWithPasskey: this.proof(passkeyPublicKey),
       latestLedger: () => soroban.latestLedger(),
       deviceRule: () => this.rule(SmartWallet.deviceRuleId),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     });
+  }
+
+  private proof(passkeyPublicKey: Uint8Array): (challenge: Uint8Array) => Promise<PasskeyAssertion> {
+    const identity = new WalletIdentity(this.address, {
+      signWithPasskey: (challenge) => passkey.sign(challenge),
+      addressOf: (credentialId) => this.walletAddressOf(credentialId),
+    });
+    return async (challenge) => {
+      const assertion = await identity.prove(challenge, passkeyPublicKey);
+      SmartWallet.confirmed.add(this.confirmedKey());
+      return assertion;
+    };
+  }
+
+  private async walletAddressOf(credentialId: Uint8Array): Promise<string> {
+    return (await soroban.read(network.factory, 'wallet_address', [xdr.ScVal.scvBytes(credentialId)])) as string;
   }
 
   private async requireWithdraw(call: SponsoredCall, currency: PaymentCurrency, shares: bigint): Promise<void> {
@@ -322,3 +392,5 @@ export class SmartWallet {
     return value;
   }
 }
+
+ctx.onSessionEnd(SmartWallet.forgetConfirmations);

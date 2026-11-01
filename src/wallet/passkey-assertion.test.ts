@@ -80,6 +80,21 @@ test('a signature by another passkey is refused', () => {
   assert.throws(() => assertion(digest, false).requireSigned(digest, otherKey), /sign-in you set Loop up with/);
 });
 
+test('the credential id of the sign-in is kept when the platform reports one', () => {
+  const credentialId = randomBytes(16);
+  const { authenticatorData, clientDataJson, signature } = assertion(digest, false);
+  const response = {
+    authenticatorData: base64.encodeUrl(authenticatorData),
+    clientDataJSON: base64.encodeUrl(clientDataJson),
+    signature: base64.encodeUrl(new p256.Signature(scalar(signature.slice(0, 32)), scalar(signature.slice(32))).toBytes('der')),
+  };
+  assert.deepEqual(
+    PasskeyAssertion.fromCredential({ id: base64.encodeUrl(credentialId), response }).credentialId,
+    credentialId,
+  );
+  assert.equal(PasskeyAssertion.fromResponse(response).credentialId, null);
+});
+
 test('the payload holds the raw signature and the uncompressed public key', () => {
   const json = assertion(digest, true).toJson(publicKey);
   assert.equal(base64.decode(json.publicKey).length, 65);

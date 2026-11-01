@@ -15,18 +15,34 @@ export class PasskeyAssertion {
   readonly authenticatorData: Uint8Array;
   readonly clientDataJson: Uint8Array;
   readonly signature: Uint8Array;
+  readonly credentialId: Uint8Array | null;
 
-  private constructor(authenticatorData: Uint8Array, clientDataJson: Uint8Array, signature: Uint8Array) {
+  private constructor(
+    authenticatorData: Uint8Array,
+    clientDataJson: Uint8Array,
+    signature: Uint8Array,
+    credentialId: Uint8Array | null,
+  ) {
     this.authenticatorData = authenticatorData;
     this.clientDataJson = clientDataJson;
     this.signature = signature;
+    this.credentialId = credentialId;
   }
 
   static fromResponse(response: PasskeyAssertionJson): PasskeyAssertion {
+    return PasskeyAssertion.parse(response, null);
+  }
+
+  static fromCredential(signed: { id: string; response: PasskeyAssertionJson }): PasskeyAssertion {
+    return PasskeyAssertion.parse(signed.response, base64.decode(signed.id));
+  }
+
+  private static parse(response: PasskeyAssertionJson, credentialId: Uint8Array | null): PasskeyAssertion {
     return new PasskeyAssertion(
       base64.decode(response.authenticatorData),
       base64.decode(response.clientDataJSON),
       PasskeyAssertion.rawLowS(base64.decode(response.signature)),
+      credentialId,
     );
   }
 

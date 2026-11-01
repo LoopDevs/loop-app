@@ -37,7 +37,7 @@ import { usePageLayout } from "@/hooks/use-page-layout";
 import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
 import { runningUpdateId } from "@/updates/update-checker";
-import { SmartWallet, UnlinkedDevice } from "@/wallet/smart-wallet";
+import { SmartWallet, UnlinkedDevice, WalletBlocked } from "@/wallet/smart-wallet";
 
 type SettingsSection = "account" | "help" | "data";
 
@@ -450,6 +450,9 @@ function SpendingDevice() {
           (error: unknown) => {
             if (error instanceof UnlinkedDevice) {
               return { wallet: error.wallet, thisDevice: false };
+            }
+            if (error instanceof WalletBlocked) {
+              return { wallet: error.wallet, thisDevice: true };
             }
             throw error;
           },

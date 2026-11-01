@@ -26,6 +26,7 @@ export class SessionAuth {
   private readonly session = new SessionTokens();
   private readonly send: Send;
   private readonly store: RefreshTokenStore;
+  private readonly sessionEndListeners = new Set<() => void>();
   private storedRefreshToken: string | null = null;
 
   constructor(send: Send, store: RefreshTokenStore) {
@@ -86,6 +87,16 @@ export class SessionAuth {
     this.session.begin();
     this.storedRefreshToken = null;
     await this.store.clear();
+    for (const listener of this.sessionEndListeners) {
+      listener();
+    }
+  }
+
+  onSessionEnd(listener: () => void): () => void {
+    this.sessionEndListeners.add(listener);
+    return () => {
+      this.sessionEndListeners.delete(listener);
+    };
   }
 
   private async replacementFor(generation: number, rejected: string, error: unknown): Promise<string> {
