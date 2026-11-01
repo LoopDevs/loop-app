@@ -340,7 +340,7 @@ class CtxClient {
       query.set('name', pattern);
     }
     if (ids) {
-      query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
+      query.set('ids', ids.map((id) => Merchant.exactPattern(id)).join(','));
     }
     if (category) {
       query.set('category', category);
@@ -363,9 +363,9 @@ class CtxClient {
       const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
       return new Merchant(json);
     }
-    const query = new URLSearchParams({ slug: idOrSlug });
+    const query = new URLSearchParams({ slug: Merchant.exactPattern(idOrSlug) });
     const { result } = await this.catalogRequest<{ result: MerchantJson[] | null }>(`/merchants?${query}`);
-    const json = result?.[0];
+    const json = result?.find((merchant) => merchant.slug === idOrSlug);
     if (!json) {
       throw new Error('We couldn’t find that gift card.');
     }

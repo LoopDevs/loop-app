@@ -228,6 +228,27 @@ test('the catalog is read without a session and with one it uses the bearer toke
   assert.equal(sent[0].headers.Authorization, `Bearer ${accessToken('user-42')}`);
 });
 
+test('a signed-out merchant lookup matches the slug whole', async () => {
+  const merchant = (slug: string) => ({
+    id: `id-${slug}`,
+    slug,
+    name: slug,
+    country: 'US',
+    currency: 'USD',
+    denominationType: 'fixed',
+    denominationValues: ['25'],
+    userDiscount: 300,
+  });
+  const pagination = { page: 1, pages: 1, perPage: 20, total: 2 };
+  respond = () => json({ result: [merchant('babygap-us'), merchant('gap-us')], pagination });
+  const found = await ctx.merchant('gap-us');
+  assert.equal(new URL(sent[0].url).searchParams.get('slug'), '^gap-us$');
+  assert.equal(sent[0].headers.Authorization, undefined);
+  assert.equal(found.slug, 'gap-us');
+  respond = () => json({ result: [merchant('babygap-us')], pagination });
+  await assert.rejects(ctx.merchant('gap-us'), { message: 'We couldn’t find that gift card.' });
+});
+
 test('a missing gift card list reads as empty and status filters are joined', async () => {
   await signIn('user-42');
   respond = () => json({ result: null, pagination: { page: 1, pages: 0, perPage: 5, total: 0 } });
