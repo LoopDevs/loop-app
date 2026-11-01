@@ -330,11 +330,11 @@ type AddToSavingsProps = {
 function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
   const theme = useTheme();
   const [input, setInput] = useState('');
-  const [usedMax, setUsedMax] = useState(false);
+  const [max, setMax] = useState<bigint | null>(null);
   const amount = normalizeAmount(input);
-  const depositAmount = Savings.depositAmount(input, depositable, usedMax);
+  const depositAmount = Savings.depositAmount(input, depositable, max);
   const edit = (text: string) => {
-    setUsedMax(false);
+    setMax(null);
     setInput(text);
   };
   const deposit = () => {
@@ -342,11 +342,11 @@ function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSav
       return;
     }
     const sentInput = input;
-    const sentMax = usedMax;
+    const sentMax = max;
     onDeposit(depositAmount, {
       clear: () => edit(''),
       restore: () => {
-        setUsedMax(sentMax);
+        setMax(sentMax);
         setInput(sentInput);
       },
     });
@@ -369,7 +369,7 @@ function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSav
           <View key={quick} style={styles.chip}>
             <Button
               label={money.fiat(quick, 'USD')}
-              selected={!usedMax && amount === quick}
+              selected={max === null && amount === quick}
               onPress={() => edit(quick)}
             />
           </View>
@@ -377,12 +377,12 @@ function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSav
         <View style={styles.chip}>
           <Button
             label="Max"
-            selected={usedMax}
+            selected={max !== null}
             onPress={() => {
-              setUsedMax(true);
+              setMax(depositable);
               setInput(Savings.maxInput(depositable));
             }}
-            disabled={depositable === 0n}
+            disabled={!Savings.canMax(depositable)}
           />
         </View>
       </View>

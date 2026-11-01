@@ -49,12 +49,22 @@ test('a deposit amount must be above zero and within the wallet balance', () => 
   assert.equal(Savings.depositAmount('5.0000001', inWallet), null);
 });
 
-test('Max shows two decimals without rounding up and deposits the exact balance', () => {
+test('Max shows two decimals without rounding up and deposits the balance captured at the tap', () => {
   const balance = units.parse('12.3456789');
   assert.equal(Savings.maxInput(balance), '12.34');
-  assert.equal(Savings.depositAmount('12.34', balance, true), balance);
+  assert.equal(Savings.depositAmount('12.34', balance, balance), balance);
   assert.equal(Savings.depositAmount('12.34', balance), units.parse('12.34'));
-  assert.equal(Savings.depositAmount('', 0n, true), null);
+  assert.equal(Savings.depositAmount('12.34', balance + units.parse('50'), balance), balance);
+  assert.equal(Savings.depositAmount('12.34', balance - 1n, balance), null);
+});
+
+test('Max needs at least one cent, so the field never shows 0.00 for an amount that is signed', () => {
+  assert.equal(Savings.canMax(Savings.oneCent), true);
+  assert.equal(Savings.canMax(Savings.oneCent - 1n), false);
+  assert.equal(Savings.canMax(0n), false);
+  assert.equal(Savings.maxInput(Savings.oneCent - 1n), '0.00');
+  assert.equal(Savings.depositAmount('0.00', Savings.oneCent - 1n, Savings.oneCent - 1n), null);
+  assert.equal(Savings.depositAmount('', 0n, 0n), null);
 });
 
 test('each deposit outcome has its own message', () => {

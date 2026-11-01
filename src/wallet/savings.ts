@@ -37,6 +37,7 @@ export class Savings {
     return Object.keys(network.vaults) as PaymentCurrency[];
   }
   static readonly depositCurrency: PaymentCurrency = 'XLM.USDC';
+  static readonly oneCent = units.parse('0.01');
   static readonly maxYearlyRatePercent = 5;
   static readonly rateHeadline = `Earn up to ${Savings.maxYearlyRatePercent}% a year, variable`;
   static readonly riskShort = 'Its value can go down as well as up';
@@ -45,7 +46,7 @@ export class Savings {
   static readonly depositFailedMessage = 'The deposit failed. Your money is still in your balance.';
   static readonly depositPendingMessage = 'Still confirming. Check back in a minute.';
   static readonly depositUnconfirmedMessage =
-    'The deposit may still be confirming. Check your savings before trying again.';
+    'The deposit may still be confirming. Give it a minute and check your savings before trying again.';
 
   static takes(currency: string | undefined): currency is PaymentCurrency {
     return currency !== undefined && Object.hasOwn(network.vaults, currency);
@@ -70,9 +71,13 @@ export class Savings {
     return units.format(inWallet, 2);
   }
 
-  static depositAmount(input: string, inWallet: bigint, usedMax = false): bigint | null {
-    if (usedMax) {
-      return inWallet > 0n ? inWallet : null;
+  static canMax(inWallet: bigint): boolean {
+    return inWallet >= Savings.oneCent;
+  }
+
+  static depositAmount(input: string, inWallet: bigint, max: bigint | null = null): bigint | null {
+    if (max !== null) {
+      return Savings.canMax(max) && max <= inWallet ? max : null;
     }
     const normalized = normalizeAmount(input);
     if (normalized === null) {
