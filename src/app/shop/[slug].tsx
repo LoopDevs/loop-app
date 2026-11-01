@@ -9,6 +9,7 @@ import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/ui/form';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
+import { PageTitle } from '@/components/page-title';
 import { useScrimScroll } from '@/components/home-panel';
 import { coverClearance, MerchantCover } from '@/components/merchant-card';
 import { PressScale } from '@/components/ui/press-scale';
@@ -156,6 +157,7 @@ export default function MerchantScreen() {
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
       <Stack.Screen options={{ title: merchant.name }} />
+      <PageTitle title={merchant.name} />
       <KeyboardAvoid>
       <Animated.ScrollView
         onScroll={onScroll}

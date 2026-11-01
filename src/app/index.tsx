@@ -21,6 +21,7 @@ import {
   MerchantCover,
   SectionHeading,
 } from '@/components/merchant-card';
+import { PageTitle } from '@/components/page-title';
 import { PressScale } from '@/components/ui/press-scale';
 import { SignInButton, useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
@@ -235,6 +236,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <PageTitle />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
