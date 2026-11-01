@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 
-import { xdr } from '@stellar/stellar-sdk';
+import { bytesToHex } from '@noble/hashes/utils';
+import { scValToNative, xdr } from '@stellar/stellar-sdk';
 
 import { BuyTimer, type BuyStep } from '../ctx/buy-timer.ts';
 import { ctx, type GiftCard, type SmartWalletIntent, type WalletLink } from '../ctx/client.ts';
@@ -14,8 +15,9 @@ import { MissingDeviceSecret } from './device-key.ts';
 import { deviceSigner } from './device-signer.ts';
 import { Holdings } from './holdings.ts';
 import { passkey } from './passkey.ts';
+import { passkeyHolder, type PasskeyHolder } from './passkey-holder.fixture.ts';
 import { Savings } from './savings.ts';
-import { SmartWallet, UnlinkedDevice } from './smart-wallet.ts';
+import { SmartWallet, UnconfirmedIdentity, UnlinkedDevice } from './smart-wallet.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 import { WalletPin } from './wallet-pin.ts';
 import type { ContextRule } from './wallet-rules.ts';
@@ -40,6 +42,7 @@ function replace<T extends object, K extends keyof T>(target: T, key: K, value: 
 }
 
 type Chain = {
+  passkeyKeyOnRule: Uint8Array;
   deviceKeyOnRule: Uint8Array;
   deviceKeyOnPhone: string | null;
   ledger: number;
@@ -57,7 +60,7 @@ let calls: string[];
 
 function contextRule(id: number): ContextRule {
   return id === 0
-    ? { id, signers: [['External', network.webauthnVerifier, passkeyKey]], valid_until: undefined }
+    ? { id, signers: [['External', network.webauthnVerifier, chain.passkeyKeyOnRule]], valid_until: undefined }
     : { id, signers: [['External', network.ed25519Verifier, chain.deviceKeyOnRule]], valid_until: undefined };
 }
 
@@ -89,8 +92,38 @@ async function leavePendingPasskey(key: Uint8Array = passkeyKey): Promise<void> 
   );
 }
 
+function holdPasskey(): PasskeyHolder {
+  const holder = passkeyHolder();
+  chain.passkeyKeyOnRule = holder.publicKey;
+  replace(passkey, 'sign', holder.sign);
+  return holder;
+}
+
+function factoryDerives(holder: PasskeyHolder, derived: string): void {
+  const read = soroban.read.bind(soroban);
+  replace(soroban, 'read', async (contract: string, method: string, args: xdr.ScVal[] = []) => {
+    if (method !== 'wallet_address') {
+      return read(contract, method, args);
+    }
+    calls.push(contract);
+    const credentialId = scValToNative(args[0]) as Uint8Array;
+    return bytesToHex(credentialId) === bytesToHex(holder.credentialId) ? derived : 'CUNKNOWN';
+  });
+}
+
+function unlinkedWallet(): Promise<SmartWallet> {
+  return SmartWallet.load().then(
+    () => assert.fail('the wallet loaded'),
+    (error: unknown) => {
+      assert.ok(error instanceof UnlinkedDevice);
+      return error.wallet;
+    },
+  );
+}
+
 beforeEach(async () => {
   chain = {
+    passkeyKeyOnRule: passkeyKey,
     deviceKeyOnRule: deviceKey,
     deviceKeyOnPhone: base64.encode(deviceKey),
     ledger: 1_000,
@@ -192,17 +225,15 @@ test('a phone with no device key is an unlinked device', async () => {
   await assert.rejects(SmartWallet.load(), UnlinkedDevice);
 });
 
-test('a pinned address the account no longer lists stops the load', async () => {
-  await pinFor(userId).write({
-    address: 'CPINNED',
-    passkeyPublicKey: base64.encode(passkeyKey),
-  });
-  await assert.rejects(SmartWallet.load(), /doesn't list the wallet created on this device/);
-});
-
-test('a pinned wallet is checked against the pinned passkey', async () => {
-  await pinWallet(userId, new Uint8Array(65).fill(9));
-  await assert.rejects(SmartWallet.load(), /rule 0 holds a different key/);
+test('a pin for another wallet or another passkey reads as an unlinked device', async () => {
+  for (const stale of [
+    { address: 'CPINNED', passkeyPublicKey: base64.encode(passkeyKey) },
+    { address, passkeyPublicKey: base64.encode(new Uint8Array(65).fill(9)) },
+  ]) {
+    await pinFor(userId).write(stale);
+    const wallet = await unlinkedWallet();
+    assert.equal(wallet.address, address);
+  }
 });
 
 test('an account switch while the wallet loads starts the load again for the new account', async () => {
@@ -219,11 +250,46 @@ test('an account switch while the wallet loads starts the load again for the new
   assert.deepEqual(seen, ['wallets']);
 });
 
-test('only an unlinked device error is turned into no wallet', () => {
-  const wallet = new UnlinkedDevice(undefined as unknown as SmartWallet);
-  assert.equal(SmartWallet.unlessUnlinked(wallet), null);
+test('only a blocked wallet error is turned into no wallet', () => {
+  const wallet = undefined as unknown as SmartWallet;
+  assert.equal(SmartWallet.unlessBlocked(new UnlinkedDevice(wallet)), null);
+  assert.equal(SmartWallet.unlessBlocked(new UnconfirmedIdentity(wallet)), null);
   const failure = new Error('offline');
-  assert.throws(() => SmartWallet.unlessUnlinked(failure), failure);
+  assert.throws(() => SmartWallet.unlessBlocked(failure), failure);
+});
+
+test('a linked device with no pin is pinned once the sign-in proves it makes this wallet', async () => {
+  await clearPins();
+  const holder = holdPasskey();
+  factoryDerives(holder, address);
+  replace(DeviceLink.prototype, 'add', async () => {
+    calls.push('add');
+  });
+  const wallet = await unlinkedWallet();
+  await wallet.addThisDevice();
+  assert.deepEqual(calls, [network.factory]);
+  assert.equal(JSON.parse((await pinned()) ?? '{}').address, address);
+  assert.equal((await SmartWallet.load())?.address, address);
+});
+
+test('a sign-in that makes another wallet leaves the device unpinned', async () => {
+  await clearPins();
+  const holder = holdPasskey();
+  factoryDerives(holder, 'COTHER');
+  const wallet = await unlinkedWallet();
+  await assert.rejects(wallet.addThisDevice(), /couldn't confirm this wallet is yours/);
+  assert.equal(await pinned(), null);
+});
+
+test('confirming identity asks the factory which wallet the sign-in makes', async () => {
+  const holder = holdPasskey();
+  await pinWallet(userId, holder.publicKey);
+  factoryDerives(holder, address);
+  const wallet = (await SmartWallet.load()) as SmartWallet;
+  await wallet.confirmIdentity();
+  assert.deepEqual(calls, [network.factory]);
+  factoryDerives(holder, 'COTHER');
+  await assert.rejects(wallet.confirmIdentity(), /couldn't confirm this wallet is yours/);
 });
 
 test('a wallet is the same only with the same id, address and account', async () => {
@@ -531,33 +597,12 @@ test('a transaction counts as landed only when the ledger reports success', asyn
   }
 });
 
-test('adding a linked device only refreshes the pin', async () => {
-  const wallet = (await SmartWallet.load()) as SmartWallet;
+test('a linked device is not pinned when another passkey signs the confirmation', async () => {
+  holdPasskey();
+  replace(passkey, 'sign', passkeyHolder().sign);
   await clearPins();
-  replace(DeviceLink.prototype, 'add', async () => {
-    calls.push('add');
-  });
-  const proven: Uint8Array[] = [];
-  replace(passkey, 'sign', async () => ({
-    requireSigned: (_challenge: Uint8Array, publicKey: Uint8Array) => {
-      proven.push(publicKey);
-    },
-  }));
-  await wallet.addThisDevice();
-  assert.deepEqual(calls, []);
-  assert.deepEqual(proven, [passkeyKey]);
-  assert.equal(JSON.parse((await pinned()) ?? 'null').address, address);
-});
-
-test('a linked device is not pinned when the passkey assertion does not verify', async () => {
-  const wallet = (await SmartWallet.load()) as SmartWallet;
-  await clearPins();
-  replace(passkey, 'sign', async () => ({
-    requireSigned: () => {
-      throw new Error('signature mismatch');
-    },
-  }));
-  await assert.rejects(wallet.addThisDevice(), /signature mismatch/);
+  const wallet = await unlinkedWallet();
+  await assert.rejects(wallet.addThisDevice(), /sign-in you set Loop up with/);
   assert.equal(await pinned(), null);
 });
 

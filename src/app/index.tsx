@@ -8,6 +8,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
+import { ConfirmIdentity } from '@/components/confirm-identity';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/ui/form';
 import { HomeActions } from '@/components/home-actions';
@@ -43,9 +44,9 @@ import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { Savings } from '@/wallet/savings';
-import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
+import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
 
-type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'wallet';
+type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'confirm-identity' | 'wallet';
 
 const featuredShown = 5;
 const stripShown = 10;
@@ -59,7 +60,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>(Platform.OS === 'web' ? 'signed-out' : 'loading');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
-  const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
+  const [blockedWallet, setBlockedWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const [sessionRead, setSessionRead] = useState(false);
   const { view, refresh } = useHoldings(wallet);
@@ -100,9 +101,9 @@ export default function HomeScreen() {
       const loaded = await SmartWallet.load();
       await Promise.all([showWallet(loaded), loaded && Platform.OS !== 'web' ? openActiveOrder() : undefined]);
     } catch (error) {
-      if (error instanceof UnlinkedDevice) {
-        setUnlinkedWallet(error.wallet);
-        setScreen('unlinked-device');
+      if (error instanceof WalletBlocked) {
+        setBlockedWallet(error.wallet);
+        setScreen(error instanceof UnlinkedDevice ? 'unlinked-device' : 'confirm-identity');
         return;
       }
       walletLoadStarted.current = false;
@@ -285,8 +286,12 @@ export default function HomeScreen() {
             </Animated.View>
           )}
 
-          {screen === 'unlinked-device' && unlinkedWallet && (
-            <AddDevice wallet={unlinkedWallet} onAdded={loadWallet} />
+          {screen === 'unlinked-device' && blockedWallet && (
+            <AddDevice wallet={blockedWallet} onAdded={loadWallet} />
+          )}
+
+          {screen === 'confirm-identity' && blockedWallet && (
+            <ConfirmIdentity wallet={blockedWallet} onConfirmed={loadWallet} />
           )}
 
           {message !== '' && <Notice message={message} />}

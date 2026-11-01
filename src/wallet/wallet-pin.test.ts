@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { p256 } from '@noble/curves/nist';
-import { sha256 } from '@noble/hashes/sha2';
-import { concatBytes, randomBytes } from '@noble/hashes/utils';
-
 import type { TokenStorage } from '../session/install-scoped-token.ts';
 import { base64 } from './base64.ts';
-import { PasskeyAssertion } from './passkey-assertion.ts';
+import type { PasskeyAssertion } from './passkey-assertion.ts';
+import { passkeyHolder } from './passkey-holder.fixture.ts';
 import { WalletPin } from './wallet-pin.ts';
 
 function memoryStorage(): TokenStorage & { values: Map<string, string> } {
@@ -28,24 +25,6 @@ function memoryStorage(): TokenStorage & { values: Map<string, string> } {
 
 function pinFor(storage: TokenStorage, userId: string, currentUserId = userId): WalletPin {
   return new WalletPin(storage, userId, async () => currentUserId);
-}
-
-function passkeyHolder() {
-  const secret = p256.utils.randomPrivateKey();
-  const publicKey = p256.getPublicKey(secret, false);
-  const sign = async (challenge: Uint8Array) => {
-    const authenticatorData = randomBytes(37);
-    const clientDataJson = new TextEncoder().encode(
-      JSON.stringify({ type: 'webauthn.get', challenge: PasskeyAssertion.challengeOf(challenge) }),
-    );
-    const signature = p256.sign(concatBytes(authenticatorData, sha256(clientDataJson)), secret, { lowS: true });
-    return PasskeyAssertion.fromResponse({
-      authenticatorData: base64.encodeUrl(authenticatorData),
-      clientDataJSON: base64.encodeUrl(clientDataJson),
-      signature: base64.encodeUrl(signature.toBytes('der')),
-    });
-  };
-  return { publicKey, sign };
 }
 
 const link = (address: string, overrides: Partial<{ sponsored: boolean; chain: string; status: string }> = {}) => ({
@@ -89,10 +68,19 @@ test('with a pin the pinned wallet is chosen even when CTX lists another first',
   assert.equal(WalletPin.choose([link('COTHER'), link('CMINE')], pinned)?.address, 'CMINE');
 });
 
-test('with a pin a list that swaps or hides the pinned wallet is refused', () => {
-  assert.throws(() => WalletPin.choose([link('COTHER')], pinned), /doesn't list the wallet/);
-  assert.throws(() => WalletPin.choose([], pinned), /doesn't list the wallet/);
-  assert.throws(() => WalletPin.choose([link('CMINE', { status: 'inactive' })], pinned), /doesn't list/);
+test('with a pin the list is the authority when it swaps or hides the pinned wallet', () => {
+  assert.equal(WalletPin.choose([link('COTHER')], pinned)?.address, 'COTHER');
+  assert.equal(WalletPin.choose([], pinned), null);
+  assert.equal(WalletPin.choose([link('CMINE', { status: 'inactive' })], pinned), null);
+});
+
+test('a pin counts only for the wallet and passkey it was written for', () => {
+  const key = passkeyHolder().publicKey;
+  const mine = { address: 'CMINE', passkeyPublicKey: base64.encode(key) };
+  assert.deepEqual(WalletPin.current(mine, 'CMINE', key), mine);
+  assert.equal(WalletPin.current(mine, 'COTHER', key), null);
+  assert.equal(WalletPin.current(mine, 'CMINE', passkeyHolder().publicKey), null);
+  assert.equal(WalletPin.current(null, 'CMINE', key), null);
 });
 
 test('a pin is kept per user and survives a reload', async () => {

@@ -30,7 +30,7 @@ import { money } from '@/money';
 import { units } from '@/stellar/units';
 import { strings } from '@/strings';
 import { Savings } from '@/wallet/savings';
-import { UnlinkedDevice } from '@/wallet/smart-wallet';
+import { WalletBlocked } from '@/wallet/smart-wallet';
 
 const quickAmounts = ['25', '50', '100'];
 
@@ -64,7 +64,7 @@ export default function SavingsScreen() {
       try {
         for (const { currency, shares } of savings) {
           const result = await wallet.withdraw(currency, shares).catch((error: unknown) => {
-            if (error instanceof UnlinkedDevice) {
+            if (error instanceof WalletBlocked) {
               reload();
             }
             throw error;

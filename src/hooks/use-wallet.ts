@@ -8,7 +8,7 @@ import { errorMessage } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { errorReporting } from '@/ops/error-reporting';
-import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
+import { SmartWallet } from '@/wallet/smart-wallet';
 
 export type WalletState = 'loading' | 'signed-out' | 'setup' | 'ready' | 'failed';
 
@@ -33,12 +33,7 @@ export function useWallet() {
         await refresh();
         return;
       }
-      const next = await SmartWallet.load().catch((error: unknown) => {
-        if (error instanceof UnlinkedDevice) {
-          return null;
-        }
-        throw error;
-      });
+      const next = await SmartWallet.load().catch(SmartWallet.unlessBlocked);
       loaded.current = next;
       setWallet(next);
       setState(next ? 'ready' : 'setup');

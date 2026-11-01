@@ -40,14 +40,14 @@ export class WalletPin {
     const usable = links.filter(
       (candidate) => candidate.sponsored && candidate.chain === 'XLM' && candidate.status === 'active',
     );
-    if (!pinned) {
-      return usable[0] ?? null;
+    return usable.find((candidate) => candidate.address === pinned?.address) ?? usable[0] ?? null;
+  }
+
+  static current(pinned: PinnedWallet | null, address: string, passkeyPublicKey: Uint8Array): PinnedWallet | null {
+    if (!pinned || pinned.address !== address || pinned.passkeyPublicKey !== base64.encode(passkeyPublicKey)) {
+      return null;
     }
-    const match = usable.find((candidate) => candidate.address === pinned.address);
-    if (!match) {
-      throw new Error("Your account doesn't list the wallet created on this device. Contact support.");
-    }
-    return match;
+    return pinned;
   }
 
   async read(): Promise<PinnedWallet | null> {

@@ -18,6 +18,7 @@ export type DeviceLinkDeps = {
 export class DeviceLink {
   static readonly passkeyRuleId = 0;
   static readonly pollMs = 2_000;
+  static readonly maxLedgerFailures = 5;
 
   private readonly deps: DeviceLinkDeps;
 
@@ -45,6 +46,7 @@ export class DeviceLink {
   }
 
   private async waitForDeviceRule(newKey: Uint8Array, expiryLedger: number, signal?: AbortSignal): Promise<void> {
+    let ledgerFailures = 0;
     while (!signal?.aborted) {
       const landed = await this.deps.deviceRule().then(
         (rule) => WalletRules.holdsDeviceKey(rule, newKey),
@@ -53,8 +55,9 @@ export class DeviceLink {
       if (landed) {
         return;
       }
-      const latest = await this.deps.latestLedger().catch(() => expiryLedger);
-      if (latest > expiryLedger) {
+      const latest = await this.deps.latestLedger().catch(() => null);
+      ledgerFailures = latest === null ? ledgerFailures + 1 : 0;
+      if ((latest !== null && latest > expiryLedger) || ledgerFailures >= DeviceLink.maxLedgerFailures) {
         throw new Error('Setting up this device timed out. Try again.');
       }
       await this.deps.sleep(DeviceLink.pollMs);
