@@ -70,7 +70,7 @@ What CTX spend-api does with each call the app makes. Read from `git -C ../spend
 
 ## Contradictions with the app
 
-1. The app sends `Idempotency-Key` on `POST /gift-cards`; CTX ignores it. Retries duplicate orders.
+1. The app sends `Idempotency-Key` on `POST /gift-cards`; CTX ignores it. A lost answer is recovered client-side from the unpaid orders placed since the request (`ctx/client.ts:placedOrder`); a retry still duplicates an order CTX created after that lookup.
 2. The app models bank methods (`plaid-uk-eu`, `plaid-vrp`); CTX picks the method from config. Branch on `paymentUrl` presence and handle `ErrBankLinkRequired`.
 3. The app's socket sends auth headers; a browser cannot, and CTX authenticates only at upgrade.
 4. The pay destination is a CTX field; the muxed id is derivable from `paymentId` and is not derived.
