@@ -48,6 +48,7 @@ import { sentPayments } from '@/hooks/use-sent-payment';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
+import { errorReporting } from '@/ops/error-reporting';
 import { network, offeredTokens, onlyPaymentCurrency, type PaymentCurrency, type Token } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
@@ -233,7 +234,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
     let landed = false;
     while (isCurrent()) {
       if (BankPayment.linkExpired(current, Date.now())) {
-        setPayment({ kind: 'bank', linkOpen: false });
+        setPayment((held) => (held.kind === 'bank' && held.linkOpen ? { kind: 'bank', linkOpen: false } : held));
       }
       if (sent && OneTapBuy.checksChain(current)) {
         const failure = await sentPaymentFailure(current, live.current.wallet, {
@@ -442,6 +443,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
         });
         buyTimer.current?.mark('order created');
         setOrder(created);
+        setSpent((held) => orderPrice(created) ?? held);
         return created;
       },
       paymentStarted: async (giftCard, refetch) => {
@@ -517,6 +519,9 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
   const approveAtBank = async (giftCard: GiftCard) => {
     const link = BankPayment.openLink(giftCard);
     if (!link) {
+      if (BankPayment.linkRefused(giftCard)) {
+        errorReporting.reportMessage(`Bank approval link refused for order ${giftCard.id}`);
+      }
       return;
     }
     await openBrowserAsync(link, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
@@ -631,7 +636,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
     buyTimer.current = BuyTimer.dev();
     setConfirmPrice(null);
     setPayment({ kind: 'sending' });
-    setSpent(usdPrice === null ? 0n : (BuyPrice.inTokens(confirmPrice, usdPrice) ?? 0n));
+    setSpent(orderPrice(order) ?? (usdPrice === null ? 0n : (BuyPrice.inTokens(confirmPrice, usdPrice) ?? 0n)));
     void settle(currency, () => oneTapBuy.confirm(buySteps(order.cardFiatAmount, currency), order, quote));
   };
 
@@ -981,7 +986,8 @@ function OrderView({
   const submitted = order?.status === 'paid' || payment.kind === 'confirming';
   const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
   const bankLink = order && payment.kind === 'bank' && payment.linkOpen ? BankPayment.openLink(order) : null;
-  const bankChecking = order?.status === 'unpaid' && payment.kind === 'bank' && bankLink === null;
+  const bankExpired = order?.status === 'unpaid' && payment.kind === 'bank' && !payment.linkOpen;
+  const bankChecking = order?.status === 'unpaid' && payment.kind === 'bank' && payment.linkOpen && bankLink === null;
   const paymentFailed = order?.status === 'unpaid' && payment.kind === 'failed';
   const failed = paymentFailed || outcome !== null;
   const canRetry = paymentFailed;
@@ -989,9 +995,11 @@ function OrderView({
     ? 'Your gift card is on its way'
     : bankLink
       ? 'Approve the payment in your banking app'
-      : bankChecking
-        ? 'Checking with your bank…'
-        : 'Buying your gift card…';
+      : bankExpired
+        ? 'The bank link has expired'
+        : bankChecking
+          ? 'Checking with your bank…'
+          : 'Buying your gift card…';
   return (
     <PurchaseCard>
       <View style={styles.orderHead}>
@@ -1037,6 +1045,14 @@ function OrderView({
         <Notice
           message="Your payment didn't go through, and you weren't charged."
           actionLabel="Try again"
+          onAction={onRetry}
+          disabled={busy}
+        />
+      )}
+      {bankExpired && (
+        <Notice
+          message="Start again to get a new link. If you already approved the payment, your gift card is still on its way."
+          actionLabel="Start again"
           onAction={onRetry}
           disabled={busy}
         />

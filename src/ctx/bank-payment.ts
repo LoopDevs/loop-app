@@ -57,6 +57,10 @@ export class BankPayment {
     return BankPayment.isApprovalHost(order.paymentUrl) ? order.paymentUrl : null;
   }
 
+  static linkRefused(order: BankOrder): boolean {
+    return BankPayment.awaitingApproval(order) && !!order.paymentUrl && !BankPayment.isApprovalHost(order.paymentUrl);
+  }
+
   static link(order: BankOrder, now: number): string | null {
     return BankPayment.linkExpired(order, now) ? null : BankPayment.openLink(order);
   }
