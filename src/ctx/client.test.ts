@@ -278,7 +278,8 @@ function card(overrides: Partial<Record<'cardFiatAmount' | 'merchantId' | 'cardF
     cardFiatAmount: '25.00',
     cardFiatCurrency: 'GBP',
     paymentId: 'p1',
-    paymentMethod: 'XLM.USDC',
+    paymentMethod: 'crypto',
+    paymentCryptoCurrency: 'XLM.USDC',
     ...overrides,
   };
 }

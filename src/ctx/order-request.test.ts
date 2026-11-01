@@ -78,7 +78,28 @@ test('the request behind a pending key is known until the key is settled', () =>
   assert.equal(keys.requestFor(key), null);
 });
 
-const placedCard = { ...card, status: 'unpaid' as const, created: '2026-10-31T12:00:05Z' };
+test('a pending request older than its key lifetime gets a new key', () => {
+  let now = askedAt;
+  let made = 0;
+  const keys = new OrderKeys(
+    () => `key-${(made += 1)}`,
+    () => now,
+  );
+  assert.equal(keys.keyFor(request.asked), 'key-1');
+  now = askedAt + OrderKeys.pendingForMs;
+  assert.equal(keys.keyFor(request.asked), 'key-1');
+  now += 1;
+  assert.equal(keys.keyFor(request.asked), 'key-2');
+  assert.equal(keys.requestFor('key-2')?.askedAt, now);
+});
+
+const placedCard = {
+  ...card,
+  status: 'unpaid' as const,
+  created: '2026-10-31T12:00:05Z',
+  paymentMethod: 'crypto',
+  paymentCryptoCurrency: 'XLM.USDC',
+};
 
 test('an unpaid matching card created since the request was asked was placed by it', () => {
   const asked = new OrderRequest(request.asked, askedAt);
@@ -96,4 +117,14 @@ test('a paid or differing card was not placed by the request', () => {
   const asked = new OrderRequest(request.asked, askedAt);
   assert.equal(asked.placed({ ...placedCard, status: 'paid' as const }), false);
   assert.equal(asked.placed({ ...placedCard, cardFiatAmount: '30.00' }), false);
+});
+
+test('a card on another payment rail was not placed by the request', () => {
+  const bankCard = { ...placedCard, paymentMethod: 'plaid-uk-eu', paymentCryptoCurrency: undefined };
+  const byWallet = new OrderRequest(request.asked, askedAt);
+  assert.equal(byWallet.placed({ ...placedCard, paymentCryptoCurrency: 'XLM' }), false);
+  assert.equal(byWallet.placed(bankCard), false);
+  const byBank = new OrderRequest({ merchantId: 'm-1', fiatAmount: '25', fiatCurrency: 'USD' }, askedAt);
+  assert.equal(byBank.placed(bankCard), true);
+  assert.equal(byBank.placed(placedCard), false);
 });
