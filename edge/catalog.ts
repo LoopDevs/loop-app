@@ -200,6 +200,10 @@ export class EdgeCache {
     return now - storedAt < this.window.staleMs;
   }
 
+  async evict(key: string): Promise<void> {
+    await this.cache.delete(key);
+  }
+
   async serve(key: string, load: () => Promise<Response>): Promise<Response> {
     const cached = await this.cache.match(key);
     const storedAt = Number(cached?.headers.get(storedAtHeader));
@@ -300,7 +304,8 @@ async function loadImage({ request, waitUntil }: EdgeContext): Promise<Response>
   }
   const format = CatalogImage.format(request.headers.get('accept'));
   const edge = new EdgeCache(EdgeCache.default(), waitUntil, EdgeCache.image);
-  const response = await edge.serve(image.cacheKey(url.origin, format), async () => {
+  const key = image.cacheKey(url.origin, format);
+  const response = await edge.serve(key, async () => {
     const resized = await fetch(image.src, image.fetchInit(format) as RequestInit);
     const loaded = resized.ok ? resized : await fetch(image.src);
     if (!loaded.ok) {
@@ -308,9 +313,14 @@ async function loadImage({ request, waitUntil }: EdgeContext): Promise<Response>
     }
     return CatalogImage.isImage(loaded.headers.get('content-type')) ? loaded : new Response(null, { status: 415 });
   });
-  if (response.ok) {
-    response.headers.set('cache-control', 'public, max-age=604800, stale-while-revalidate=2592000');
-    response.headers.set('vary', 'Accept');
+  if (!response.ok) {
+    return response;
   }
+  if (!CatalogImage.isImage(response.headers.get('content-type'))) {
+    waitUntil(edge.evict(key));
+    return new Response(null, { status: 415 });
+  }
+  response.headers.set('cache-control', 'public, max-age=604800, stale-while-revalidate=2592000');
+  response.headers.set('vary', 'Accept');
   return response;
 }

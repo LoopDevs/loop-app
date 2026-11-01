@@ -18,8 +18,19 @@ function image(src: string, width = 256): CatalogImage | null {
   return CatalogImage.from(new URL(`https://loop.test/i?src=${encodeURIComponent(src)}&w=${width}`));
 }
 
-function fakeCache(stored: Response | undefined): Cache {
-  return { match: async () => stored, put: async () => undefined } as unknown as Cache;
+type CacheLog = { puts: string[]; deletes: string[] };
+
+function fakeCache(stored: Response | undefined, log: CacheLog = { puts: [], deletes: [] }): Cache {
+  return {
+    match: async () => stored,
+    put: async (key: string) => {
+      log.puts.push(key);
+    },
+    delete: async (key: string) => {
+      log.deletes.push(key);
+      return true;
+    },
+  } as unknown as Cache;
 }
 
 function cachedAt(storedAt: number): Response {
@@ -161,7 +172,8 @@ test('an entry past the stale window is reloaded before it is served', async () 
 });
 
 test('the resizer refuses non-image content and sandboxes what it serves', async () => {
-  globalThis.caches = { default: fakeCache(undefined) } as unknown as CacheStorage;
+  const log: CacheLog = { puts: [], deletes: [] };
+  globalThis.caches = { default: fakeCache(undefined, log) } as unknown as CacheStorage;
   const request = new Request(`https://loop.test/api/catalog/image?src=${encodeURIComponent(s3)}&w=256`);
   const context = { request, env, waitUntil: () => undefined };
 
@@ -170,6 +182,7 @@ test('the resizer refuses non-image content and sandboxes what it serves', async
   assert.equal(html.status, 415);
   assert.equal(html.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(await html.text(), '');
+  assert.equal(log.puts.length, 0);
 
   globalThis.fetch = (async () => new Response('<svg/>', { headers: { 'content-type': 'image/svg+xml' } })) as typeof fetch;
   const svg = await serveImage(context);
@@ -179,4 +192,23 @@ test('the resizer refuses non-image content and sandboxes what it serves', async
   assert.equal(svg.headers.get('content-disposition'), 'inline');
   assert.equal(svg.headers.get('x-frame-options'), 'DENY');
   assert.equal(await svg.text(), '<svg/>');
+  assert.equal(log.puts.length, 1);
+});
+
+test('a cached entry that is not an image is refused and evicted', async () => {
+  const log: CacheLog = { puts: [], deletes: [] };
+  const stored = new Response('<html>', {
+    headers: { 'content-type': 'text/html', 'x-catalog-stored-at': String(Date.now()) },
+  });
+  globalThis.caches = { default: fakeCache(stored, log) } as unknown as CacheStorage;
+  globalThis.fetch = (async () => assert.fail('a fresh cached entry is not reloaded')) as typeof fetch;
+  const background: Promise<unknown>[] = [];
+  const request = new Request(`https://loop.test/api/catalog/image?src=${encodeURIComponent(s3)}&w=256`);
+  const response = await serveImage({ request, env, waitUntil: (promise) => background.push(promise) });
+  await Promise.all(background);
+  assert.equal(response.status, 415);
+  assert.equal(await response.text(), '');
+  assert.equal(response.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+  assert.equal(log.deletes.length, 1);
+  assert.equal(log.puts.length, 0);
 });

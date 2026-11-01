@@ -12,10 +12,11 @@ test('security headers are added to a response and keep its status, body and own
   assert.equal(secured.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(secured.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains');
   assert.equal(secured.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+  assert.equal(secured.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; sandbox");
   assert.equal(await secured.text(), 'body');
 });
 
-test('image headers sandbox the document and keep the baseline', () => {
+test('image headers show the file inline and keep the baseline', () => {
   const secured = SecurityHeaders.applied(new Response(null), SecurityHeaders.image);
   assert.equal(secured.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; sandbox");
   assert.equal(secured.headers.get('content-disposition'), 'inline');

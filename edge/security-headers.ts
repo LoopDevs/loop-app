@@ -4,11 +4,11 @@ export class SecurityHeaders {
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
     'referrer-policy': 'strict-origin-when-cross-origin',
+    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
   };
 
   static readonly image: Readonly<Record<string, string>> = {
     ...SecurityHeaders.baseline,
-    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
     'content-disposition': 'inline',
   };
 
