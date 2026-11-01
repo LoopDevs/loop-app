@@ -210,6 +210,25 @@ test('a refresh token CTX rejects is cleared and the session ends', async () => 
   assert.equal(await auth.hasSession(), false);
 });
 
+test('listeners hear the session end on sign-out and on a rejected refresh token, until they unsubscribe', async () => {
+  const ctx = new FakeCtx(async () => {
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'));
+  let ended = 0;
+  const stop = auth.onSessionEnd(() => {
+    ended += 1;
+  });
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
+  assert.equal(ended, 1);
+  await auth.clearSession();
+  assert.equal(ended, 2);
+  stop();
+  await auth.clearSession();
+  assert.equal(ended, 2);
+});
+
 test('a second 401 after the retry is thrown without another rotation', async () => {
   const ctx = new FakeCtx(async ({ path }) => {
     if (path === '/refresh-token') {

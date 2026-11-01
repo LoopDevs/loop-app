@@ -58,6 +58,19 @@ const refuseAddDevice = async () => {
   throw new Error('adding a device was not expected');
 };
 
+const refuseLookup = async (): Promise<string> => {
+  throw new Error('a factory lookup was not expected');
+};
+
+function factoryMaking(derived: string) {
+  const lookups: Uint8Array[] = [];
+  const addressOf = async (credentialId: Uint8Array) => {
+    lookups.push(credentialId);
+    return derived;
+  };
+  return { addressOf, lookups };
+}
+
 test('without a pin the first active sponsored Stellar wallet is the candidate', () => {
   const links = [link('CA', { sponsored: false }), link('CB', { status: 'inactive' }), link('CC')];
   assert.equal(WalletPin.choose(links, null)?.address, 'CC');
@@ -119,7 +132,7 @@ test('a wallet with an unreadable pin is pinned again only after the passkey con
   storage.values.set(pin.key, '{bad');
   const discarded = await pin.read();
   const linked = { thisDevice: 'linked' as const, passkeyPublicKey: holder.publicKey };
-  assert.equal(await pin.admits(discarded, 'CMINE', linked), false);
+  assert.equal(await pin.admits(discarded, 'CMINE', linked, refuseLookup), false);
   await pin.confirmThisDevice(discarded, 'CMINE', linked, refuseAddDevice, holder.sign);
   assert.equal((await pin.read())?.address, 'CMINE');
 });
@@ -183,15 +196,25 @@ test('a wallet holding the passkey made here is pinned without asking again', as
   const storage = memoryStorage();
   const pin = pinFor(storage, 'user-1');
   const created = await pin.passkeyForSetup(setupPasskeys().create, cancelled);
-  assert.equal(await pin.pinCreatedHere('CMINE', passkeyHolder().publicKey), false);
+  assert.equal(await pin.pinCreatedHere('CMINE', passkeyHolder().publicKey, refuseLookup), false);
   assert.equal(await pin.read(), null);
-  assert.equal(await pin.pinCreatedHere('CMINE', created.publicKey), true);
+  const factory = factoryMaking('CMINE');
+  assert.equal(await pin.pinCreatedHere('CMINE', created.publicKey, factory.addressOf), true);
   assert.equal((await pin.read())?.address, 'CMINE');
+  assert.deepEqual(factory.lookups, [base64.decode(created.credentialId)]);
+});
+
+test('a wallet other than the one the passkey made here makes is not pinned', async () => {
+  const storage = memoryStorage();
+  const pin = pinFor(storage, 'user-1');
+  const created = await pin.passkeyForSetup(setupPasskeys().create, cancelled);
+  assert.equal(await pin.pinCreatedHere('CMINE', created.publicKey, factoryMaking('COTHER').addressOf), false);
+  assert.equal(await pin.read(), null);
 });
 
 test('with no passkey made here nothing is pinned without asking', async () => {
   const pin = pinFor(memoryStorage(), 'user-1');
-  assert.equal(await pin.pinCreatedHere('CMINE', passkeyHolder().publicKey), false);
+  assert.equal(await pin.pinCreatedHere('CMINE', passkeyHolder().publicKey, refuseLookup), false);
   assert.equal(await pin.read(), null);
 });
 
@@ -210,19 +233,21 @@ test('a wallet is admitted on load only when this device is linked and the walle
   const holder = passkeyHolder();
   const linked = { thisDevice: 'linked' as const, passkeyPublicKey: holder.publicKey };
   const unlinked = { thisDevice: 'unlinked' as const, passkeyPublicKey: holder.publicKey };
-  assert.equal(await pin.admits(pinned, 'CMINE', unlinked), false);
-  assert.equal(await pin.admits(null, 'CMINE', unlinked), false);
-  assert.equal(await pin.admits(null, 'CMINE', linked), false);
+  assert.equal(await pin.admits(pinned, 'CMINE', unlinked, refuseLookup), false);
+  assert.equal(await pin.admits(null, 'CMINE', unlinked, refuseLookup), false);
+  assert.equal(await pin.admits(null, 'CMINE', linked, refuseLookup), false);
   assert.equal(await pin.read(), null);
-  assert.equal(await pin.admits(pinned, 'CMINE', linked), true);
+  assert.equal(await pin.admits(pinned, 'CMINE', linked, refuseLookup), true);
 });
 
-test('a wallet made here is admitted on load and pinned', async () => {
+test('a wallet made here is admitted on load and pinned only when the factory agrees', async () => {
   const storage = memoryStorage();
   const pin = pinFor(storage, 'user-1');
   const created = await pin.passkeyForSetup(setupPasskeys().create, cancelled);
   const linked = { thisDevice: 'linked' as const, passkeyPublicKey: created.publicKey };
-  assert.equal(await pin.admits(null, 'CMINE', linked), true);
+  assert.equal(await pin.admits(null, 'CMINE', linked, factoryMaking('COTHER').addressOf), false);
+  assert.equal(await pin.read(), null);
+  assert.equal(await pin.admits(null, 'CMINE', linked, factoryMaking('CMINE').addressOf), true);
   assert.equal((await pin.read())?.address, 'CMINE');
 });
 

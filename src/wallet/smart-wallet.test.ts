@@ -3,6 +3,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 
 import { bytesToHex } from '@noble/hashes/utils';
 import { scValToNative, xdr } from '@stellar/stellar-sdk';
+import { Platform } from 'react-native';
 
 import { BuyTimer, type BuyStep } from '../ctx/buy-timer.ts';
 import { ctx, type GiftCard, type SmartWalletIntent, type WalletLink } from '../ctx/client.ts';
@@ -17,7 +18,7 @@ import { Holdings } from './holdings.ts';
 import { passkey } from './passkey.ts';
 import { passkeyHolder, type PasskeyHolder } from './passkey-holder.fixture.ts';
 import { Savings } from './savings.ts';
-import { SmartWallet, UnconfirmedIdentity, UnlinkedDevice } from './smart-wallet.ts';
+import { SmartWallet, UnconfirmedIdentity, UnlinkedDevice, type WalletBlocked } from './smart-wallet.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 import { WalletPin } from './wallet-pin.ts';
 import type { ContextRule } from './wallet-rules.ts';
@@ -25,6 +26,7 @@ import type { ContextRule } from './wallet-rules.ts';
 const userId = 'user-1';
 const address = network.factory;
 const passkeyKey = new Uint8Array(65).fill(4);
+const createdCredentialId = 'cred-1';
 const deviceKey = new Uint8Array(32).fill(1);
 const otherDeviceKey = new Uint8Array(32).fill(2);
 const link: WalletLink = { id: 'w1', chain: 'XLM', address, sponsored: true, status: 'active' };
@@ -50,6 +52,7 @@ type Chain = {
   shares: bigint;
   gbpShareValue: bigint;
   gbpShares: bigint;
+  walletOfCreatedPasskey: string;
 };
 
 const gbpVault = 'CGBPLOOPVAULT';
@@ -88,7 +91,7 @@ async function pinWallet(user: string, key: Uint8Array = passkeyKey): Promise<vo
 async function leavePendingPasskey(key: Uint8Array = passkeyKey): Promise<void> {
   await secureTokenStorage.setItem(
     pinFor(userId).pendingKey,
-    JSON.stringify({ credentialId: 'cred-1', publicKey: base64.encode(key) }),
+    JSON.stringify({ credentialId: createdCredentialId, publicKey: base64.encode(key) }),
   );
 }
 
@@ -111,14 +114,30 @@ function factoryDerives(holder: PasskeyHolder, derived: string): void {
   });
 }
 
-function unlinkedWallet(): Promise<SmartWallet> {
+function blockedWallet(blocked: new (wallet: SmartWallet) => WalletBlocked): Promise<SmartWallet> {
   return SmartWallet.load().then(
     () => assert.fail('the wallet loaded'),
     (error: unknown) => {
-      assert.ok(error instanceof UnlinkedDevice);
+      assert.ok(error instanceof blocked);
       return error.wallet;
     },
   );
+}
+
+function unlinkedWallet(): Promise<SmartWallet> {
+  return blockedWallet(UnlinkedDevice);
+}
+
+function unconfirmedWallet(): Promise<SmartWallet> {
+  return blockedWallet(UnconfirmedIdentity);
+}
+
+async function inBrowserWithPinnedPasskey(): Promise<PasskeyHolder> {
+  replace(Platform, 'OS', 'web');
+  const holder = holdPasskey();
+  await pinWallet(userId, holder.publicKey);
+  factoryDerives(holder, address);
+  return holder;
 }
 
 beforeEach(async () => {
@@ -131,10 +150,12 @@ beforeEach(async () => {
     shares: 0n,
     gbpShareValue: 0n,
     gbpShares: 0n,
+    walletOfCreatedPasskey: address,
   };
   network.vaults['XLM.GBPLOOP'] = gbpVault;
   links = [link];
   calls = [];
+  SmartWallet.forgetConfirmations();
   await clearPins();
   await pinWallet(userId);
   replace(ctx, 'userId', async () => userId);
@@ -156,6 +177,12 @@ beforeEach(async () => {
     }
     if (method === 'get_asset_amounts_per_shares') {
       return [contract === gbpVault ? chain.gbpShareValue : chain.shareValue];
+    }
+    if (method === 'wallet_address') {
+      const credentialId = scValToNative(args[0]) as Uint8Array;
+      return bytesToHex(credentialId) === bytesToHex(base64.decode(createdCredentialId))
+        ? chain.walletOfCreatedPasskey
+        : 'CUNKNOWN';
     }
     throw new Error(`unexpected read ${method}`);
   });
@@ -204,6 +231,14 @@ test('a wallet that holds the passkey this device created is pinned and the pend
 test('a wallet holding a different passkey than the one this device created is not pinned', async () => {
   await clearPins();
   await leavePendingPasskey(new Uint8Array(65).fill(9));
+  await assert.rejects(SmartWallet.load(), UnlinkedDevice);
+  assert.equal(await pinned(), null);
+});
+
+test('a wallet other than the one the passkey made here makes is not pinned', async () => {
+  await clearPins();
+  await leavePendingPasskey();
+  chain.walletOfCreatedPasskey = 'COTHER';
   await assert.rejects(SmartWallet.load(), UnlinkedDevice);
   assert.equal(await pinned(), null);
 });
@@ -292,6 +327,32 @@ test('confirming identity asks the factory which wallet the sign-in makes', asyn
   await assert.rejects(wallet.confirmIdentity(), /couldn't confirm this wallet is yours/);
 });
 
+test('in a browser a pinned wallet loads once the sign-in confirms it, until the session ends', async () => {
+  await inBrowserWithPinnedPasskey();
+  const wallet = await unconfirmedWallet();
+  await wallet.confirmIdentity();
+  assert.equal((await SmartWallet.load())?.address, address);
+  await ctx.signOut();
+  await assert.rejects(SmartWallet.load(), UnconfirmedIdentity);
+});
+
+test('in a browser a confirmation counts for the account that gave it', async () => {
+  const holder = await inBrowserWithPinnedPasskey();
+  await pinWallet('user-2', holder.publicKey);
+  const wallet = await unconfirmedWallet();
+  await wallet.confirmIdentity();
+  replace(ctx, 'userId', async () => 'user-2');
+  await assert.rejects(SmartWallet.load(), UnconfirmedIdentity);
+});
+
+test('in a browser adding a linked, pinned device asks the sign-in to confirm the wallet', async () => {
+  await inBrowserWithPinnedPasskey();
+  const wallet = await unconfirmedWallet();
+  await wallet.addThisDevice();
+  assert.deepEqual(calls, [network.factory]);
+  assert.equal((await SmartWallet.load())?.address, address);
+});
+
 test('a wallet is the same only with the same id, address and account', async () => {
   const wallet = (await SmartWallet.load()) as SmartWallet;
   assert.equal(wallet.sameAs(null), false);
@@ -324,7 +385,7 @@ test('creating a wallet makes the device key and passkey, deploys with both and 
   });
   replace(passkey, 'create', async (label: string) => {
     calls.push(`passkey ${label}`);
-    return { credentialId: 'cred-1', publicKey: passkeyKey };
+    return { credentialId: createdCredentialId, publicKey: passkeyKey };
   });
   let deployed: unknown;
   let deployedFor = '';
@@ -338,7 +399,7 @@ test('creating a wallet makes the device key and passkey, deploys with both and 
   assert.deepEqual(calls, ['create key', 'passkey a@example.com']);
   assert.equal(deployedFor, userId);
   assert.deepEqual(deployed, {
-    credentialId: 'cred-1',
+    credentialId: createdCredentialId,
     passkeyPublicKey: base64.encode(passkeyKey),
     devicePublicKey: base64.encode(deviceKey),
   });
@@ -353,7 +414,7 @@ test('a load started during wallet creation waits for the deployment', async () 
   await clearPins();
   links = [];
   replace(deviceSigner, 'create', async () => base64.encode(deviceKey));
-  replace(passkey, 'create', async () => ({ credentialId: 'cred-1', publicKey: passkeyKey }));
+  replace(passkey, 'create', async () => ({ credentialId: createdCredentialId, publicKey: passkeyKey }));
   let finishDeploy: () => void = () => undefined;
   replace(
     ctx,
@@ -382,19 +443,31 @@ test('a deployed wallet that does not hold this device key fails the load and is
   await clearPins();
   links = [];
   chain.deviceKeyOnRule = otherDeviceKey;
+  await assert.rejects(createAndLoad(), /The new wallet does not hold this device key/);
+  assert.equal(await pinned(), null);
+});
+
+test('a deployed wallet other than the one the new passkey makes fails the load and is not pinned', async () => {
+  await clearPins();
+  links = [];
+  chain.walletOfCreatedPasskey = 'COTHER';
+  await assert.rejects(createAndLoad(), /couldn't confirm the new wallet is yours/);
+  assert.equal(await pinned(), null);
+});
+
+async function createAndLoad(): Promise<SmartWallet | null> {
   replace(deviceSigner, 'create', async () => base64.encode(deviceKey));
-  replace(passkey, 'create', async () => ({ credentialId: 'cred-1', publicKey: passkeyKey }));
+  replace(passkey, 'create', async () => ({ credentialId: createdCredentialId, publicKey: passkeyKey }));
   replace(ctx, 'deployWallet', async () => link);
   const warn = console.warn;
   console.warn = () => undefined;
   try {
     await SmartWallet.create('Loop');
-    await assert.rejects(SmartWallet.load(), /The new wallet does not hold this device key/);
+    return await SmartWallet.load();
   } finally {
     console.warn = warn;
   }
-  assert.equal(await pinned(), null);
-});
+}
 
 test('balances list each token and skip the vault valuation for no shares', async () => {
   const wallet = (await SmartWallet.load()) as SmartWallet;

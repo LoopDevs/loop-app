@@ -20,6 +20,8 @@ type LinkShape = {
 
 type SignWithPasskey = (challenge: Uint8Array) => Promise<PasskeyAssertion>;
 
+export type AddressOf = (credentialId: Uint8Array) => Promise<string>;
+
 export class WalletPin {
   readonly key: string;
   readonly pendingKey: string;
@@ -99,11 +101,16 @@ export class WalletPin {
     return created;
   }
 
-  async admits(pinned: PinnedWallet | null, address: string, checked: WalletCheck): Promise<boolean> {
+  async admits(
+    pinned: PinnedWallet | null,
+    address: string,
+    checked: WalletCheck,
+    addressOf: AddressOf,
+  ): Promise<boolean> {
     if (checked.thisDevice === 'unlinked') {
       return false;
     }
-    return pinned !== null || (await this.pinCreatedHere(address, checked.passkeyPublicKey));
+    return pinned !== null || (await this.pinCreatedHere(address, checked.passkeyPublicKey, addressOf));
   }
 
   async confirmThisDevice(
@@ -123,9 +130,12 @@ export class WalletPin {
     }
   }
 
-  async pinCreatedHere(address: string, passkeyPublicKey: Uint8Array): Promise<boolean> {
+  async pinCreatedHere(address: string, passkeyPublicKey: Uint8Array, addressOf: AddressOf): Promise<boolean> {
     const pending = await this.pendingPasskey();
     if (!pending || bytesToHex(pending.publicKey) !== bytesToHex(passkeyPublicKey)) {
+      return false;
+    }
+    if ((await addressOf(base64.decode(pending.credentialId))) !== address) {
       return false;
     }
     await this.write({ address, passkeyPublicKey: base64.encode(passkeyPublicKey) });

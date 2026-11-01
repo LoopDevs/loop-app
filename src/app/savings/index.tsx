@@ -40,7 +40,7 @@ export default function SavingsScreen() {
   const toast = useToast();
   const { wide } = usePageLayout();
   const { openSignIn } = useSignIn();
-  const { state, wallet, view, refresh, reload } = useWallet();
+  const { state, wallet, view, refresh, reload, problem } = useWallet();
   const { busy, message, setMessage, run } = useBusyAction();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [adding, setAdding] = useState(false);
@@ -169,6 +169,10 @@ export default function SavingsScreen() {
               actionLabel="Go to Home"
               onAction={() => router.navigate('/')}
             />
+          )}
+
+          {state === 'blocked' && (
+            <Notice tone="neutral" message={problem} actionLabel="Go to Home" onAction={() => router.navigate('/')} />
           )}
 
           {state === 'ready' && (

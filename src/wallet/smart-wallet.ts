@@ -84,6 +84,10 @@ export class SmartWallet {
     return new WalletPin(SmartWallet.pinStorage, userId, () => ctx.userId());
   }
 
+  static forgetConfirmations(): void {
+    SmartWallet.confirmed.clear();
+  }
+
   static async load(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
     await SmartWallet.creation.settled(userId);
@@ -99,10 +103,10 @@ export class SmartWallet {
     const wallet = new SmartWallet(link.id, link.address, userId);
     const checked = await wallet.verify();
     const held = WalletPin.current(pinned, wallet.address, checked.passkeyPublicKey);
-    if (!(await pin.admits(held, wallet.address, checked))) {
+    if (!(await pin.admits(held, wallet.address, checked, (credentialId) => wallet.walletAddressOf(credentialId)))) {
       throw new UnlinkedDevice(wallet);
     }
-    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(wallet.address)) {
+    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(wallet.confirmedKey())) {
       throw new UnconfirmedIdentity(wallet);
     }
     return wallet;
@@ -151,10 +155,13 @@ export class SmartWallet {
       devicePublicKey,
     });
     const wallet = new SmartWallet(link.id, link.address, userId);
+    if ((await wallet.walletAddressOf(base64.decode(created.credentialId))) !== wallet.address) {
+      throw new Error("Loop couldn't confirm the new wallet is yours. Try again.");
+    }
     if ((await wallet.verify(created.publicKey)).thisDevice !== 'linked') {
       throw new Error('The new wallet does not hold this device key');
     }
-    SmartWallet.confirmed.add(wallet.address);
+    SmartWallet.confirmed.add(wallet.confirmedKey());
     await pin.write({
       address: wallet.address,
       passkeyPublicKey: base64.encode(created.publicKey),
@@ -192,11 +199,22 @@ export class SmartWallet {
         ),
       this.proof(checked.passkeyPublicKey),
     );
+    await this.requireConfirmed(checked.passkeyPublicKey);
   }
 
   async confirmIdentity(): Promise<void> {
     const checked = await this.verify();
     await this.proof(checked.passkeyPublicKey)(randomBytes(32));
+  }
+
+  private async requireConfirmed(passkeyPublicKey: Uint8Array): Promise<void> {
+    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(this.confirmedKey())) {
+      await this.proof(passkeyPublicKey)(randomBytes(32));
+    }
+  }
+
+  private confirmedKey(): string {
+    return `${this.userId}:${this.address}`;
   }
 
   async balances(): Promise<Balances> {
@@ -345,7 +363,7 @@ export class SmartWallet {
     });
     return async (challenge) => {
       const assertion = await identity.prove(challenge, passkeyPublicKey);
-      SmartWallet.confirmed.add(this.address);
+      SmartWallet.confirmed.add(this.confirmedKey());
       return assertion;
     };
   }
@@ -374,3 +392,5 @@ export class SmartWallet {
     return value;
   }
 }
+
+ctx.onSessionEnd(SmartWallet.forgetConfirmations);

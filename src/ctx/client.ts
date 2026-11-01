@@ -314,6 +314,10 @@ class CtxClient {
     await this.auth.clearSession();
   }
 
+  onSessionEnd(listener: () => void): () => void {
+    return this.auth.onSessionEnd(listener);
+  }
+
   async userId(): Promise<string> {
     return this.userIdFrom(await this.auth.requireAccessToken());
   }
