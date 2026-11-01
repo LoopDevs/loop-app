@@ -1,4 +1,4 @@
-import { SecurityHeaders } from '../edge/security-headers.ts';
+import { SecurityHeaders } from '../../edge/security-headers.ts';
 
 type MiddlewareContext = {
   next(): Promise<Response>;
