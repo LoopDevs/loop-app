@@ -26,6 +26,7 @@ export class SessionAuth {
   private readonly session = new SessionTokens();
   private readonly send: Send;
   private readonly store: RefreshTokenStore;
+  private storedRefreshToken: string | null = null;
 
   constructor(send: Send, store: RefreshTokenStore) {
     this.send = send;
@@ -53,23 +54,24 @@ export class SessionAuth {
     path: string,
     body?: unknown,
     reportServiceState = true,
+    headers: Record<string, string> = {},
   ): Promise<T> {
     const generation = this.session.current();
+    const request = (accessToken: string) =>
+      this.authorized<T>(accessToken, method, path, body, reportServiceState, headers);
     const accessToken = await this.requireAccessToken();
     try {
-      return await this.authorized<T>(accessToken, method, path, body, reportServiceState);
+      return await request(accessToken);
     } catch (error) {
-      if (!(error instanceof CtxError) || error.status !== 401) {
-        throw error;
+      const refreshed = await this.replacementFor(generation, accessToken, error);
+      try {
+        return await request(refreshed);
+      } catch (retryError) {
+        if (!(await this.rotatedElsewhere(retryError))) {
+          throw retryError;
+        }
+        return request(await this.replacementFor(generation, refreshed, retryError));
       }
-      if (!this.session.reject(generation, accessToken)) {
-        throw error;
-      }
-      const refreshed = await this.accessToken();
-      if (!refreshed || !this.session.isCurrent(generation)) {
-        throw error;
-      }
-      return this.authorized<T>(refreshed, method, path, body, reportServiceState);
     }
   }
 
@@ -82,7 +84,31 @@ export class SessionAuth {
 
   async clearSession(): Promise<void> {
     this.session.begin();
+    this.storedRefreshToken = null;
     await this.store.clear();
+  }
+
+  private async replacementFor(generation: number, rejected: string, error: unknown): Promise<string> {
+    if (!SessionAuth.isUnauthorized(error) || !this.session.reject(generation, rejected)) {
+      throw error;
+    }
+    const refreshed = await this.accessToken();
+    if (!refreshed || !this.session.isCurrent(generation)) {
+      throw error;
+    }
+    return refreshed;
+  }
+
+  private async rotatedElsewhere(error: unknown): Promise<boolean> {
+    if (!SessionAuth.isUnauthorized(error)) {
+      return false;
+    }
+    const stored = await this.store.exclusive(() => this.store.readRefreshToken());
+    return stored !== null && stored !== this.storedRefreshToken;
+  }
+
+  private static isUnauthorized(error: unknown): boolean {
+    return error instanceof CtxError && error.status === 401;
   }
 
   private authorized<T>(
@@ -91,9 +117,10 @@ export class SessionAuth {
     path: string,
     body: unknown,
     reportServiceState: boolean,
+    headers: Record<string, string>,
   ): Promise<T> {
     return this.send<T>(method, path, body, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { ...headers, Authorization: `Bearer ${accessToken}` },
       reportServiceState,
     });
   }
@@ -143,6 +170,7 @@ export class SessionAuth {
       return false;
     }
     await this.store.writeRefreshToken(tokens.refreshToken);
+    this.storedRefreshToken = tokens.refreshToken;
     return this.session.adopt(generation, tokens.accessToken);
   }
 }

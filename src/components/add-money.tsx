@@ -5,20 +5,21 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Button, Field, Notice } from '@/components/form';
-import { ListGroup, ListRow } from '@/components/list-row';
-import { PreviewBadge } from '@/components/preview-badge';
+import { Button, Field, Notice } from '@/components/ui/form';
+import { ListGroup, ListRow } from '@/components/ui/list-row';
+import { PreviewBadge } from '@/components/ui/preview-badge';
 import { QrCode } from '@/components/qr-code';
-import { Skeleton } from '@/components/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StatusTracker } from '@/components/status-tracker';
-import { ThemedText } from '@/components/themed-text';
-import { useToast } from '@/components/toast';
+import { ThemedText } from '@/components/ui/themed-text';
+import { useToast } from '@/components/ui/toast';
 import { Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { invalidAmountMessage, normalizeAmount } from '@/ctx/amount-input';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
+import { strings } from '@/strings';
 import { network } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { PayRequest } from '@/wallet/pay-request';
@@ -111,13 +112,12 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
   const amountPicker = (onSubmit: () => void) => (
     <>
       <Field
-        placeholder="Amount in dollars"
+        label={strings.field.amountInDollars}
         value={input}
         onChangeText={setInput}
         keyboardType="decimal-pad"
         returnKeyType="next"
         onSubmitEditing={onSubmit}
-        accessibilityLabel="Amount in dollars"
       />
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   card: {
     padding: Spacing.three,
     gap: Spacing.three,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
     width: '100%',
     maxWidth: Layout.sheetWidth,
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   tracker: {
     paddingTop: Spacing.three,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
   },
 });

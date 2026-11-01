@@ -1,12 +1,36 @@
-import { Button } from '@/components/form';
-import { MessageScreen } from '@/components/message-screen';
+import type { ErrorBoundaryProps } from 'expo-router';
+import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
-export function CrashFallback({ onRetry }: { onRetry: () => void }) {
+import { Button } from '@/components/ui/form';
+import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
+import { errorReporting } from '@/ops/error-reporting';
+import { StaleBuild } from '@/ops/stale-build';
+import { markLaunchFailed } from '@/updates/update-checker';
+
+export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const staleBuild = Platform.OS === 'web' && StaleBuild.caused(error);
+  useEffect(() => {
+    if (staleBuild) {
+      StaleBuild.reloadOnce();
+    }
+  }, [staleBuild]);
+  const retry = staleBuild ? () => window.location.reload() : onRetry;
   return (
     <MessageScreen
       title="Something went wrong"
-      detail="A payment already sent is not lost. Check Orders for its status.">
-      <Button label="Try again" variant="primary" onPress={onRetry} />
+      detail="A payment already sent is not lost. Check Wallet for its status.">
+      <Button label="Try again" variant="primary" onPress={retry} />
+      <ContactSupportButton subject="Loop app error" />
     </MessageScreen>
   );
+}
+
+export function ScreenCrash({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    if (!markLaunchFailed(error)) {
+      errorReporting.reportCrash(error, 'Screen render');
+    }
+  }, [error]);
+  return <CrashFallback error={error} onRetry={() => void retry()} />;
 }

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Payout, type PayoutJson } from '../ctx/payout.ts';
+import { Account } from '../ctx/account.ts';
+import type { BalanceJson } from '../ctx/client.ts';
+import type { PayoutJson } from '../ctx/payout.ts';
 import { Rates } from '../ctx/rates.ts';
-import type { PaymentCurrency } from '../stellar/network.ts';
+import { network, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 import { Holdings, type Holding } from './holdings.ts';
 
@@ -19,22 +21,25 @@ const marketRates = Rates.fromPrices({
 
 function holdings(
   wallet: Partial<Record<PaymentCurrency, string>>,
-  options: { vaultValue?: string; onTheWay?: Holding[] | null; rates?: Rates } = {},
+  options: { savings?: Partial<Record<PaymentCurrency, string>>; onTheWay?: Holding[] | null; rates?: Rates } = {},
 ): Holdings {
   const tokens = currencies.map((currency) => ({
     token: { currency, symbol: currency, contract: '' },
     amount: units.parse(wallet[currency] ?? '0'),
   }));
-  const vaultValue = units.parse(options.vaultValue ?? '0');
+  const savings = Object.entries(options.savings ?? {}).map(([currency, amount]) => {
+    const value = units.parse(amount);
+    return { currency: currency as PaymentCurrency, shares: value, value };
+  });
   return new Holdings(
-    { tokens, vaultShares: vaultValue, vaultValue },
+    { tokens, savings },
     options.onTheWay === undefined ? [] : options.onTheWay,
     options.rates ?? marketRates,
   );
 }
 
-function payout(overrides: Partial<PayoutJson>): Payout {
-  return new Payout({
+function payout(overrides: Partial<PayoutJson>): PayoutJson {
+  return {
     id: 'p1',
     status: 'pending',
     currency: 'XLM.GBPLOOP',
@@ -42,8 +47,15 @@ function payout(overrides: Partial<PayoutJson>): Payout {
     address: walletAddress,
     reservationTransferId: 't1',
     ...overrides,
-  });
+  };
 }
+
+function accountOf(wallet: BalanceJson[], payouts: PayoutJson[] = []): Account {
+  return new Account({ wallet, payouts });
+}
+
+const toBalance = { stableCurrency: 'XLM.USDC', savesCashback: () => false };
+const toSavings = { stableCurrency: 'XLM.USDC', savesCashback: () => true };
 
 test('an amount in the stable counts at 1 with no rate for it', () => {
   const empty = holdings({}, { rates: Rates.fromPrices({}) });
@@ -68,11 +80,45 @@ test('USD and USDC are priced at 1 with no fetched rates', () => {
 });
 
 test('spendable USDC adds the savings withdrawal floor to the wallet balance', () => {
-  const held = holdings({ 'XLM.USDC': '5', XLM: '20' }, { vaultValue: '10' });
+  const held = holdings({ 'XLM.USDC': '5', XLM: '20' }, { savings: { 'XLM.USDC': '10' } });
   assert.equal(held.spendable('XLM.USDC'), units.parse('5') + Holdings.floorOf(units.parse('10')));
   assert.equal(held.spendable('XLM.USDC'), units.parse('14.9'));
   assert.equal(held.spendable('XLM'), units.parse('20'));
   assert.equal(held.spendable('XLM.EURC'), 0n);
+});
+
+test('savings holdings list each vault with shares at its withdrawal floor', () => {
+  assert.deepEqual(holdings({}, { savings: { 'XLM.USDC': '10' } }).savingsHoldings(), [
+    { currency: 'XLM.USDC', amount: Holdings.floorOf(units.parse('10')) },
+  ]);
+  assert.deepEqual(holdings({}).savingsHoldings(), []);
+  assert.equal(holdings({}).savings('XLM.USDC'), 0n);
+});
+
+test('each savings currency counts only its own vault', () => {
+  network.vaults['XLM.GBPLOOP'] = 'CGBPLOOPVAULT';
+  try {
+    const held = holdings({ 'XLM.USDC': '5', 'XLM.GBPLOOP': '1' }, { savings: { 'XLM.USDC': '10', 'XLM.GBPLOOP': '2' } });
+    assert.equal(held.spendable('XLM.USDC'), units.parse('5') + Holdings.floorOf(units.parse('10')));
+    assert.equal(held.spendable('XLM.GBPLOOP'), units.parse('1') + Holdings.floorOf(units.parse('2')));
+    assert.deepEqual(held.coverage('XLM.GBPLOOP', units.parse('2.5')), {
+      kind: 'savings',
+      fromSavings: units.parse('1.5'),
+    });
+    assert.deepEqual(held.coverage('XLM.GBPLOOP', units.parse('3.5')), { kind: 'short' });
+    assert.deepEqual(held.savingsHoldings(), [
+      { currency: 'XLM.USDC', amount: Holdings.floorOf(units.parse('10')) },
+      { currency: 'XLM.GBPLOOP', amount: Holdings.floorOf(units.parse('2')) },
+    ]);
+  } finally {
+    delete network.vaults['XLM.GBPLOOP'];
+  }
+});
+
+test('shares whose withdrawal floor is nothing are neither shown nor withdrawable', () => {
+  const dust = holdings({}, { savings: { 'XLM.USDC': '0.0000001' } });
+  assert.deepEqual(dust.savingsHoldings(), []);
+  assert.deepEqual(dust.withdrawableSavings(), []);
 });
 
 test('on the way counts at 1 in the stable when the stable has no rate', () => {
@@ -125,51 +171,72 @@ test('a token with no rate hides the converted spendable figure', () => {
 });
 
 test('on the way lists ledger balances and in-flight payouts to this wallet only', () => {
-  const onTheWay = Holdings.onTheWayFrom(
-    {
-      wallet: [
-        { currency: 'XLM.GBPLOOP', amount: '2.50', estimates: { USD: '3.3' } },
-        { currency: 'XLM.EURC', amount: '0' },
-      ],
-      payouts: [
-        payout({ amount: '1.25' }),
-        payout({ address: 'GELSEWHERE', amount: '9' }),
-        payout({ address: undefined, amount: '9' }),
-        payout({ status: 'complete', amount: '9' }),
-        payout({ reservationTransferId: undefined, amount: '9' }),
-        payout({ reversalTransferId: 'r1', amount: '9' }),
-      ],
-    },
-    walletAddress,
+  const account = accountOf(
+    [
+      { currency: 'XLM.GBPLOOP', amount: '2.50', estimates: { USD: '3.3' } },
+      { currency: 'XLM.EURC', amount: '0' },
+    ],
+    [
+      payout({ amount: '1.25' }),
+      payout({ address: 'GELSEWHERE', amount: '9' }),
+      payout({ address: undefined, amount: '9' }),
+      payout({ status: 'complete', amount: '9' }),
+      payout({ reservationTransferId: undefined, amount: '9' }),
+      payout({ reversalTransferId: 'r1', amount: '9' }),
+    ],
   );
-  assert.deepEqual(onTheWay, [
+  assert.deepEqual(Holdings.onTheWayFrom(account, walletAddress, toBalance), [
     { currency: 'XLM.GBPLOOP', amount: units.parse('2.5'), estimates: { USD: '3.3' } },
     { currency: 'XLM.GBPLOOP', amount: units.parse('1.25'), estimates: undefined },
   ]);
 });
 
+test('cashback that savings holds back is not on the way, what savings takes still is', () => {
+  const account = accountOf([
+    { currency: 'XLM.GBPLOOP', amount: '2.50' },
+    { currency: 'XLM.USDC', amount: '1.50' },
+    { currency: 'XLM', amount: '10' },
+  ]);
+  assert.deepEqual(
+    Holdings.onTheWayFrom(account, walletAddress, toSavings).map(({ currency }) => currency),
+    ['XLM.USDC', 'XLM'],
+  );
+  assert.deepEqual(
+    Holdings.onTheWayFrom(account, walletAddress, toBalance).map(({ currency }) => currency),
+    ['XLM.GBPLOOP', 'XLM.USDC', 'XLM'],
+  );
+});
+
 test('a payout counts what CTX sends after the network fee', () => {
-  const account = { wallet: [], payouts: [payout({ currency: 'XLM.USDC', amount: '4', sentAmount: '3.99' })] };
-  const held = holdings({}, { onTheWay: Holdings.onTheWayFrom(account, walletAddress) });
+  const account = accountOf([], [payout({ currency: 'XLM.USDC', amount: '4', sentAmount: '3.99' })]);
+  const held = holdings({}, { onTheWay: Holdings.onTheWayFrom(account, walletAddress, toBalance) });
   assert.equal(held.onTheWayIn('USD'), units.parse('3.99'));
 });
 
 test('a payout to another address adds nothing to the total', () => {
-  const account = { wallet: [], payouts: [payout({ address: 'GELSEWHERE', currency: 'XLM.USDC', amount: '4' })] };
-  const held = holdings({ 'XLM.USDC': '4' }, { onTheWay: Holdings.onTheWayFrom(account, walletAddress) });
+  const account = accountOf([], [payout({ address: 'GELSEWHERE', currency: 'XLM.USDC', amount: '4' })]);
+  const held = holdings({ 'XLM.USDC': '4' }, { onTheWay: Holdings.onTheWayFrom(account, walletAddress, toBalance) });
   assert.equal(held.totalIn('USD'), units.parse('4'));
 });
 
+test('an in-flight or completed payout to another wallet is reported as paid elsewhere', () => {
+  const paidElsewhere = (overrides: Parameters<typeof payout>[0]) =>
+    Holdings.paidElsewhere(accountOf([], [payout(overrides)]), walletAddress);
+  assert.equal(paidElsewhere({ address: 'GELSEWHERE' }), true);
+  assert.equal(paidElsewhere({ address: 'GELSEWHERE', status: 'complete' }), true);
+  assert.equal(paidElsewhere({}), false);
+  assert.equal(paidElsewhere({ status: 'complete' }), false);
+  assert.equal(paidElsewhere({ address: undefined }), false);
+  assert.equal(paidElsewhere({ address: 'GELSEWHERE', status: 'cancelled' }), false);
+});
+
 test('a ledger balance that does not parse is skipped and the rest still count', () => {
-  const account = {
-    wallet: [
-      { currency: 'XLM.USDC', amount: '-1' },
-      { currency: 'XLM.USDC', amount: 'abc' },
-      { currency: 'XLM.USDC', amount: '1.123456789' },
-    ],
-    payouts: [],
-  };
-  assert.deepEqual(Holdings.onTheWayFrom(account, walletAddress), [
+  const account = accountOf([
+    { currency: 'XLM.USDC', amount: '-1' },
+    { currency: 'XLM.USDC', amount: 'abc' },
+    { currency: 'XLM.USDC', amount: '1.123456789' },
+  ]);
+  assert.deepEqual(Holdings.onTheWayFrom(account, walletAddress, toBalance), [
     { currency: 'XLM.USDC', amount: units.parse('1.1234567'), estimates: undefined },
   ]);
 });
@@ -230,6 +297,16 @@ test('with no priced candidate a funded currency is preferred, the stable first,
   assert.equal(unpriced.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set(['XLM.USDC'])), 'XLM.GBPLOOP');
   assert.equal(unpriced.preferredCurrency(currencies, 'XLM.EURC', new Set()), 'XLM.USDC');
   assert.equal(unpriced.preferredCurrency(currencies, 'XLM.EURC', new Set(['XLM.USDC', 'XLM.GBPLOOP'])), 'XLM');
+});
+
+test('when the display currency has no rate, a priced stablecoin is ranked by its amount, not passed over for a near-empty stable', () => {
+  const held = holdings({ 'XLM.EURC': '100', 'XLM.GBPLOOP': '0.01' }, { rates: Rates.fromPrices({ 'XLM.EURC': '1.1' }) });
+  assert.equal(held.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set()), 'XLM.EURC');
+});
+
+test('a stablecoin without its own rate is not ranked by its amount, because it cannot pass the price check', () => {
+  const held = holdings({ 'XLM.EURC': '100', 'XLM.GBPLOOP': '0.01' }, { rates: Rates.fromPrices({ 'XLM.GBPLOOP': '1.3' }) });
+  assert.equal(held.preferredCurrency(currencies, 'XLM.GBPLOOP', new Set()), 'XLM.GBPLOOP');
 });
 
 test('an unfunded stable is never preferred over a funded currency', () => {

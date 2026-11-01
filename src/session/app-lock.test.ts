@@ -80,6 +80,23 @@ test('backgrounding while locked keeps the lock', () => {
   assert.equal(lock.status, 'locked');
 });
 
+test('backgrounding keeps an open in-app browser until the lock engages', () => {
+  const backgrounded = unlockedThenBackgrounded();
+  assert.equal(backgrounded.covers(), true);
+  assert.equal(backgrounded.closesBrowser(), false);
+  assert.equal(backgrounded.foregrounded(start + lockAfterBackgroundMs - 1).closesBrowser(), false);
+});
+
+test('the in-app browser closes once the app locks', () => {
+  assert.equal(unlockedThenBackgrounded().foregrounded(start + lockAfterBackgroundMs).closesBrowser(), true);
+  assert.equal(AppLock.loading().loaded(true).closesBrowser(), true);
+});
+
+test('the in-app browser stays open with the lock off', () => {
+  assert.equal(AppLock.loading().loaded(false).closesBrowser(), false);
+  assert.equal(AppLock.loading().closesBrowser(), false);
+});
+
 test('turning the lock on leaves the app unlocked', () => {
   const lock = AppLock.loading().loaded(false).turnedOn();
   assert.equal(lock.status, 'unlocked');

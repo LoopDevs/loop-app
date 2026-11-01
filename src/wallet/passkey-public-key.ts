@@ -1,3 +1,5 @@
+import { p256 } from '@noble/curves/nist';
+
 const coordinatesLength = 64;
 const uncompressedPointPrefix = 0x04;
 const p256SpkiHeader = Uint8Array.of(
@@ -8,12 +10,21 @@ const p256SpkiHeader = Uint8Array.of(
 export class PasskeyPublicKey {
   static uncompressedPoint(decoded: Uint8Array): Uint8Array {
     if (decoded.length === coordinatesLength) {
-      return Uint8Array.of(uncompressedPointPrefix, ...decoded);
+      return PasskeyPublicKey.onCurve(Uint8Array.of(uncompressedPointPrefix, ...decoded));
     }
     if (PasskeyPublicKey.isP256Spki(decoded)) {
-      return decoded.slice(p256SpkiHeader.length);
+      return PasskeyPublicKey.onCurve(decoded.slice(p256SpkiHeader.length));
     }
     throw new Error('The passkey is not a P-256 key');
+  }
+
+  private static onCurve(point: Uint8Array): Uint8Array {
+    try {
+      p256.Point.fromBytes(point);
+    } catch {
+      throw new Error('The passkey is not a P-256 key');
+    }
+    return point;
   }
 
   private static isP256Spki(decoded: Uint8Array): boolean {

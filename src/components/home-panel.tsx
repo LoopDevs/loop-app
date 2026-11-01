@@ -1,6 +1,6 @@
-import { useScrollToTop } from 'expo-router';
+import { useFocusEffect, useScrollToTop } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { useRef, type ComponentProps, type ReactNode } from 'react';
+import { useCallback, useRef, type ComponentProps, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import Animated, {
   interpolate,
@@ -9,6 +9,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { Odometer } from '@/components/odometer';
 import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
@@ -16,9 +17,9 @@ import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
-import { Savings } from '@/wallet/savings';
 
 const scrimFadeDistance = 48;
+const nearEndDistance = 800;
 const balanceType = {
   fontFamily: FontFamily.semibold,
   fontSize: 36,
@@ -28,14 +29,31 @@ const balanceType = {
 
 type Scrollable = NonNullable<Parameters<typeof useScrollToTop>[0]['current']>;
 
-export function useScrimScroll<T extends Scrollable = ScrollViewInstance>() {
+type OffsetScrollable = { scrollTo?: (options: object) => void; scrollToOffset?: (options: object) => void };
+
+export function useScrollToTopOnFocus(ref: { current: Scrollable | null }) {
+  useScrollToTop(ref);
+  useFocusEffect(
+    useCallback(() => {
+      const target = ref.current as unknown as OffsetScrollable | null;
+      target?.scrollTo?.({ y: 0, animated: false });
+      target?.scrollToOffset?.({ offset: 0, animated: false });
+    }, [ref]),
+  );
+}
+
+export function useScrimScroll<T extends Scrollable = ScrollViewInstance>(onNearEnd?: () => void) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const scrollRef = useRef<T>(null);
-  useScrollToTop(scrollRef);
+  useScrollToTopOnFocus(scrollRef);
   const offset = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
     offset.value = event.contentOffset.y;
+    const remaining = event.contentSize.height - event.contentOffset.y - event.layoutMeasurement.height;
+    if (onNearEnd && remaining < nearEndDistance) {
+      scheduleOnRN(onNearEnd);
+    }
   });
   const fade = useAnimatedStyle(() => ({
     opacity: interpolate(offset.value, [0, scrimFadeDistance], [0, 1], 'clamp'),
@@ -123,9 +141,9 @@ function accountState(view: HoldingsView | null): string {
   if (onTheWay !== null && onTheWay > 0n) {
     return `${format(onTheWay)} cashback on the way`;
   }
-  const savings = holdings.savings();
-  if (savings > 0n) {
-    return `${money.token(savings, Savings.currency)} in savings`;
+  const savings = holdings.savingsHoldings();
+  if (savings.length > 0) {
+    return `${savings.map(({ currency, amount }) => money.token(amount, currency)).join(' and ')} in savings`;
   }
   const total = stable ? holdings.totalIn(stable) : null;
   if (total === 0n) {
@@ -138,7 +156,7 @@ const styles = StyleSheet.create({
   card: {
     padding: Spacing.four,
     gap: Spacing.four,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: 1,
   },
   balanceBlock: {

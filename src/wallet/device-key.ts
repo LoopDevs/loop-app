@@ -15,6 +15,21 @@ export class MissingDeviceSecret extends Error {
   }
 }
 
+export class IdentityNotConfirmed extends Error {
+  private static readonly declinedMessages = [/User canceled the operation/, /User canceled the authentication/];
+
+  constructor() {
+    super('Couldn’t confirm it’s you. Try again.');
+  }
+
+  static from(error: unknown): unknown {
+    const message = error instanceof Error ? error.message : String(error);
+    return IdentityNotConfirmed.declinedMessages.some((pattern) => pattern.test(message))
+      ? new IdentityNotConfirmed()
+      : error;
+  }
+}
+
 export class DeviceKey {
   readonly secretName: string;
   readonly publicKeyName: string;
@@ -34,15 +49,15 @@ export class DeviceKey {
     return `device.signer.${userId}`;
   }
 
-  static readonly sharedSecretName = 'device.signer.secret';
-  static readonly sharedPublicKeyName = 'device.signer.public';
-
-  async publicKey(): Promise<string | null> {
-    const own = await this.storage.read(this.publicKeyName, false);
-    return own ?? this.storage.read(DeviceKey.sharedPublicKeyName, false);
+  publicKey(): Promise<string | null> {
+    return this.storage.read(this.publicKeyName, false);
   }
 
   async create(): Promise<string> {
+    const existing = await this.storage.read(this.publicKeyName, false);
+    if (existing) {
+      return existing;
+    }
     const secret = randomBytes(32);
     const publicKey = base64.encode(ed25519.getPublicKey(secret));
     await this.storage.remove(this.secretName);
@@ -52,12 +67,9 @@ export class DeviceKey {
   }
 
   async sign(digest: Uint8Array): Promise<string> {
-    const ownPublicKey = await this.storage.read(this.publicKeyName, false);
-    const secretName = ownPublicKey ? this.secretName : DeviceKey.sharedSecretName;
-    const publicKeyName = ownPublicKey ? this.publicKeyName : DeviceKey.sharedPublicKeyName;
-    const secret = await this.storage.read(secretName, true);
+    const secret = await this.storage.read(this.secretName, true);
     if (!secret) {
-      await this.storage.remove(publicKeyName);
+      await this.storage.remove(this.publicKeyName);
       throw new MissingDeviceSecret();
     }
     return base64.encode(ed25519.sign(digest, base64.decode(secret)));

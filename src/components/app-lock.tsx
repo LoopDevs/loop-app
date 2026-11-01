@@ -1,21 +1,29 @@
 import { useFocusEffect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { AccessibilityInfo, AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ListGroup, ListRow } from '@/components/list-row';
+import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { Wordmark } from '@/components/wordmark';
 import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useTheme } from '@/hooks/use-theme';
 import { biometrics } from '@/native/biometrics';
 import { haptics } from '@/native/haptics';
-import { useRecentsProtection } from '@/native/screen-privacy';
 import { AppLock, type AuthenticationResult } from '@/session/app-lock';
 import { appLockStore } from '@/session/app-lock-store';
 
-const notConfirmedMessage = "Couldn't confirm it's you. Try again.";
+const notConfirmedMessage = AppLock.notConfirmedMessage;
+const lockLabel = 'Lock Loop with Face ID, fingerprint or passcode';
+
+function useAnnouncement(message: string) {
+  useEffect(() => {
+    if (message !== '') {
+      AccessibilityInfo.announceForAccessibility(message);
+    }
+  }, [message]);
+}
 
 type AppLockControls = {
   isOn: boolean;
@@ -32,18 +40,19 @@ const AppLockContext = createContext<AppLockControls>({
 export function AppLockToggle() {
   const { isOn, turnOn, turnOff } = useContext(AppLockContext);
   const { busy, message, run } = useBusyAction();
-  const [enrolled, setEnrolled] = useState(false);
+  const [screenLock, setScreenLock] = useState(false);
   const theme = useTheme();
+  useAnnouncement(message);
 
   useFocusEffect(
     useCallback(() => {
       let current = true;
       biometrics
-        .isEnrolled()
+        .hasScreenLock()
         .catch(() => false)
         .then((result) => {
           if (current) {
-            setEnrolled(result);
+            setScreenLock(result);
           }
         });
       return () => {
@@ -52,7 +61,7 @@ export function AppLockToggle() {
     }, []),
   );
 
-  if (!enrolled && !isOn) {
+  if (!screenLock && !isOn) {
     return null;
   }
 
@@ -60,13 +69,13 @@ export function AppLockToggle() {
 
   return (
     <ListGroup title="Security" footer={message}>
-      <ListRow label="Lock Loop with Face ID / fingerprint">
+      <ListRow label={lockLabel}>
         <Switch
           value={isOn}
           onValueChange={toggle}
           disabled={busy}
           trackColor={{ true: theme.accent }}
-          accessibilityLabel="Lock Loop with Face ID / fingerprint"
+          accessibilityLabel={lockLabel}
         />
       </ListRow>
     </ListGroup>
@@ -78,6 +87,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const [inForeground, setInForeground] = useState(AppState.currentState !== 'background');
   const [message, setMessage] = useState('');
   const authenticating = useRef(false);
+  const autoPrompted = useRef(false);
 
   useEffect(() => {
     let current = true;
@@ -103,6 +113,9 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       setInForeground(next !== 'background');
       if (next === 'background') {
+        if (!authenticating.current) {
+          autoPrompted.current = false;
+        }
         setLock((previous) => previous.backgrounded(now));
       } else if (next === 'active') {
         setLock((previous) => previous.foregrounded(now));
@@ -143,17 +156,21 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     [authenticate, applyUnlockResult],
   );
 
-  useRecentsProtection(lock.isOn());
-
   const covered = lock.covers();
+  const closesBrowser = lock.closesBrowser();
   useEffect(() => {
-    if (covered) {
+    if (closesBrowser) {
       Promise.resolve(WebBrowser.dismissBrowser()).catch(() => undefined);
     }
-  }, [covered]);
+  }, [closesBrowser]);
 
   useEffect(() => {
-    if (lock.status === 'locked' && inForeground) {
+    if (lock.status !== 'locked') {
+      autoPrompted.current = false;
+      return;
+    }
+    if (inForeground && !autoPrompted.current) {
+      autoPrompted.current = true;
       void unlock();
     }
   }, [lock.status, inForeground, unlock]);
@@ -205,6 +222,7 @@ type LockViewProps = {
 
 function LockView({ showUnlock, message, onUnlock }: LockViewProps) {
   const theme = useTheme();
+  useAnnouncement(message);
   return (
     <View style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safeArea}>
@@ -265,7 +283,7 @@ const styles = StyleSheet.create({
   },
   unlock: {
     minHeight: 50,
-    borderRadius: Radius.control,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,

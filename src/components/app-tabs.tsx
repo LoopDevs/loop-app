@@ -1,12 +1,30 @@
 import { NativeTabs } from 'expo-router/native-tabs';
+import { StyleSheet } from 'react-native';
 
-import { Colors, FontFamily } from '@/constants/theme';
+import { SignInScreen, useSignIn } from '@/components/sign-in';
+import { ThemedView } from '@/components/ui/themed-view';
+import { useWelcomeSeen, WelcomeScreen } from '@/components/welcome';
+import { FontFamily } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
-  const colors = Colors.light;
+  const { signedIn } = useSignIn();
+  const [welcomeSeen, dismissWelcome] = useWelcomeSeen();
+  if (signedIn === null || (!signedIn && welcomeSeen === null)) {
+    return <ThemedView style={styles.loading} />;
+  }
+  if (!signedIn) {
+    return welcomeSeen ? <SignInScreen /> : <WelcomeScreen onContinue={dismissWelcome} />;
+  }
+  return <SignedInTabs />;
+}
+
+function SignedInTabs() {
+  const colors = useTheme();
 
   return (
     <NativeTabs
+      labelVisibilityMode="labeled"
       backgroundColor={colors.backgroundElement}
       indicatorColor={colors.backgroundSelected}
       rippleColor={colors.backgroundSelected}
@@ -59,3 +77,9 @@ export default function AppTabs() {
     </NativeTabs>
   );
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+  },
+});

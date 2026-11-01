@@ -7,22 +7,24 @@ export const orderHelp = {
     return `Loop order ${giftCard.id}`;
   },
 
-  body(giftCard: GiftCard): string {
+  body(giftCard: GiftCard, sentTxId?: string): string {
+    const txId = giftCard.paymentCryptoTxId ?? sentTxId;
     return [
       `Merchant: ${giftCard.merchantName}`,
       `Amount: ${giftCard.cardFiatAmount} ${giftCard.cardFiatCurrency}`,
       `Status: ${giftCard.status}`,
       `Date: ${dates.day(giftCard.created, 'en')}`,
       `Order id: ${giftCard.id}`,
+      ...(txId ? [`Payment transaction: ${txId}`] : []),
       '',
       'What went wrong:',
       '',
     ].join('\n');
   },
 
-  mailto(giftCard: GiftCard): string {
+  mailto(giftCard: GiftCard, sentTxId?: string): string {
     const subject = encodeURIComponent(orderHelp.subject(giftCard));
-    const body = encodeURIComponent(orderHelp.body(giftCard));
+    const body = encodeURIComponent(orderHelp.body(giftCard, sentTxId));
     return `mailto:${loopLinks.supportEmail}?subject=${subject}&body=${body}`;
   },
 };

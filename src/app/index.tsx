@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
 import { CountryMenu } from '@/components/country-menu';
-import { Button, Notice } from '@/components/form';
+import { Button, Notice } from '@/components/ui/form';
 import { HomeActions } from '@/components/home-actions';
 import { NextStep, RecentGiftCards } from '@/components/home-overview';
 import { BalanceCard, StatusBarScrim, useScrimScroll } from '@/components/home-panel';
@@ -20,10 +20,10 @@ import {
   MerchantCover,
   SectionHeading,
 } from '@/components/merchant-card';
-import { PressScale } from '@/components/press-scale';
-import { SignInButton, useOnSignIn } from '@/components/sign-in';
+import { PressScale } from '@/components/ui/press-scale';
+import { SignInButton, useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
-import { Skeleton } from '@/components/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   HowLoopWorks,
   PageWidth,
@@ -31,8 +31,8 @@ import {
   useCatalog,
   type Catalog,
 } from '@/components/storefront';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
@@ -51,6 +51,7 @@ const featuredShown = 5;
 const stripShown = 10;
 const brandRows = 2;
 const maxBrandColumns = 6;
+const offersShown = featuredShown + Math.max(stripShown, maxBrandColumns * brandRows);
 
 const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
@@ -60,20 +61,25 @@ export default function HomeScreen() {
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
+  const [sessionRead, setSessionRead] = useState(false);
   const { view, refresh } = useHoldings(wallet);
-  const { busy, message, setMessage, run } = useBusyAction();
+  const { busy, message, run, load } = useBusyAction();
+  const [loadError, setLoadError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [giftCardsRefreshKey, setGiftCardsRefreshKey] = useState(0);
   const [search, setSearch] = useState('');
   const walletLoadStarted = useRef(false);
+  const walletLoadFailed = useRef(false);
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { country: marketCountry } = useMarket();
+  const { country: marketCountry, resolved: marketResolved } = useMarket();
+  const { check } = useSignIn();
   const signedOut = screen === 'signed-out';
-  const catalogCountry = signedOut ? marketCountry : profileCountry;
-  const catalog = useCatalog(catalogCountry);
+  const signedOutCountry = marketResolved ? marketCountry : undefined;
+  const catalogCountry = !sessionRead ? undefined : signedOut ? signedOutCountry : profileCountry;
+  const catalog = useCatalog(catalogCountry, offersShown);
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
     setWallet(loaded);
@@ -89,9 +95,10 @@ export default function HomeScreen() {
 
   const loadWallet = useCallback(async () => {
     walletLoadStarted.current = true;
+    walletLoadFailed.current = false;
     try {
       const loaded = await SmartWallet.load();
-      await Promise.all([showWallet(loaded), loaded ? openActiveOrder() : undefined]);
+      await Promise.all([showWallet(loaded), loaded && Platform.OS !== 'web' ? openActiveOrder() : undefined]);
     } catch (error) {
       if (error instanceof UnlinkedDevice) {
         setUnlinkedWallet(error.wallet);
@@ -99,6 +106,8 @@ export default function HomeScreen() {
         return;
       }
       walletLoadStarted.current = false;
+      walletLoadFailed.current = true;
+      setScreen('no-wallet');
       throw error;
     }
   }, [showWallet, openActiveOrder]);
@@ -110,22 +119,28 @@ export default function HomeScreen() {
 
   const readSession = useCallback(async () => {
     try {
-      if (await ctx.isSignedIn()) {
+      const signedIn = await ctx.isSignedIn();
+      setSessionRead(true);
+      if (signedIn) {
         if (preWalletScreens.includes(screen) && !walletLoadStarted.current) {
           setScreen('loading');
           loadProfileCountry();
           await loadWallet();
+          setLoadError('');
         }
         return;
       }
       walletLoadStarted.current = false;
+      walletLoadFailed.current = false;
       setWallet(null);
       setScreen('signed-out');
+      setLoadError('');
+      check();
     } catch (error) {
       walletLoadStarted.current = false;
-      setMessage(errorMessage(error));
+      setLoadError(errorMessage(error));
     }
-  }, [screen, loadWallet, loadProfileCountry, setMessage]);
+  }, [screen, loadWallet, loadProfileCountry, check]);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,7 +156,9 @@ export default function HomeScreen() {
   const createWallet = () =>
     run(async () => {
       const profile = await ctx.me();
-      showWallet(await SmartWallet.create(profile.passkeyLabel()));
+      await SmartWallet.create(profile.passkeyLabel());
+      setScreen('loading');
+      await loadWallet();
     });
 
   const refreshBalances = useCallback(async () => {
@@ -150,17 +167,48 @@ export default function HomeScreen() {
     }
     try {
       await refresh();
+      setLoadError('');
     } catch (error) {
-      setMessage(errorMessage(error));
+      setLoadError(errorMessage(error));
     }
-  }, [wallet, refresh, setMessage]);
+  }, [wallet, refresh]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshBalances();
-    }, [refreshBalances]),
-  );
-  useAppRefresh(refreshBalances);
+  const retryWalletLoad = useCallback(async () => {
+    if (!walletLoadFailed.current || walletLoadStarted.current) {
+      return;
+    }
+    try {
+      const signedIn = await ctx.isSignedIn();
+      if (!signedIn || walletLoadStarted.current) {
+        return;
+      }
+      setScreen('loading');
+      await loadWallet();
+      setLoadError('');
+    } catch (error) {
+      setLoadError(errorMessage(error));
+    }
+  }, [loadWallet]);
+
+  const refreshLoaded = useCallback(() => {
+    retryWalletLoad();
+    refreshBalances();
+  }, [retryWalletLoad, refreshBalances]);
+
+  const refreshHome = useCallback(() => {
+    readSession();
+    refreshLoaded();
+  }, [readSession, refreshLoaded]);
+
+  const retryLoads = () =>
+    load(async () => {
+      await readSession();
+      await retryWalletLoad();
+      await refreshBalances();
+    });
+
+  useFocusEffect(refreshLoaded);
+  useAppRefresh(refreshHome);
 
   const pullToRefresh = async () => {
     setRefreshing(true);
@@ -185,7 +233,7 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -243,6 +291,10 @@ export default function HomeScreen() {
 
           {message !== '' && <Notice message={message} />}
 
+          {loadError !== '' && (
+            <Notice message={loadError} actionLabel="Try again" onAction={retryLoads} disabled={busy} />
+          )}
+
           {showsListings && <FeaturedOffers catalog={catalog} onOpen={openMerchant} onSeeAll={openShop} />}
 
           {showsListings && (
@@ -252,6 +304,13 @@ export default function HomeScreen() {
               onOpen={openMerchant}
               onSeeAll={openShop}
             />
+          )}
+
+          {screen === 'loading' && sessionRead && (
+            <View style={styles.section}>
+              <SectionHeading title="Your Loop" />
+              <BalanceCard view={null} />
+            </View>
           )}
 
           {screen === 'wallet' && wallet && (
@@ -291,7 +350,7 @@ export default function HomeScreen() {
           )}
         </PageWidth>
         {signedOut && <HowLoopWorks />}
-        {(signedOut || wide) && <SiteFooter />}
+        <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>
@@ -373,7 +432,8 @@ function BrandWall({ catalog, onOpen, onSeeAll }: ListingProps) {
               accessibilityRole="button"
               accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
               style={[styles.brandTile, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-              <View style={[styles.brandLogo, { borderColor: theme.border }]}>
+              <View
+                style={[styles.brandLogo, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
                 <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.brandLogoImage} />
               </View>
               <Text style={[styles.brandName, { color: theme.text }]} numberOfLines={1}>
@@ -396,7 +456,7 @@ function SavingsNudge({ onPress }: { onPress: () => void }) {
     <PressScale
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Savings. ${Savings.rateHeadline}`}
+      accessibilityLabel={`Savings. ${Savings.rateHeadline}. ${Savings.riskShort}.`}
       style={[styles.nudge, { backgroundColor: theme.accentSoft }]}>
       <View style={[styles.nudgeIcon, { backgroundColor: theme.accent }]}>
         <SymbolView name={{ ios: 'leaf', android: 'savings', web: 'savings' }} size={20} tintColor={theme.onAccent} />
@@ -404,7 +464,7 @@ function SavingsNudge({ onPress }: { onPress: () => void }) {
       <View style={styles.nudgeText}>
         <ThemedText type="smallBold">{Savings.rateHeadline}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Let your cashback grow in savings.
+          Let your cashback grow in savings. {Savings.riskShort}.
         </ThemedText>
       </View>
       <SymbolView
@@ -480,7 +540,7 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.two,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     borderWidth: 1,
   },
   brandLogo: {
@@ -488,7 +548,6 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
     padding: Spacing.two,
     marginBottom: Spacing.one,
     alignItems: 'center',
@@ -538,7 +597,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
     minHeight: 72,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
   },
   nudgeIcon: {
     width: 40,

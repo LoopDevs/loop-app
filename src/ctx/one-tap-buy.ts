@@ -11,7 +11,7 @@ export type SentRecord = Pick<SentPayment, 'txId' | 'expiryLedger'>;
 
 export type BuySteps = {
   createOrder(): Promise<GiftCard>;
-  paymentStarted(order: GiftCard): Promise<GiftCard | null>;
+  paymentStarted(order: GiftCard, refetch: boolean): Promise<GiftCard | null>;
   pay(order: GiftCard): Promise<SendOutcome>;
   now(): number;
 };
@@ -33,7 +33,7 @@ export type ShownOrder = {
 export type BuyView =
   | { kind: 'rollBack'; message: string }
   | { kind: 'confirm'; order: GiftCard; price: bigint }
-  | { kind: 'show'; shown: ShownOrder; celebrate: boolean };
+  | { kind: 'show'; shown: ShownOrder; celebrate: boolean; notice?: string };
 
 const expired: SendOutcome = { state: { kind: 'priceExpired' }, resumed: false };
 
@@ -41,8 +41,19 @@ export class OneTapBuy {
   static readonly maxOrders = 2;
   static readonly notBoughtMessage = "Your card wasn't bought, and you weren't charged. Try again.";
   static readonly busyMessage = 'Another gift card purchase is still going. Try again in a moment.';
+  static readonly paidElsewhereMessage = 'This order was already paid, so nothing more was sent from this device.';
 
   private running = false;
+
+  static beforeTopUp(current: OrderPayment): SendOutcome | null {
+    if (current.status === 'expired') {
+      return expired;
+    }
+    if (OneTapBuy.paymentStarted(current, false)) {
+      return { state: { kind: 'confirming', txId: current.paymentCryptoTxId }, resumed: true, paidElsewhere: true };
+    }
+    return null;
+  }
 
   static paymentStarted(order: OrderPayment, sentHere: boolean): boolean {
     return (
@@ -96,7 +107,15 @@ export class OneTapBuy {
           const detail = state.kind === 'notSent' ? state.detail : '';
           return { kind: 'rollBack', message: detail !== '' ? detail : OneTapBuy.notBoughtMessage };
         }
-        return { kind: 'show', shown: OneTapBuy.shown(result.order, state, true), celebrate: !resumed };
+        if (result.outcome.paidElsewhere) {
+          const shown = OneTapBuy.shown(result.order, state, true);
+          return { kind: 'show', shown, celebrate: false, notice: OneTapBuy.paidElsewhereMessage };
+        }
+        return {
+          kind: 'show',
+          shown: OneTapBuy.shown(result.order, state, true),
+          celebrate: !resumed && state.txId !== undefined,
+        };
       }
     }
   }
@@ -129,11 +148,11 @@ export class OneTapBuy {
   }
 
   start(steps: BuySteps, quote: BuyQuote): Promise<BuyResult> {
-    return this.exclusive(async () => this.attempt(steps, await steps.createOrder(), quote));
+    return this.exclusive(async () => this.attempt(steps, await steps.createOrder(), quote, true));
   }
 
   confirm(steps: BuySteps, order: GiftCard, quote: BuyQuote): Promise<BuyResult> {
-    return this.exclusive(() => this.attempt(steps, order, quote));
+    return this.exclusive(() => this.attempt(steps, order, quote, false));
   }
 
   private async exclusive(task: () => Promise<BuyResult>): Promise<BuyResult> {
@@ -148,8 +167,14 @@ export class OneTapBuy {
     }
   }
 
-  private async attempt(steps: BuySteps, first: GiftCard, quote: BuyQuote): Promise<BuyResult> {
+  private async attempt(
+    steps: BuySteps,
+    first: GiftCard,
+    quote: BuyQuote,
+    created: boolean,
+  ): Promise<BuyResult> {
     let order = first;
+    let justCreated = created;
     for (let orders = 1; ; orders += 1) {
       const check = BuyPrice.check(order, quote);
       if (check.kind === 'refuse') {
@@ -158,7 +183,7 @@ export class OneTapBuy {
       if (check.kind === 'confirm') {
         return { kind: 'confirm', order, price: check.price };
       }
-      const paying = await steps.paymentStarted(order);
+      const paying = await steps.paymentStarted(order, !justCreated);
       if (paying) {
         return { kind: 'alreadyPaying', order: paying };
       }
@@ -167,11 +192,12 @@ export class OneTapBuy {
       if (outcome.state.kind !== 'priceExpired' || orders >= OneTapBuy.maxOrders) {
         return { kind: 'payment', order, outcome };
       }
-      const paidElsewhere = await steps.paymentStarted(order);
+      const paidElsewhere = await steps.paymentStarted(order, true);
       if (paidElsewhere) {
         return { kind: 'alreadyPaying', order: paidElsewhere };
       }
       order = await steps.createOrder();
+      justCreated = true;
     }
   }
 }

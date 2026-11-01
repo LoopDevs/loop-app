@@ -24,7 +24,9 @@ export const units = {
   },
 
   format(amount: bigint, shownDecimals = 2): string {
-    const fraction = (amount % scale).toString().padStart(decimals, '0').slice(0, shownDecimals);
-    return `${amount / scale}.${fraction}`;
+    const sign = amount < 0n ? '-' : '';
+    const magnitude = amount < 0n ? -amount : amount;
+    const fraction = (magnitude % scale).toString().padStart(decimals, '0').slice(0, shownDecimals);
+    return `${sign}${magnitude / scale}.${fraction}`;
   },
 };

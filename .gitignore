@@ -29,11 +29,21 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+!/certs/certificate.pem
 
 # local env files
 .env
-.env*.local
-.env.production
+.env.*
+!.env.example
+
+# signing keys and service credentials
+credentials.json
+*.keystore
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*service-account*.json
 
 # typescript
 *.tsbuildinfo
@@ -44,5 +54,8 @@ example
 /ios
 /android
 
-# audit reports and recipe
-/docs/audit/
+# audit reports; the recipe and its annex are tracked
+/docs/audit/audit-*/
+
+# design-tool state
+/.impeccable/

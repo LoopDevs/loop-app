@@ -7,17 +7,20 @@ import { useCallback, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { Button } from '@/components/form';
+import { webLink } from '@/components/external-link';
+import { Button, Notice } from '@/components/ui/form';
 import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
-import { ListGroup } from '@/components/list-row';
+import { ListGroup } from '@/components/ui/list-row';
 import { PageHeader } from '@/components/page-header';
-import { PressScale } from '@/components/press-scale';
+import { PressScale } from '@/components/ui/press-scale';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { SiteFooter } from '@/components/site-footer';
+import { ThemedText } from '@/components/ui/themed-text';
+import { ThemedView } from '@/components/ui/themed-view';
 import { loopLinks } from '@/constants/loop-links';
-import { BottomTabInset, Layout, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Layout, MaxContentWidth, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
@@ -41,17 +44,21 @@ export default function ProfileScreen() {
   const { signedIn, openSignIn, check } = useSignIn();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [email, setEmail] = useState<string | null>(null);
+  const [accountFailed, setAccountFailed] = useState(false);
+  const { busy: signingOut, message: signOutFailure, run } = useBusyAction();
 
   const loadEmail = useCallback(async () => {
     if (!(await ctx.isSignedIn())) {
       setEmail(null);
+      setAccountFailed(false);
       return;
     }
     try {
       const profile = await ctx.me();
       setEmail(profile.email ?? null);
+      setAccountFailed(false);
     } catch {
-      setEmail(null);
+      setAccountFailed(true);
     }
   }, []);
 
@@ -62,11 +69,16 @@ export default function ProfileScreen() {
   );
   useOnSignIn(loadEmail);
 
-  const signOut = async () => {
-    await ctx.signOut();
-    setEmail(null);
-    await check();
-    router.navigate('/');
+  const signOut = () => {
+    if (signingOut) {
+      return;
+    }
+    run(async () => {
+      await ctx.signOut();
+      setEmail(null);
+      router.navigate('/');
+      await check();
+    });
   };
 
   const confirmSignOut = () => {
@@ -87,11 +99,17 @@ export default function ProfileScreen() {
     <IconRow
       icon={helpIcon}
       label="Get help"
+      href={loopLinks.supportMail()}
       onPress={() => Linking.openURL(loopLinks.supportMail())}
     />
   );
   const privacyRow = (
-    <IconRow icon={privacyIcon} label="Privacy" onPress={() => openBrowserAsync(loopLinks.privacy)} />
+    <IconRow
+      icon={privacyIcon}
+      label="Privacy"
+      href={loopLinks.privacy}
+      onPress={() => openBrowserAsync(loopLinks.privacy)}
+    />
   );
 
   return (
@@ -116,6 +134,9 @@ export default function ProfileScreen() {
             ) : (
               <>
                 <AccountCard email={email} />
+                {accountFailed && (
+                  <Notice message="We couldn't load your account details." actionLabel="Try again" onAction={loadEmail} />
+                )}
                 <View style={styles.tileRow}>
                   <Tile
                     icon={bagIcon}
@@ -144,12 +165,20 @@ export default function ProfileScreen() {
                   />
                   {helpRow}
                   {privacyRow}
-                  <IconRow icon={signOutIcon} label="Sign out" tone="danger" onPress={confirmSignOut} />
+                  <IconRow
+                    icon={signOutIcon}
+                    label="Sign out"
+                    tone="danger"
+                    disabled={signingOut}
+                    onPress={confirmSignOut}
+                  />
                 </ListGroup>
+                {signOutFailure !== '' && <Notice message={signOutFailure} />}
               </>
             )}
           </View>
         </View>
+        <SiteFooter />
       </Animated.ScrollView>
       <StatusBarScrim style={scrim} />
     </ThemedView>
@@ -244,21 +273,29 @@ type IconRowProps = {
   icon: SymbolViewProps['name'];
   label: string;
   onPress: () => void;
+  href?: string;
+  disabled?: boolean;
   tone?: 'text' | 'danger';
 };
 
-function IconRow({ icon, label, onPress, tone = 'text' }: IconRowProps) {
+function IconRow({ icon, label, onPress, href, disabled = false, tone = 'text' }: IconRowProps) {
   const theme = useTheme();
   const tint = tone === 'danger' ? theme.danger : theme.text;
+  const link = webLink(href);
   return (
     <PressScale
+      {...link}
       style={styles.row}
       onPress={() => {
         haptics.tap();
-        onPress();
+        if (!link) {
+          onPress();
+        }
       }}
       scale={0.99}
-      accessibilityRole="button"
+      disabled={disabled}
+      accessibilityRole={href ? 'link' : 'button'}
+      accessibilityState={{ disabled }}
       accessibilityLabel={label}>
       <SymbolView name={icon} size={22} tintColor={tint} />
       <ThemedText themeColor={tone} style={styles.rowLabel}>
@@ -274,7 +311,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingBottom: BottomTabInset + Spacing.five,
+    flexGrow: 1,
+    paddingBottom: ScrollEndInset,
   },
   page: {
     width: '100%',
@@ -289,7 +327,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderRadius: Radius.card,
+    borderRadius: Radius.large,
     padding: Spacing.four,
   },
   accountCard: {
@@ -325,8 +363,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex: 1,
-    aspectRatio: 1,
-    minHeight: 140,
+    height: 140,
     justifyContent: 'space-between',
   },
   tileText: {

@@ -1,11 +1,13 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-import { DeviceKey, type DeviceKeyStorage } from '@/wallet/device-key';
+import { errorReporting } from '@/ops/error-reporting';
+import { DeviceKey, IdentityNotConfirmed, type DeviceKeyStorage } from '@/wallet/device-key';
+import { reportingSigningFailure } from '@/wallet/signing-report';
 
 const biometricOptions: SecureStore.SecureStoreOptions = {
   requireAuthentication: true,
-  authenticationPrompt: 'Approve with Face ID',
+  authenticationPrompt: 'Confirm it’s you',
 };
 const biometricsHelp: Partial<Record<typeof Platform.OS, string>> = {
   ios: 'Set up Face ID or Touch ID in Settings, or unlock it with your passcode, then try again.',
@@ -13,8 +15,13 @@ const biometricsHelp: Partial<Record<typeof Platform.OS, string>> = {
 };
 
 const secureStorage: DeviceKeyStorage = {
-  read(name, biometric) {
-    return SecureStore.getItemAsync(name, biometric ? biometricOptions : undefined);
+  async read(name, biometric) {
+    if (!biometric) {
+      return SecureStore.getItemAsync(name);
+    }
+    return SecureStore.getItemAsync(name, biometricOptions).catch((error: unknown) => {
+      throw IdentityNotConfirmed.from(error);
+    });
   },
   write(name, value, biometric) {
     return SecureStore.setItemAsync(name, value, biometric ? biometricOptions : undefined);
@@ -33,10 +40,14 @@ export const deviceSigner = {
     if (!SecureStore.canUseBiometricAuthentication()) {
       throw new Error(biometricsHelp[Platform.OS] ?? biometricsHelp.ios);
     }
-    return new DeviceKey(secureStorage, userId).create();
+    return reportingSigningFailure('device key', errorReporting.reportError, () =>
+      new DeviceKey(secureStorage, userId).create(),
+    );
   },
 
   sign(userId: string, digest: Uint8Array): Promise<string> {
-    return new DeviceKey(secureStorage, userId).sign(digest);
+    return reportingSigningFailure('device key', errorReporting.reportError, () =>
+      new DeviceKey(secureStorage, userId).sign(digest),
+    );
   },
 };

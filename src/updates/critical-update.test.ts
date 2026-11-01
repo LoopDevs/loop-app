@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { criticalIndexOf, fetchedCriticalIndex, isCriticalUpdate, ReloadGate } from './critical-update.ts';
+import {
+  criticalIndexFromEnv,
+  criticalIndexOf,
+  fetchedCriticalIndex,
+  isCriticalUpdate,
+  LaunchRecovery,
+  ReloadGate,
+  reloadsNow,
+} from './critical-update.ts';
 
 const manifestWith = (criticalIndex?: number) => ({
   extra: { expoClient: { extra: criticalIndex === undefined ? {} : { criticalIndex } } },
@@ -15,6 +23,20 @@ test('a missing or invalid critical index counts as 0', () => {
   assert.equal(criticalIndexOf({ criticalIndex: 1.5 }), 0);
   assert.equal(criticalIndexOf({ criticalIndex: -2 }), 0);
   assert.equal(criticalIndexOf({ criticalIndex: 4 }), 4);
+});
+
+test('the publish-time critical index comes from LOOP_CRITICAL_INDEX', () => {
+  assert.equal(criticalIndexFromEnv(undefined), undefined);
+  assert.equal(criticalIndexFromEnv(''), undefined);
+  assert.equal(criticalIndexFromEnv('0'), 0);
+  assert.equal(criticalIndexFromEnv('7'), 7);
+});
+
+test('a publish-time critical index that is not a whole number stops the publish', () => {
+  assert.throws(() => criticalIndexFromEnv('-1'), /whole number/);
+  assert.throws(() => criticalIndexFromEnv('1.5'), /whole number/);
+  assert.throws(() => criticalIndexFromEnv('two'), /whole number/);
+  assert.throws(() => criticalIndexFromEnv(' 3'), /whole number/);
 });
 
 test('the fetched index is read from the manifest client extra', () => {
@@ -31,6 +53,14 @@ test('an update is critical only when its index is higher than the running one',
   assert.equal(isCriticalUpdate(manifestWith(0), { criticalIndex: 1 }), false);
 });
 
+test('a roll back to the embedded build reloads now, a non-critical new update waits for the next launch', () => {
+  const running = { criticalIndex: 1 };
+  assert.equal(reloadsNow({ isNew: false, isRollBackToEmbedded: true }, running), true);
+  assert.equal(reloadsNow({ isNew: true, isRollBackToEmbedded: false, manifest: manifestWith(1) }, running), false);
+  assert.equal(reloadsNow({ isNew: true, isRollBackToEmbedded: false, manifest: manifestWith(2) }, running), true);
+  assert.equal(reloadsNow({ isNew: false, isRollBackToEmbedded: false }, running), false);
+});
+
 test('a client that skipped critical update 1 reloads on update 2', () => {
   assert.equal(isCriticalUpdate(manifestWith(2), { criticalIndex: 0 }), true);
 });
@@ -42,6 +72,35 @@ test('a reload requested with nothing held runs at once', () => {
     reloads += 1;
   });
   assert.equal(reloads, 1);
+});
+
+test('a task held after the reload fires is refused without running', async () => {
+  const gate = new ReloadGate();
+  gate.request(() => {});
+  let ran = false;
+  await assert.rejects(
+    gate.hold(async () => {
+      ran = true;
+    }),
+    /updating/,
+  );
+  assert.equal(ran, false);
+});
+
+test('a failed reload reopens the gate for held tasks', async () => {
+  const gate = new ReloadGate();
+  gate.request(() => Promise.reject(new Error('reload failed')));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(await gate.hold(async () => 'sent'), 'sent');
+});
+
+test('a reload that throws at once also reopens the gate', async () => {
+  const gate = new ReloadGate();
+  gate.request(() => {
+    throw new Error('reload failed');
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(await gate.hold(async () => 'sent'), 'sent');
 });
 
 test('a reload requested while a task runs waits until the task returns', async () => {
@@ -88,4 +147,40 @@ test('the reload waits for every overlapping task', async () => {
   releaseSecond();
   await second;
   assert.equal(reloads, 1);
+});
+
+function recoveryAt(elapsedMs: number, runsUpdate: boolean) {
+  const raised: Error[] = [];
+  const recovery = new LaunchRecovery({
+    launchedAt: 1_000,
+    now: () => 1_000 + elapsedMs,
+    runsUpdate: () => runsUpdate,
+    fatal: (error) => raised.push(error),
+  });
+  return { recovery, raised };
+}
+
+test('a crash shortly after launching an update raises a fatal error', () => {
+  const { recovery, raised } = recoveryAt(9_999, true);
+  const failure = new Error('render failed');
+  assert.equal(recovery.markFailed(failure), true);
+  assert.deepEqual(raised, [failure]);
+});
+
+test('a thrown value that is not an error is wrapped before it is raised', () => {
+  const { recovery, raised } = recoveryAt(0, true);
+  assert.equal(recovery.markFailed('boom'), true);
+  assert.equal(raised[0]?.message, 'boom');
+});
+
+test('a crash after the recovery window raises nothing', () => {
+  const { recovery, raised } = recoveryAt(LaunchRecovery.windowMs, true);
+  assert.equal(recovery.markFailed(new Error('late')), false);
+  assert.deepEqual(raised, []);
+});
+
+test('a crash in a launch that is not an update raises nothing', () => {
+  const { recovery, raised } = recoveryAt(0, false);
+  assert.equal(recovery.markFailed(new Error('embedded')), false);
+  assert.deepEqual(raised, []);
 });
