@@ -27,15 +27,23 @@ export class SessionAuth {
   private readonly send: Send;
   private readonly store: RefreshTokenStore;
   private readonly sessionEndListeners = new Set<() => void>();
+  private readonly ownerOf: (accessToken: string) => string;
   private storedRefreshToken: string | null = null;
+  private refusedRefreshToken: string | null = null;
+  private owner: string | null = null;
 
-  constructor(send: Send, store: RefreshTokenStore) {
+  constructor(send: Send, store: RefreshTokenStore, ownerOf: (accessToken: string) => string) {
     this.send = send;
     this.store = store;
+    this.ownerOf = ownerOf;
   }
 
   async hasSession(): Promise<boolean> {
-    return this.session.token() !== null || (await this.store.readRefreshToken()) !== null;
+    if (this.session.token() !== null) {
+      return true;
+    }
+    const stored = await this.store.readRefreshToken();
+    return stored !== null && stored !== this.refusedRefreshToken;
   }
 
   async accessToken(): Promise<string | null> {
@@ -48,6 +56,11 @@ export class SessionAuth {
       throw new Error('Sign in first');
     }
     return accessToken;
+  }
+
+  replacement(rejected: string): Promise<string> {
+    this.session.reject(this.session.current(), rejected);
+    return this.requireAccessToken();
   }
 
   async sessionRequest<T>(
@@ -77,19 +90,17 @@ export class SessionAuth {
   }
 
   async startSession(tokens: TokenPair): Promise<void> {
-    const generation = this.session.begin();
+    const generation = this.beginSession();
     await this.session.refreshOnce(generation, async () =>
       (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null,
     );
   }
 
   async clearSession(): Promise<void> {
-    this.session.begin();
+    this.beginSession();
     this.storedRefreshToken = null;
     await this.store.clear();
-    for (const listener of this.sessionEndListeners) {
-      listener();
-    }
+    this.notifySessionEnd();
   }
 
   onSessionEnd(listener: () => void): () => void {
@@ -99,8 +110,34 @@ export class SessionAuth {
     };
   }
 
+  private beginSession(): number {
+    this.owner = null;
+    this.refusedRefreshToken = null;
+    return this.session.begin();
+  }
+
+  private refuse(refreshToken: string): void {
+    this.refusedRefreshToken = refreshToken;
+    this.session.begin();
+    this.notifySessionEnd();
+  }
+
+  private ownerOrNull(accessToken: string): string | null {
+    try {
+      return this.ownerOf(accessToken) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private notifySessionEnd(): void {
+    for (const listener of this.sessionEndListeners) {
+      listener();
+    }
+  }
+
   private async replacementFor(generation: number, rejected: string, error: unknown): Promise<string> {
-    if (!SessionAuth.isUnauthorized(error) || !this.session.reject(generation, rejected)) {
+    if (!SessionAuth.tokenRefused(error) || !this.session.reject(generation, rejected)) {
       throw error;
     }
     const refreshed = await this.accessToken();
@@ -111,15 +148,15 @@ export class SessionAuth {
   }
 
   private async rotatedElsewhere(error: unknown): Promise<boolean> {
-    if (!SessionAuth.isUnauthorized(error)) {
+    if (!SessionAuth.tokenRefused(error)) {
       return false;
     }
     const stored = await this.store.exclusive(() => this.store.readRefreshToken());
     return stored !== null && stored !== this.storedRefreshToken;
   }
 
-  private static isUnauthorized(error: unknown): boolean {
-    return error instanceof CtxError && error.status === 401;
+  private static tokenRefused(error: unknown): boolean {
+    return error instanceof CtxError && error.refusesToken();
   }
 
   private authorized<T>(
@@ -145,7 +182,7 @@ export class SessionAuth {
 
   private async rotateRefreshToken(generation: number): Promise<string | null> {
     const refreshToken = await this.store.readRefreshToken();
-    if (!refreshToken || !this.session.isCurrent(generation)) {
+    if (!refreshToken || refreshToken === this.refusedRefreshToken || !this.session.isCurrent(generation)) {
       return null;
     }
     try {
@@ -182,6 +219,15 @@ export class SessionAuth {
     }
     await this.store.writeRefreshToken(tokens.refreshToken);
     this.storedRefreshToken = tokens.refreshToken;
+    if (!this.session.isCurrent(generation)) {
+      return false;
+    }
+    const owner = this.ownerOrNull(tokens.accessToken);
+    if (owner === null || (this.owner !== null && owner !== this.owner)) {
+      this.refuse(tokens.refreshToken);
+      return false;
+    }
+    this.owner = owner;
     return this.session.adopt(generation, tokens.accessToken);
   }
 }
