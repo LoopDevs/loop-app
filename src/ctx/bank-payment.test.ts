@@ -86,6 +86,14 @@ test('only an https link on a plaid host is offered for approval', () => {
   assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: 'https://plaid.com/hl/abc' })), 'https://plaid.com/hl/abc');
 });
 
+test('a link that is present but not offered for approval counts as refused', () => {
+  assert.equal(BankPayment.linkRefused(bankOrder({ paymentUrl: 'https://evil.test/hl/abc' })), true);
+  assert.equal(BankPayment.linkRefused(bankOrder({ paymentUrl: 'http://secure.plaid.com/hl/abc' })), true);
+  assert.equal(BankPayment.linkRefused(bankOrder()), false);
+  assert.equal(BankPayment.linkRefused(bankOrder({ paymentUrl: undefined })), false);
+  assert.equal(BankPayment.linkRefused(bankOrder({ status: 'paid', paymentStatus: 'paid', paymentUrl: 'https://evil.test/x' })), false);
+});
+
 test('a paid or settled order has no link and is never expired', () => {
   for (const status of ['paid', 'fulfilled', 'expired', 'rejected'] as const) {
     const order = bankOrder({ status, paymentUrlExpiration: earlier });
