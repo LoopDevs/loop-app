@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { maxPollIntervalMs, pollIntervalMs } from "./gift-card-status.ts";
 import { OrderWake } from "./order-wake.ts";
 
 const event = (id: string, topic = "giftcard", type = "event") =>
@@ -46,4 +47,23 @@ test("a wait with no signal ends at the timeout and the next wait waits again", 
   const started = Date.now();
   await wake.wait(40);
   assert.ok(Date.now() - started >= 30);
+});
+
+test("an attached wake polls at the heartbeat and a detached one at the fast cadence", () => {
+  const wake = new OrderWake();
+  assert.equal(wake.interval(), pollIntervalMs);
+  wake.attach();
+  assert.equal(wake.interval(), maxPollIntervalMs);
+  wake.detach();
+  assert.equal(wake.interval(), pollIntervalMs);
+});
+
+test("detaching ends a pending wait", async () => {
+  const wake = new OrderWake();
+  wake.attach();
+  const started = Date.now();
+  const waiting = wake.wait(5000);
+  wake.detach();
+  await waiting;
+  assert.ok(Date.now() - started < 1000);
 });

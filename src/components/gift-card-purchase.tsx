@@ -26,7 +26,6 @@ import {
   giftCardStatusLabel,
   isHiddenFromHistory,
   outcomeText,
-  pollIntervalMs,
   settledStatuses,
 } from '@/ctx/gift-card-status';
 import { CashbackRate, type Merchant } from '@/ctx/merchant';
@@ -253,7 +252,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
       if (settledStatuses.includes(current.status)) {
         return;
       }
-      await wake.wait(pollIntervalMs);
+      await wake.wait(wake.interval());
       try {
         current = await ctx.giftCard(current.id);
       } catch {

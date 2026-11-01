@@ -421,11 +421,15 @@ class CtxClient {
   }
 
   watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
-    return this.openSocket('giftcard', (raw) => {
-      if (OrderWake.concerns(raw, orderId)) {
-        wake.signal();
-      }
-    });
+    return this.openSocket(
+      'giftcard',
+      (raw) => {
+        if (OrderWake.concerns(raw, orderId)) {
+          wake.signal();
+        }
+      },
+      { attach: () => wake.attach(), detach: () => wake.detach() },
+    );
   }
 
   watchAccount(onChange: () => void): Promise<() => void> {
@@ -436,7 +440,11 @@ class CtxClient {
     });
   }
 
-  private async openSocket(topic: string, onMessage: (raw: unknown) => void): Promise<() => void> {
+  private async openSocket(
+    topic: string,
+    onMessage: (raw: unknown) => void,
+    state?: { attach: () => void; detach: () => void },
+  ): Promise<() => void> {
     const accessToken = await this.auth.requireAccessToken();
     const HeaderSocket = WebSocket as unknown as new (
       url: string,
@@ -450,7 +458,12 @@ class CtxClient {
         'X-App-Version': this.appVersion,
       },
     });
-    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic }));
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ action: 'subscribe', topic }));
+      state?.attach();
+    };
+    socket.onclose = () => state?.detach();
+    socket.onerror = () => state?.detach();
     socket.onmessage = (message) => onMessage(message.data);
     return () => socket.close();
   }
