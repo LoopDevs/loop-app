@@ -9,6 +9,7 @@ import { GiftCardDetails } from '@/components/gift-card-details';
 import { GiftCardFace } from '@/components/gift-card-face';
 import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
+import { PageTitle } from '@/components/page-title';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
 import { OrderDetailSkeleton } from '@/components/ui/skeleton';
@@ -138,6 +139,7 @@ export default function GiftCardScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <PageTitle title={shownGiftCard ? `${shownGiftCard.merchantName} gift card` : 'Gift card'} />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
