@@ -54,6 +54,7 @@ import { soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
 import type { Coverage, Holdings } from '@/wallet/holdings';
+import { PaymentSearch } from '@/wallet/payment-search';
 import { PendingWithdrawals } from '@/wallet/pending-withdrawals';
 import { Savings } from '@/wallet/savings';
 import type { TopUpOutcome } from '@/wallet/savings-top-up';
@@ -97,11 +98,7 @@ async function sentPaymentFailure(
 
 async function signedTransfer(giftCard: GiftCard): Promise<SignedTransfer | null> {
   const recorded = await sentPayments.get(giftCard.paymentId);
-  if (recorded?.transfer) {
-    return recorded.transfer;
-  }
-  const price = orderPrice(giftCard);
-  return price === null ? null : { amount: price };
+  return recorded?.transfer ?? PaymentSearch.orderTransfer(giftCard)?.expected ?? null;
 }
 
 function payRejection(error: unknown): PayRejection | undefined {
