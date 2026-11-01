@@ -127,6 +127,14 @@ const expiredOrder = (fields: Partial<GiftCard> = {}): GiftCard => ({
 
 const orderPayment = { amount: 25_000_000n, to_muxed_id: 7n };
 
+test('the transfer an order expects carries the order amount and the muxed id of the order address', () => {
+  assert.deepEqual(PaymentSearch.orderTransfer(expiredOrder())?.expected, { amount: 25_000_000n, muxedId: 7n });
+  assert.deepEqual(PaymentSearch.orderTransfer(expiredOrder({ paymentCryptoAddress: network.payee }))?.expected, {
+    amount: 25_000_000n,
+  });
+  assert.equal(PaymentSearch.orderTransfer(expiredOrder({ paymentCryptoAmount: '' })), null);
+});
+
 test('an order payment search looks for the order token, amount and muxed id across the order lifetime', async () => {
   const transfers = source(
     [event(orderPayment, created + 5_000, 'paid-tx')],
