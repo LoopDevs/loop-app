@@ -7,15 +7,9 @@ import { PriceWindow } from '../ctx/price-window.ts';
 import { Rates } from '../ctx/rates.ts';
 import { units } from '../stellar/units.ts';
 import { Holdings } from './holdings.ts';
-import {
-  SavingsTopUp,
-  UnansweredWithdrawal,
-  type ChainTransaction,
-  type PendingWithdrawal,
-  type SignedWithdrawal,
-  type TopUpChain,
-} from './savings-top-up.ts';
+import { SavingsTopUp, UnansweredWithdrawal, type SignedWithdrawal, type TopUpChain } from './savings-top-up.ts';
 import type { Balances } from './smart-wallet.ts';
+import { VaultCall, type ChainTransaction, type PendingVaultCall } from './vault-call.ts';
 
 const usdc = { currency: 'XLM.USDC' as const, symbol: 'USDC', contract: 'CUSDC' };
 const gbp = { currency: 'XLM.GBPLOOP' as const, symbol: 'GBPLOOP', contract: 'CGBPLOOP' };
@@ -57,6 +51,7 @@ class FakeChain implements TopUpChain {
   readonly statusesOf: Record<string, Status[]>;
   readonly landed: (shares: bigint, value: bigint) => bigint;
   readonly refusals: Refusal[];
+  readonly vaultCall: VaultCall = new VaultCall(this);
 
   constructor(vault: FakeVault) {
     this.wallet = units.parse(vault.wallet);
@@ -77,7 +72,7 @@ class FakeChain implements TopUpChain {
     return this.ledger();
   }
 
-  pendingSent(shares: string, hash = 'OLD'): PendingWithdrawal {
+  pendingSent(shares: string, hash = 'OLD'): PendingVaultCall {
     this.sent.set(hash, units.parse(shares));
     return { hash, expiryLedger: this.ledger() + signatureLedgers };
   }
@@ -365,7 +360,7 @@ test('a withdrawal still pending after 30 seconds stops with its hash and expiry
     kind: 'stillMoving',
     withdrawal: { hash: 'HASH-1', expiryLedger: firstLedger + signatureLedgers },
   });
-  assert.equal(chain.clock - start, SavingsTopUp.confirmTimeoutMs);
+  assert.equal(chain.clock - start, VaultCall.confirmTimeoutMs);
 });
 
 test('a retry with a pending withdrawal that covers the price confirms it and never withdraws again', async () => {
@@ -419,14 +414,6 @@ test('a failed pending withdrawal is dropped when the wallet already covers the 
   const chain = new FakeChain({ wallet: '20', shares: '50', value: '50', statuses: ['FAILED'] });
   const pending = chain.pendingSent('11');
   assert.deepEqual(await new SavingsTopUp(chain, 'XLM.USDC').run(price, openWindow, pending), { kind: 'covered' });
-});
-
-test('a withdrawal not found once its signature has expired counts as failed', () => {
-  const pending = { hash: 'OLD', expiryLedger: 1_060 };
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'NOT_FOUND', latestLedger: 1_060 }, pending), 'pending');
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'NOT_FOUND', latestLedger: 1_061 }, pending), 'failed');
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'SUCCESS', latestLedger: 1_061 }, pending), 'success');
-  assert.equal(SavingsTopUp.outcomeOf({ status: 'FAILED', latestLedger: 1_000 }, pending), 'failed');
 });
 
 test('a dropped pending withdrawal is given up after its expiry and a new one is sent', async () => {
