@@ -19,10 +19,11 @@ export type SocketPresence = {
 };
 
 export class SocketWatch {
-  static readonly maxAttempts = 5;
   static readonly retryDelayMs = 1000;
+  static readonly maxRetryDelayMs = 30_000;
 
   private attempts = 0;
+  private replaced = false;
   private closed = false;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private socket: WatchedSocket | null = null;
@@ -63,11 +64,14 @@ export class SocketWatch {
     let opened = false;
     socket.onopen = () => {
       opened = true;
-      this.attempts = 0;
       socket.send(JSON.stringify({ action: 'subscribe', topic: this.topic }));
       this.presence?.attach();
     };
-    socket.onmessage = (message) => this.onMessage(message.data);
+    socket.onmessage = (message) => {
+      this.attempts = 0;
+      this.replaced = false;
+      this.onMessage(message.data);
+    };
     socket.onerror = () => undefined;
     socket.onclose = () => {
       this.presence?.detach();
@@ -80,11 +84,13 @@ export class SocketWatch {
   }
 
   private reconnect(rejected: string | null): void {
-    if (this.closed || this.attempts >= SocketWatch.maxAttempts) {
+    if (this.closed) {
       return;
     }
-    const delayMs = SocketWatch.retryDelayMs * 2 ** this.attempts;
-    this.attempts += 1;
+    const delayMs = Math.min(SocketWatch.retryDelayMs * 2 ** this.attempts, SocketWatch.maxRetryDelayMs);
+    if (delayMs < SocketWatch.maxRetryDelayMs) {
+      this.attempts += 1;
+    }
     this.retry = setTimeout(() => {
       this.retry = null;
       this.accessTokenAfter(rejected)
@@ -94,6 +100,10 @@ export class SocketWatch {
   }
 
   private accessTokenAfter(rejected: string | null): Promise<string> {
-    return rejected === null ? this.auth.requireAccessToken() : this.auth.replacement(rejected);
+    if (rejected === null || this.replaced) {
+      return this.auth.requireAccessToken();
+    }
+    this.replaced = true;
+    return this.auth.replacement(rejected);
   }
 }

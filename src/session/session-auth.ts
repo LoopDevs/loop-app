@@ -29,6 +29,7 @@ export class SessionAuth {
   private readonly sessionEndListeners = new Set<() => void>();
   private readonly ownerOf: (accessToken: string) => string;
   private storedRefreshToken: string | null = null;
+  private refusedRefreshToken: string | null = null;
   private owner: string | null = null;
 
   constructor(send: Send, store: RefreshTokenStore, ownerOf: (accessToken: string) => string) {
@@ -38,7 +39,11 @@ export class SessionAuth {
   }
 
   async hasSession(): Promise<boolean> {
-    return this.session.token() !== null || (await this.store.readRefreshToken()) !== null;
+    if (this.session.token() !== null) {
+      return true;
+    }
+    const stored = await this.store.readRefreshToken();
+    return stored !== null && stored !== this.refusedRefreshToken;
   }
 
   async accessToken(): Promise<string | null> {
@@ -85,14 +90,14 @@ export class SessionAuth {
   }
 
   async startSession(tokens: TokenPair): Promise<void> {
-    const generation = this.endGeneration();
+    const generation = this.beginSession();
     await this.session.refreshOnce(generation, async () =>
       (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null,
     );
   }
 
   async clearSession(): Promise<void> {
-    this.endGeneration();
+    this.beginSession();
     this.storedRefreshToken = null;
     await this.store.clear();
     this.notifySessionEnd();
@@ -105,9 +110,24 @@ export class SessionAuth {
     };
   }
 
-  private endGeneration(): number {
+  private beginSession(): number {
     this.owner = null;
+    this.refusedRefreshToken = null;
     return this.session.begin();
+  }
+
+  private refuse(refreshToken: string): void {
+    this.refusedRefreshToken = refreshToken;
+    this.session.begin();
+    this.notifySessionEnd();
+  }
+
+  private ownerOrNull(accessToken: string): string | null {
+    try {
+      return this.ownerOf(accessToken) || null;
+    } catch {
+      return null;
+    }
   }
 
   private notifySessionEnd(): void {
@@ -162,7 +182,7 @@ export class SessionAuth {
 
   private async rotateRefreshToken(generation: number): Promise<string | null> {
     const refreshToken = await this.store.readRefreshToken();
-    if (!refreshToken || !this.session.isCurrent(generation)) {
+    if (!refreshToken || refreshToken === this.refusedRefreshToken || !this.session.isCurrent(generation)) {
       return null;
     }
     try {
@@ -202,10 +222,9 @@ export class SessionAuth {
     if (!this.session.isCurrent(generation)) {
       return false;
     }
-    const owner = this.ownerOf(tokens.accessToken);
-    if (this.owner !== null && owner !== this.owner) {
-      this.endGeneration();
-      this.notifySessionEnd();
+    const owner = this.ownerOrNull(tokens.accessToken);
+    if (owner === null || (this.owner !== null && owner !== this.owner)) {
+      this.refuse(tokens.refreshToken);
       return false;
     }
     this.owner = owner;

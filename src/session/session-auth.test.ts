@@ -248,7 +248,7 @@ test('a 401 that denies the call rather than the token is thrown without a rotat
   assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
 });
 
-test("a refresh that yields another user's tokens ends this session and keeps the store for that user", async () => {
+test("a refresh that yields another user's tokens ends this session, keeps the store for that user and stays signed out", async () => {
   const ctx = new FakeCtx(async ({ path, token }) => {
     if (path === '/refresh-token') {
       return { accessToken: 'b2', refreshToken: 'b-r2' };
@@ -273,11 +273,43 @@ test("a refresh that yields another user's tokens ends this session and keeps th
   assert.equal(store.refreshToken, 'b-r2');
   assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
 
+  await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
+
+  assert.equal(ctx.refreshes(), 1);
+  assert.equal(await auth.hasSession(), false);
+  assert.equal(store.refreshToken, 'b-r2');
+  assert.equal(ended, 1);
+
+  await auth.startSession({ accessToken: 'b3', refreshToken: 'b-r3' });
   await auth.sessionRequest('GET', '/me');
 
-  assert.equal(ctx.refreshes(), 2);
-  assert.deepEqual(ctx.tokensFor('/me'), ['a1', 'b2']);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1', 'b3']);
+  assert.equal(await auth.hasSession(), true);
+});
+
+test('a refresh that yields a token without a readable owner is refused once and leaves the store alone', async () => {
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'not-a-jwt', refreshToken: 'r2' };
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore('r1');
+  const auth = new SessionAuth(ctx.send, store, (accessToken) => {
+    throw new SyntaxError(`Unexpected token ${accessToken}`);
+  });
+  let ended = 0;
+  auth.onSessionEnd(() => {
+    ended += 1;
+  });
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
+  await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
+
+  assert.equal(ctx.refreshes(), 1);
+  assert.equal(store.refreshToken, 'r2');
   assert.equal(ended, 1);
+  assert.deepEqual(ctx.tokensFor('/me'), []);
 });
 
 test('a replacement for the current token rotates once and a stale token reuses the replacement', async () => {

@@ -144,33 +144,70 @@ test('a failed handshake reconnects with a replacement token', async () => {
   assert.equal(auth.sockets[1].accessToken, 'a2');
 });
 
-test('retries back off and stop after the attempt limit', async () => {
+test('failed handshakes take one replacement token until a socket works', async () => {
   await watch.start();
-  for (let attempt = 0; attempt < SocketWatch.maxAttempts; attempt += 1) {
+  auth.sockets[0].drop();
+  await retryAfter(1_000);
+  auth.sockets[1].drop();
+  await retryAfter(2_000);
+
+  assert.deepEqual(auth.replaced, ['a1']);
+  assert.deepEqual(
+    auth.sockets.map((socket) => socket.accessToken),
+    ['a1', 'a2', 'a2'],
+  );
+
+  auth.sockets[2].open();
+  auth.sockets[2].onmessage?.({ data: 'ok' });
+  auth.sockets[2].drop();
+  await retryAfter(1_000);
+  auth.sockets[3].drop();
+  await retryAfter(2_000);
+
+  assert.deepEqual(auth.replaced, ['a1', 'a2']);
+  assert.equal(auth.sockets[4].accessToken, 'a3');
+});
+
+test('retries back off to a ceiling and keep going', async () => {
+  await watch.start();
+  for (const delayMs of [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000]) {
     auth.latest().drop();
     const opened = auth.sockets.length;
-    await retryAfter(SocketWatch.retryDelayMs * 2 ** attempt - 1);
+    await retryAfter(delayMs - 1);
     assert.equal(auth.sockets.length, opened);
     await retryAfter(1);
     assert.equal(auth.sockets.length, opened + 1);
   }
 
-  auth.latest().drop();
-  await retryAfter(SocketWatch.retryDelayMs * 2 ** SocketWatch.maxAttempts);
-
-  assert.equal(auth.sockets.length, SocketWatch.maxAttempts + 1);
+  assert.deepEqual(auth.replaced, ['a1']);
 });
 
-test('an open socket resets the attempt count', async () => {
+test('a message on the socket resets the backoff', async () => {
   await watch.start();
   auth.sockets[0].drop();
-  await retryAfter(SocketWatch.retryDelayMs);
+  await retryAfter(1_000);
+  auth.sockets[1].open();
+  auth.sockets[1].onmessage?.({ data: 'ok' });
+  auth.sockets[1].drop();
+
+  await retryAfter(1_000);
+
+  assert.equal(auth.sockets.length, 3);
+});
+
+test('a socket that closes before any message keeps backing off', async () => {
+  await watch.start();
+  auth.sockets[0].drop();
+  await retryAfter(1_000);
   auth.sockets[1].open();
   auth.sockets[1].drop();
 
-  await retryAfter(SocketWatch.retryDelayMs);
+  await retryAfter(1_000);
+  assert.equal(auth.sockets.length, 2);
+  await retryAfter(1_000);
 
   assert.equal(auth.sockets.length, 3);
+  assert.deepEqual(auth.replaced, ['a1']);
 });
 
 test('a retry that cannot get a token tries again later with the current one', async () => {
@@ -193,7 +230,7 @@ test('the session ending closes the socket and stops the retries', async () => {
   auth.sockets[0].open();
 
   auth.endSession();
-  await retryAfter(SocketWatch.retryDelayMs * 2 ** SocketWatch.maxAttempts);
+  await retryAfter(SocketWatch.maxRetryDelayMs);
 
   assert.equal(auth.sockets[0].closed, true);
   assert.equal(auth.sockets.length, 1);
@@ -204,7 +241,7 @@ test('a pending retry is dropped when the watch closes', async () => {
   auth.sockets[0].drop();
 
   close();
-  await retryAfter(SocketWatch.retryDelayMs * 2 ** SocketWatch.maxAttempts);
+  await retryAfter(SocketWatch.maxRetryDelayMs);
 
   assert.equal(auth.sockets.length, 1);
 });
