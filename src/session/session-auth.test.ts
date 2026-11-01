@@ -76,14 +76,16 @@ class Gate {
   }
 }
 
-const unauthorized = () => new CtxError(401, '{"error":"unauthorized"}');
+const unauthorized = () => new CtxError(401, '{"error":"ErrTokenInvalid"}');
+
+const ownerOf = (accessToken: string) => accessToken.charAt(0);
 
 test('a call made during sign-in waits for and uses the new tokens', async () => {
   const ctx = new FakeCtx(async () => ({ ok: true }));
   const store = new MemoryStore('r-old');
   const write = new Gate();
   store.pendingWrite = write.opened;
-  const auth = new SessionAuth(ctx.send, store);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
 
   const signingIn = auth.startSession({ accessToken: 'a-new', refreshToken: 'r-new' });
   const request = auth.sessionRequest('GET', '/me');
@@ -105,7 +107,7 @@ test('a request retried after a refresh keeps its idempotency key', async () => 
     }
     throw unauthorized();
   });
-  const auth = new SessionAuth(ctx.send, new MemoryStore(null));
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
   await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
 
   await auth.sessionRequest('POST', '/gift-cards', {}, true, { 'Idempotency-Key': 'order-1' });
@@ -133,7 +135,7 @@ test('a late 401 after a refresh retries with the new token without rotating aga
     }
     throw unauthorized();
   });
-  const auth = new SessionAuth(ctx.send, new MemoryStore(null));
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
   await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
 
   const slow = auth.sessionRequest('GET', '/slow');
@@ -158,7 +160,7 @@ test('a refresh retries once after a network error', async () => {
     }
     return { ok: true };
   });
-  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'));
+  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'), ownerOf);
 
   await auth.sessionRequest('GET', '/me');
 
@@ -175,7 +177,7 @@ test('a refresh refused by CTX is not retried', async () => {
     return { ok: true };
   });
   const store = new MemoryStore('r1');
-  const auth = new SessionAuth(ctx.send, store);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
 
   await assert.rejects(auth.sessionRequest('GET', '/me'), refused);
 
@@ -187,7 +189,7 @@ test('concurrent refreshes share one rotation', async () => {
   const ctx = new FakeCtx(async ({ path }) =>
     path === '/refresh-token' ? { accessToken: 'a2', refreshToken: 'r2' } : { ok: true },
   );
-  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'));
+  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'), ownerOf);
 
   await Promise.all([auth.sessionRequest('GET', '/one'), auth.sessionRequest('GET', '/two')]);
 
@@ -201,7 +203,7 @@ test('a refresh token CTX rejects is cleared and the session ends', async () => 
     throw unauthorized();
   });
   const store = new MemoryStore('r1');
-  const auth = new SessionAuth(ctx.send, store);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
 
   await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
 
@@ -214,7 +216,7 @@ test('listeners hear the session end on sign-out and on a rejected refresh token
   const ctx = new FakeCtx(async () => {
     throw unauthorized();
   });
-  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'));
+  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'), ownerOf);
   let ended = 0;
   const stop = auth.onSessionEnd(() => {
     ended += 1;
@@ -229,6 +231,68 @@ test('listeners hear the session end on sign-out and on a rejected refresh token
   assert.equal(ended, 2);
 });
 
+test('a 401 that denies the call rather than the token is thrown without a rotation', async () => {
+  const denied = new CtxError(401, '{"error":"ErrNotAuthorized"}');
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    throw denied;
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), denied);
+
+  assert.equal(ctx.refreshes(), 0);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
+});
+
+test("a refresh that yields another user's tokens ends this session and keeps the store for that user", async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'b2', refreshToken: 'b-r2' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore(null);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  let ended = 0;
+  auth.onSessionEnd(() => {
+    ended += 1;
+  });
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  store.refreshToken = 'b-r1';
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), (error) => error instanceof CtxError && error.status === 401);
+
+  assert.equal(ended, 1);
+  assert.equal(store.refreshToken, 'b-r2');
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
+
+  await auth.sessionRequest('GET', '/me');
+
+  assert.equal(ctx.refreshes(), 2);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1', 'b2']);
+  assert.equal(ended, 1);
+});
+
+test('a replacement for the current token rotates once and a stale token reuses the replacement', async () => {
+  const ctx = new FakeCtx(async ({ path }) =>
+    path === '/refresh-token' ? { accessToken: 'a2', refreshToken: 'r2' } : { ok: true },
+  );
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+
+  assert.equal(await auth.replacement('a1'), 'a2');
+  assert.equal(await auth.replacement('a1'), 'a2');
+
+  assert.equal(ctx.refreshes(), 1);
+});
+
 test('a second 401 after the retry is thrown without another rotation', async () => {
   const ctx = new FakeCtx(async ({ path }) => {
     if (path === '/refresh-token') {
@@ -236,7 +300,7 @@ test('a second 401 after the retry is thrown without another rotation', async ()
     }
     throw unauthorized();
   });
-  const auth = new SessionAuth(ctx.send, new MemoryStore(null));
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
   await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
 
   await assert.rejects(auth.sessionRequest('GET', '/me'), (error) => error instanceof CtxError && error.status === 401);
@@ -255,7 +319,7 @@ test('signing out during a refresh keeps the session ended', async () => {
     return { ok: true };
   });
   const store = new MemoryStore('r1');
-  const auth = new SessionAuth(ctx.send, store);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
 
   const request = auth.sessionRequest('GET', '/me');
   await new Promise((resolve) => setImmediate(resolve));
@@ -287,7 +351,7 @@ test('a rotation runs inside the store lock', async () => {
       locked = false;
     }
   };
-  const auth = new SessionAuth(ctx.send, store);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
 
   await auth.sessionRequest('GET', '/me');
 
@@ -310,7 +374,7 @@ test('a 401 after another tab rotates the session retries with the token that ta
     }
     throw unauthorized();
   });
-  const auth = new SessionAuth(ctx.send, store);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
   await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
 
   await auth.sessionRequest('GET', '/me');
