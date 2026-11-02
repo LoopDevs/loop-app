@@ -1,18 +1,26 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SymbolView } from 'expo-symbols';
 import { dismissBrowser, openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
-import { StyleSheet, TextInput, View } from 'react-native';
-import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
+import { Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import Animated, {
+  FadeInLeft,
+  FadeInRight,
+  FadeOutLeft,
+  FadeOutRight,
+  useReducedMotion,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExternalLink } from '@/components/external-link';
+import { LogoDisc } from '@/components/merchant-mark';
+import { PayTopBar } from '@/components/pay-top-bar';
+import { PurchaseConfirm, PurchaseDelivered, PurchaseProgress } from '@/components/purchase-progress';
 import { Button, Field, Notice } from '@/components/ui/form';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
 import { loopLinks } from '@/constants/loop-links';
-import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { BankPayment } from '@/ctx/bank-payment';
@@ -21,14 +29,10 @@ import { BuyTimer } from '@/ctx/buy-timer';
 import { OrderWake } from '@/ctx/order-wake';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { currencyRefusalMessage, refusesCurrency } from '@/ctx/currency-refusal';
+import { dismissedOrders } from '@/ctx/dismissed-orders';
 import { InFlightPayments } from '@/ctx/in-flight-payments';
-import {
-  giftCardStatusLabel,
-  isHiddenFromHistory,
-  outcomeText,
-  settledStatuses,
-} from '@/ctx/gift-card-status';
-import { CashbackRate, type Merchant } from '@/ctx/merchant';
+import { isHiddenFromHistory, settledStatuses } from '@/ctx/gift-card-status';
+import type { Merchant } from '@/ctx/merchant';
 import { OneTapBuy, type BuyResult, type BuySteps, type SentRecord, type ShownOrder } from '@/ctx/one-tap-buy';
 import { paymentLock } from '@/ctx/payment-lock';
 import { PaymentSender, type SendOutcome } from '@/ctx/payment-sender';
@@ -44,6 +48,7 @@ import { Profile } from '@/ctx/profile';
 import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
+import { usePageLayout } from '@/hooks/use-page-layout';
 import { sentPayments } from '@/hooks/use-sent-payment';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
@@ -65,6 +70,17 @@ type Props = {
   wallet: SmartWallet;
   profile: Profile;
   onProfile: (profile: Profile) => void;
+  onClose: () => void;
+};
+
+type Step = 'review' | 'terms' | 'confirm' | 'progress' | 'delivered';
+
+const stepOrder: Record<Step, number> = {
+  review: 0,
+  terms: 1,
+  confirm: 2,
+  progress: 2,
+  delivered: 3,
 };
 
 type PayWith = PaymentCurrency | typeof BankPayment.option;
@@ -125,8 +141,12 @@ const purchaseTerms = [
   "Each gift card is subject to the brand's own terms, including where it can be used and any expiry date.",
 ];
 
-export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props) {
+export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose }: Props) {
   const router = useRouter();
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
+  const { wide } = usePageLayout();
   const { busy, message, setMessage, run } = useBusyAction();
   const [amount, setAmount] = useState(firstAmount(merchant));
   const [amountError, setAmountError] = useState<string | null>(null);
@@ -143,6 +163,8 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
   const [showingTerms, setShowingTerms] = useState(false);
   const { view, refresh } = useHoldings(wallet);
   const toast = useToast();
+  const [shownStep, setShownStep] = useState<Step>('review');
+  const [forward, setForward] = useState(true);
 
   useEffect(() => {
     let current = true;
@@ -176,9 +198,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
   const usdPrice = currency ? (view?.holdings.rates ?? noRates).usdPrice(currency) : null;
   const fiatAmount = normalizeAmount(amount);
   const amountProblem = merchant.amountProblem(amount);
-  const shownPrice = fiatAmount
-    ? BuyPrice.shown(fiatAmount, (cardRates ?? noRates).usdPrice(merchant.currency))
-    : null;
+  const shownPrice = fiatAmount ? BuyPrice.shown(fiatAmount, (cardRates ?? noRates).usdPrice(merchant.currency)) : null;
   const balance = view && currency ? view.holdings.spendable(currency) : null;
   const tokenPrice = shownPrice !== null && usdPrice !== null ? BuyPrice.inTokens(shownPrice, usdPrice) : null;
   const shownBalance = balance === null ? null : balance > spent ? balance - spent : 0n;
@@ -230,60 +250,60 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
 
   const pollOrder = useCallback(
     async (giftCard: GiftCard, sent: SentRecord | null, isCurrent: () => boolean, wake: OrderWake) => {
-    let current = giftCard;
-    let landed = false;
-    while (isCurrent()) {
-      if (BankPayment.linkExpired(current, Date.now())) {
-        setPayment((held) => (held.kind === 'bank' && held.linkOpen ? { kind: 'bank', linkOpen: false } : held));
-      }
-      if (sent && OneTapBuy.checksChain(current)) {
-        const failure = await sentPaymentFailure(current, live.current.wallet, {
-          txId: sent.txId ?? current.paymentCryptoTxId,
-          expiryLedger: sent.expiryLedger,
-        }).catch(() => null);
+      let current = giftCard;
+      let landed = false;
+      while (isCurrent()) {
+        if (BankPayment.linkExpired(current, Date.now())) {
+          setPayment((held) => (held.kind === 'bank' && held.linkOpen ? { kind: 'bank', linkOpen: false } : held));
+        }
+        if (sent && OneTapBuy.checksChain(current)) {
+          const failure = await sentPaymentFailure(current, live.current.wallet, {
+            txId: sent.txId ?? current.paymentCryptoTxId,
+            expiryLedger: sent.expiryLedger,
+          }).catch(() => null);
+          if (!isCurrent()) {
+            return;
+          }
+          if (failure) {
+            setPayment(failure);
+            setSpent(0n);
+            return;
+          }
+        }
+        if (settledStatuses.includes(current.status)) {
+          return;
+        }
+        await wake.wait(wake.interval());
+        try {
+          current = await ctx.giftCard(current.id);
+        } catch {
+          continue;
+        }
         if (!isCurrent()) {
           return;
         }
-        if (failure) {
-          setPayment(failure);
-          setSpent(0n);
-          return;
+        const fetched = current;
+        setOrder((held) => OneTapBuy.merged(held, fetched));
+        if (current.status === 'fulfilled') {
+          buyTimer.current?.mark('card shown');
+          buyTimer.current = null;
+        }
+        if (!landed && current.paymentStatus === 'paid') {
+          landed = true;
+          buyTimer.current?.mark('paid seen');
+          if (BankPayment.isBank(current)) {
+            void dismissBrowser();
+          }
+          live.current
+            .refresh()
+            .then(() => {
+              if (isCurrent()) {
+                setSpent(0n);
+              }
+            })
+            .catch(() => undefined);
         }
       }
-      if (settledStatuses.includes(current.status)) {
-        return;
-      }
-      await wake.wait(wake.interval());
-      try {
-        current = await ctx.giftCard(current.id);
-      } catch {
-        continue;
-      }
-      if (!isCurrent()) {
-        return;
-      }
-      const fetched = current;
-      setOrder((held) => OneTapBuy.merged(held, fetched));
-      if (current.status === 'fulfilled') {
-        buyTimer.current?.mark('card shown');
-        buyTimer.current = null;
-      }
-      if (!landed && current.paymentStatus === 'paid') {
-        landed = true;
-        buyTimer.current?.mark('paid seen');
-        if (BankPayment.isBank(current)) {
-          void dismissBrowser();
-        }
-        live.current
-          .refresh()
-          .then(() => {
-            if (isCurrent()) {
-              setSpent(0n);
-            }
-          })
-          .catch(() => undefined);
-      }
-    }
     },
     [],
   );
@@ -321,9 +341,14 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
     () =>
       run(async () => {
         const held = heldOrder.current;
-        let giftCard = held ? await ctx.giftCard(held.id) : await ctx.activeGiftCard(merchant.id);
+        let giftCard = held ? await ctx.giftCard(held.id) : await dismissedOrders.activeOrder(merchant.id);
         while (giftCard && inFlightPayments.has(giftCard.paymentId)) {
-          show({ order: giftCard, payment: { kind: 'sending' }, follow: false, sent: null });
+          show({
+            order: giftCard,
+            payment: { kind: 'sending' },
+            follow: false,
+            sent: null,
+          });
           await inFlightPayments.settled(giftCard.paymentId);
           if (!mounted.current) {
             return;
@@ -401,7 +426,10 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
     const toppingUp =
       savingsCurrency !== null && (coverage?.kind === 'savings' || (await hasPendingTopUp(wallet, savingsCurrency)));
     if (coverage?.kind === 'short' && !toppingUp) {
-      return { state: { kind: 'notSent', detail: notEnoughMessage }, resumed: false };
+      return {
+        state: { kind: 'notSent', detail: notEnoughMessage },
+        resumed: false,
+      };
     }
     const topUpPrice = toppingUp ? orderPrice(giftCard) : null;
     const send = async (): Promise<SendOutcome> => {
@@ -524,7 +552,9 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
       }
       return;
     }
-    await openBrowserAsync(link, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
+    await openBrowserAsync(link, {
+      presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+    });
     const fetched = await ctx.giftCard(giftCard.id).catch(() => null);
     if (fetched && mounted.current) {
       setOrder((held) => OneTapBuy.merged(held, fetched));
@@ -646,181 +676,295 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile }: Props
     refresh().catch((error: unknown) => setMessage(errorMessage(error)));
   };
 
+  const cancelOrder = () => {
+    const cancelled = order;
+    if (cancelled) {
+      void dismissedOrders.dismiss(cancelled);
+    }
+    startOver();
+    if (cancelled && BankPayment.isBank(cancelled)) {
+      toast('If you already approved it at your bank, the card will still arrive.');
+    }
+  };
+
   const tryAgain = () => {
     rollBack();
     startBuy();
   };
 
-  const finish = () => {
-    if (order && !isHiddenFromHistory(order)) {
-      router.push(`/wallet/${order.id}`, { withAnchor: true });
-    }
+  const viewCard = () => {
+    const shown = order;
     startOver();
+    onClose();
+    if (shown && !isHiddenFromHistory(shown)) {
+      router.push(`/wallet/${shown.id}`, { withAnchor: true });
+    }
   };
 
-  const balanceText = shownBalance === null || !currency ? null : money.token(shownBalance, currency);
+  const finish = () => {
+    startOver();
+    onClose();
+  };
 
-  if (order || draftAmount) {
-    return (
-      <View style={styles.section}>
-        <OrderView
-          merchant={merchant}
-          cardAmount={order?.cardFiatAmount ?? draftAmount ?? ''}
-          order={order}
-          payment={payment}
-          confirmPrice={confirmPrice}
-          balance={bankOrder ? null : balanceText}
-          busy={busy}
-          onConfirm={payConfirmedPrice}
-          onApprove={approveAtBank}
-          onRetry={tryAgain}
-          onDone={finish}
-        />
-        {message !== '' && <Notice message={message} />}
-      </View>
-    );
+  const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
+  const step: Step =
+    order?.status === 'fulfilled'
+      ? 'delivered'
+      : confirmPrice !== null && order
+        ? 'confirm'
+        : order || draftAmount
+          ? 'progress'
+          : showingTerms
+            ? 'terms'
+            : 'review';
+  if (step !== shownStep) {
+    setForward(stepOrder[step] >= stepOrder[shownStep]);
+    setShownStep(step);
   }
-
+  const closeStep = () => {
+    if (step === 'confirm') {
+      cancelOrder();
+    }
+    onClose();
+  };
+  const cardAmount = order?.cardFiatAmount ?? draftAmount ?? fiatAmount ?? '';
+  const balanceText = shownBalance === null || !currency ? null : money.token(shownBalance, currency);
   const estimate = merchant.cashbackEstimate(fiatAmount ?? '');
   const range = merchant.rangeLabel();
   const cardLabel = fiatAmount ? merchant.shortAmount(fiatAmount) : null;
   const bankPrice = fiatAmount ? money.fiat(fiatAmount, merchant.currency) : null;
   const walletPrice =
-    tokenPrice !== null && currency ? money.token(tokenPrice, currency) : shownPrice !== null ? dollars(shownPrice) : null;
+    tokenPrice !== null && currency
+      ? money.token(tokenPrice, currency)
+      : shownPrice !== null
+        ? dollars(shownPrice)
+        : null;
+  const priceText = bankOrder
+    ? order
+      ? money.fiat(order.cardFiatAmount, order.cardFiatCurrency)
+      : bankPrice
+    : walletPrice;
   const walletOptions = onlyPaymentCurrency
     ? offeredTokens.filter((token) => token.currency === onlyPaymentCurrency)
     : offeredTokens;
-  const payOptions = (
-    <View style={styles.step}>
-      <ThemedText type="heading" accessibilityRole="header">
-        Pay with
-      </ThemedText>
-      <View style={styles.grid} accessibilityRole="radiogroup">
-        {bankOffered && (
-          <View style={styles.token}>
-            <Button
-              label="UK bank account"
-              onPress={() => setChosen(BankPayment.option)}
-              selected={byBank}
+  const topPadding = Platform.OS === 'ios' ? Spacing.two : insets.top + Spacing.two;
+  const bottomPadding = insets.bottom + Spacing.three;
+  const stepContent = () => {
+    switch (step) {
+      case 'delivered':
+        return order && <PurchaseDelivered order={order} onView={viewCard} onDone={finish} />;
+      case 'confirm':
+        return (
+          confirmPrice !== null && (
+            <PurchaseConfirm
+              merchant={merchant}
+              cardAmount={cardAmount}
+              price={confirmPrice}
+              busy={busy}
+              onConfirm={payConfirmedPrice}
+              onCancel={cancelOrder}
             />
-          </View>
-        )}
-        {walletOptions.map((token) => (
-          <View key={token.currency} style={styles.token}>
-            <Button
-              label={tokenLabel(token, view?.holdings ?? null)}
-              onPress={() => setChosen(token.currency)}
-              selected={!byBank && currency === token.currency}
-              disabled={refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n}
-            />
-          </View>
-        ))}
-      </View>
-      {byBank && (
-        <ThemedText type="small" themeColor="textSecondary">
-          You approve the payment in your banking app. Cashback is paid in pounds.
-        </ThemedText>
-      )}
-    </View>
-  );
-  return (
-    <PurchaseCard>
-      <View style={styles.step}>
-        <ThemedText type="heading" accessibilityRole="header">
-          Choose an amount
-        </ThemedText>
-        {merchant.denominationType === 'fixed' ? (
-          <View style={styles.grid} accessibilityRole="radiogroup">
-            {merchant.denominationValues.map((denomination) => (
-              <View key={denomination} style={styles.chip}>
-                <Button
-                  label={merchant.shortAmount(denomination)}
-                  onPress={() => changeAmount(denomination)}
-                  selected={amount === denomination}
-                />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <>
-            <AmountEntry merchant={merchant} value={amount} onChange={changeAmount} />
-            {range && (
-              <ThemedText type="small" themeColor="textSecondary" style={styles.centered}>
-                {range}
-              </ThemedText>
-            )}
-            <View style={styles.grid} accessibilityRole="radiogroup">
-              {merchant.quickAmounts().map((quick) => (
-                <View key={quick} style={styles.chip}>
-                  <Button
-                    label={merchant.shortAmount(quick)}
-                    onPress={() => changeAmount(quick)}
-                    selected={fiatAmount !== null && units.parseTruncated(fiatAmount) === units.parseTruncated(quick)}
-                  />
-                </View>
-              ))}
-            </View>
-          </>
-        )}
-        {(amountProblem ?? amountError) && <InlineError text={(amountProblem ?? amountError) as string} />}
-      </View>
-
-      {(onlyPaymentCurrency === null || bankOffered) && payOptions}
-
-      {legalNameNeeded && (
-        <View style={styles.step}>
-          <ThemedText type="heading" accessibilityRole="header">
-            Name on your bank account
-          </ThemedText>
-          <Field
-            value={legalName}
-            onChangeText={setLegalName}
-            placeholder="First and last name"
-            autoCapitalize="words"
-            autoComplete="name"
-            textContentType="name"
+          )
+        );
+      case 'progress':
+        return (
+          <PurchaseProgress
+            merchant={merchant}
+            cardAmount={cardAmount}
+            order={order}
+            payment={payment}
+            priceText={priceText}
+            busy={busy}
+            onApprove={approveAtBank}
+            onRetry={tryAgain}
+            onCancel={cancelOrder}
+            onDone={finish}
           />
-          <ThemedText type="small" themeColor="textSecondary">
-            Your bank checks this name when you approve the payment.
-          </ThemedText>
-        </View>
-      )}
+        );
+      case 'terms':
+        return (
+          <View style={styles.stage}>
+            <View style={styles.body}>
+              <PurchaseTerms />
+            </View>
+            <View style={styles.footer}>
+              <Button label="Agree and buy" variant="primary" onPress={agreeAndBuy} disabled={!canBuy} />
+              <Button label="Not now" variant="quiet" onPress={() => setShowingTerms(false)} />
+            </View>
+          </View>
+        );
+      case 'review':
+        return (
+          <View style={styles.stage}>
+            <ScrollView
+              style={styles.stage}
+              contentContainerStyle={styles.review}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag">
+              <View style={styles.merchantRow}>
+                <LogoDisc merchant={merchant} name={merchant.name} size={52} />
+                <View style={styles.merchantText}>
+                  <ThemedText type="heading" numberOfLines={1}>
+                    {merchant.name}
+                  </ThemedText>
+                  {merchant.cashbackBasisPoints() > 0 && (
+                    <ThemedText type="small" themeColor="success">
+                      {merchant.rateLabel()} cashback
+                    </ThemedText>
+                  )}
+                </View>
+              </View>
 
-      <View style={styles.summary}>
-        {byBank
-          ? bankPrice && <SummaryRow label="You pay" value={bankPrice} />
-          : walletPrice && <SummaryRow label="You pay" value={walletPrice} />}
-        {estimate && <SummaryRow label="Cashback" value={`About ${estimate}`} emphasis />}
-        {!byBank && balanceText && <SummaryRow label="Your balance" value={balanceText} />}
+              <View style={styles.hero}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Gift card amount
+                </ThemedText>
+                {merchant.denominationType === 'fixed' ? (
+                  <ThemedText style={styles.heroAmount} accessibilityLiveRegion="polite">
+                    {merchant.shortAmount(amount)}
+                  </ThemedText>
+                ) : (
+                  <AmountEntry merchant={merchant} value={amount} onChange={changeAmount} />
+                )}
+                {range && merchant.denominationType !== 'fixed' && (
+                  <ThemedText type="caption" themeColor="textSecondary">
+                    {range}
+                  </ThemedText>
+                )}
+                {(amountProblem ?? amountError) && <InlineError text={(amountProblem ?? amountError) as string} />}
+                {estimate && (
+                  <View style={[styles.pill, { backgroundColor: theme.accentSoft }]}>
+                    <ThemedText type="smallBold" themeColor="success">
+                      You earn about {estimate} cashback
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.chips} accessibilityRole="radiogroup">
+                {merchant.denominationType === 'fixed'
+                  ? merchant.denominationValues.map((denomination) => (
+                      <AmountChip
+                        key={denomination}
+                        label={merchant.shortAmount(denomination)}
+                        selected={amount === denomination}
+                        onPress={() => changeAmount(denomination)}
+                      />
+                    ))
+                  : merchant
+                      .quickAmounts()
+                      .map((quick) => (
+                        <AmountChip
+                          key={quick}
+                          label={merchant.shortAmount(quick)}
+                          selected={
+                            fiatAmount !== null && units.parseTruncated(fiatAmount) === units.parseTruncated(quick)
+                          }
+                          onPress={() => changeAmount(quick)}
+                        />
+                      ))}
+              </View>
+
+              <View style={[styles.group, { backgroundColor: theme.backgroundSubtle }]}>
+                <SummaryRow label="You pay" value={byBank ? bankPrice : walletPrice} />
+                <SummaryRow label="Cashback" value={estimate ? `About ${estimate}` : null} emphasis />
+                {!byBank && <SummaryRow label="Your balance" value={balanceText} />}
+                {short && <InlineError text={notEnoughMessage} />}
+              </View>
+
+              {(onlyPaymentCurrency === null || bankOffered) && (
+                <View style={styles.section}>
+                  <ThemedText type="smallBold">Pay with</ThemedText>
+                  <View style={styles.options} accessibilityRole="radiogroup">
+                    {bankOffered && (
+                      <Button
+                        label={BankPayment.rail(merchant.currency)?.bankLabel ?? 'Bank account'}
+                        onPress={() => setChosen(BankPayment.option)}
+                        selected={byBank}
+                      />
+                    )}
+                    {walletOptions.map((token) => (
+                      <Button
+                        key={token.currency}
+                        label={tokenLabel(token, view?.holdings ?? null)}
+                        onPress={() => setChosen(token.currency)}
+                        selected={!byBank && currency === token.currency}
+                        disabled={
+                          refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n
+                        }
+                      />
+                    ))}
+                  </View>
+                  {byBank && (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      You approve the payment in your banking app. Cashback is paid in pounds.
+                    </ThemedText>
+                  )}
+                </View>
+              )}
+
+              {legalNameNeeded && (
+                <View style={styles.section}>
+                  <Field
+                    label="Name on your bank account"
+                    value={legalName}
+                    onChangeText={setLegalName}
+                    placeholder="First and last name"
+                    autoCapitalize="words"
+                    autoComplete="name"
+                    textContentType="name"
+                  />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Your bank checks this name when you approve the payment.
+                  </ThemedText>
+                </View>
+              )}
+            </ScrollView>
+            <View style={styles.footer}>
+              {message !== '' && <Notice message={message} />}
+              <Button
+                label={cardLabel ? `Buy ${cardLabel} gift card` : 'Buy gift card'}
+                variant="primary"
+                onPress={startBuy}
+                disabled={!canBuy}
+              />
+            </View>
+          </View>
+        );
+    }
+  };
+
+  return (
+    <View style={[styles.screen, { paddingTop: topPadding, paddingBottom: bottomPadding }]}>
+      <View style={[styles.stage, wide && styles.sheet]}>
+        {!working && step !== 'delivered' && (
+          <PayTopBar
+            title={merchant.name}
+            onBack={step === 'terms' ? () => setShowingTerms(false) : step === 'confirm' ? cancelOrder : undefined}
+            onClose={closeStep}
+          />
+        )}
+        <Animated.View
+          key={step}
+          style={styles.stage}
+          entering={reduceMotion ? undefined : (forward ? FadeInRight : FadeInLeft).duration(Motion.transition)}
+          exiting={reduceMotion ? undefined : (forward ? FadeOutLeft : FadeOutRight).duration(Motion.exit)}>
+          {stepContent()}
+          {step !== 'review' && message !== '' && (
+            <View style={styles.footer}>
+              <Notice message={message} />
+            </View>
+          )}
+        </Animated.View>
       </View>
-      {short && <InlineError text={notEnoughMessage} />}
-      {showingTerms ? (
-        <PurchaseTerms onAgree={agreeAndBuy} onCancel={() => setShowingTerms(false)} disabled={!canBuy} />
-      ) : (
-        <Button
-          label={cardLabel ? `Buy ${cardLabel} gift card` : 'Buy gift card'}
-          variant="primary"
-          onPress={startBuy}
-          disabled={!canBuy}
-        />
-      )}
-      {message !== '' && <Notice message={message} actionLabel="Try again" onAction={startBuy} disabled={!canBuy} />}
-    </PurchaseCard>
+    </View>
   );
 }
 
-function PurchaseTerms({
-  onAgree,
-  onCancel,
-  disabled,
-}: {
-  onAgree: () => void;
-  onCancel: () => void;
-  disabled: boolean;
-}) {
+function PurchaseTerms() {
   return (
-    <View style={styles.step} accessibilityLiveRegion="polite">
-      <ThemedText type="heading" accessibilityRole="header">
+    <View style={styles.section} accessibilityLiveRegion="polite">
+      <ThemedText type="subtitle" accessibilityRole="header">
         Before your first gift card
       </ThemedText>
       {purchaseTerms.map((term) => (
@@ -835,8 +979,14 @@ function PurchaseTerms({
         </ExternalLink>
         .
       </ThemedText>
-      <Button label="Agree and buy" variant="primary" onPress={onAgree} disabled={disabled} />
-      <Button label="Not now" variant="quiet" onPress={onCancel} />
+    </View>
+  );
+}
+
+function AmountChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <View style={styles.chip}>
+      <Button label={label} onPress={onPress} selected={selected} variant="secondary" />
     </View>
   );
 }
@@ -862,30 +1012,24 @@ function AmountEntry({
       inputMode={wholeUnits ? 'numeric' : 'decimal'}
       placeholderTextColor={theme.textSecondary}
       selectionColor={theme.accent}
-      style={[styles.amountEntry, { color: theme.text, borderColor: theme.borderStrong }]}
+      style={[styles.amountEntry, { color: theme.text }]}
     />
   );
 }
 
-function PurchaseCard({ children }: { children: React.ReactNode }) {
-  const theme = useTheme();
-  const reduceMotion = useReducedMotion();
-  return (
-    <Animated.View
-      entering={reduceMotion ? undefined : FadeInDown.duration(Motion.state).easing(Motion.easeOut)}
-      style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      {children}
-    </Animated.View>
-  );
-}
-
-function SummaryRow({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+function SummaryRow({ label, value, emphasis = false }: { label: string; value: string | null; emphasis?: boolean }) {
+  if (value === null) {
+    return null;
+  }
   return (
     <View style={styles.summaryRow}>
       <ThemedText type="small" themeColor="textSecondary" style={styles.summaryLabel}>
         {label}
       </ThemedText>
-      <ThemedText type={emphasis ? 'smallBold' : 'small'} themeColor={emphasis ? 'success' : 'text'} style={styles.summaryValue}>
+      <ThemedText
+        type={emphasis ? 'smallBold' : 'small'}
+        themeColor={emphasis ? 'success' : 'text'}
+        style={styles.summaryValue}>
         {value}
       </ThemedText>
     </View>
@@ -951,254 +1095,100 @@ async function hasPendingTopUp(wallet: SmartWallet, currency: PaymentCurrency): 
   return (await pendingTopUps.get(wallet.address, currency)) !== undefined;
 }
 
-type OrderViewProps = {
-  merchant: Merchant;
-  cardAmount: string;
-  order: GiftCard | null;
-  payment: PaymentState;
-  confirmPrice: bigint | null;
-  balance: string | null;
-  busy: boolean;
-  onConfirm: () => void;
-  onApprove: (order: GiftCard) => void;
-  onRetry: () => void;
-  onDone: () => void;
-};
-
-function OrderView({
-  merchant,
-  cardAmount,
-  order,
-  payment,
-  confirmPrice,
-  balance,
-  busy,
-  onConfirm,
-  onApprove,
-  onRetry,
-  onDone,
-}: OrderViewProps) {
-  const theme = useTheme();
-  const cashback = order ? CashbackRate.shownFor(order) : null;
-  const sentUnconfirmed = payment.kind === 'confirming';
-  const outcome = order ? outcomeText(order, sentUnconfirmed) : null;
-  const ready = order?.status === 'fulfilled';
-  const submitted = order?.status === 'paid' || payment.kind === 'confirming';
-  const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
-  const bankLink = order && payment.kind === 'bank' && payment.linkOpen ? BankPayment.openLink(order) : null;
-  const bankExpired = order?.status === 'unpaid' && payment.kind === 'bank' && !payment.linkOpen;
-  const bankChecking = order?.status === 'unpaid' && payment.kind === 'bank' && payment.linkOpen && bankLink === null;
-  const paymentFailed = order?.status === 'unpaid' && payment.kind === 'failed';
-  const failed = paymentFailed || outcome !== null;
-  const canRetry = paymentFailed;
-  const headline = submitted
-    ? 'Your gift card is on its way'
-    : bankLink
-      ? 'Approve the payment in your banking app'
-      : bankExpired
-        ? 'The bank link has expired'
-        : bankChecking
-          ? 'Checking with your bank…'
-          : 'Buying your gift card…';
-  return (
-    <PurchaseCard>
-      <View style={styles.orderHead}>
-        <ThemedText type="small" themeColor="textSecondary">
-          {merchant.name} gift card
-        </ThemedText>
-        <ThemedText type="subtitle">{merchant.shortAmount(cardAmount)}</ThemedText>
-        {!ready && !failed && confirmPrice === null && <ThemedText type="smallBold">{headline}</ThemedText>}
-      </View>
-
-      {(balance || cashback) && (
-        <View style={[styles.summary, { borderColor: theme.border }]}>
-          {cashback && <SummaryRow label="Cashback" value={cashback} emphasis />}
-          {balance && <SummaryRow label="Your balance" value={balance} />}
-        </View>
-      )}
-
-      {confirmPrice !== null ? (
-        <Notice
-          tone="neutral"
-          message={`The price for this card is now ${dollars(confirmPrice)}. Buy it at this price?`}
-        />
-      ) : ready ? (
-        <View style={styles.outcome} accessibilityLiveRegion="polite">
-          <SymbolView
-            name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
-            size={28}
-            tintColor={theme.success}
-          />
-          <View style={styles.outcomeText}>
-            <ThemedText type="smallBold">Your gift card is ready</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Open it to see the code and how to use it.
-            </ThemedText>
-          </View>
-        </View>
-      ) : (
-        <PaymentProgress step={progressStep(order, payment)} label={progressLabel(order, payment)} failed={failed} />
-      )}
-
-      {outcome && <Notice message={outcome} />}
-      {canRetry && (
-        <Notice
-          message="Your payment didn't go through, and you weren't charged."
-          actionLabel="Try again"
-          onAction={onRetry}
-          disabled={busy}
-        />
-      )}
-      {bankExpired && (
-        <Notice
-          message="Start again to get a new link. If you already approved the payment, your gift card is still on its way."
-          actionLabel="Start again"
-          onAction={onRetry}
-          disabled={busy}
-        />
-      )}
-
-      {confirmPrice !== null && (
-        <Button label={`Buy for ${dollars(confirmPrice)}`} variant="primary" onPress={onConfirm} disabled={busy} />
-      )}
-      {bankLink && order && (
-        <Button label="Approve at your bank" variant="primary" onPress={() => onApprove(order)} disabled={busy} />
-      )}
-      {!working && (
-        <Button
-          label={ready ? 'View gift card' : confirmPrice !== null ? 'Cancel' : 'Done'}
-          variant={ready ? 'primary' : 'quiet'}
-          onPress={onDone}
-          disabled={busy}
-        />
-      )}
-    </PurchaseCard>
-  );
-}
-
-const progressLabels = ['Paying', 'On its way', 'Ready'];
-
-function progressStep(order: GiftCard | null, payment: PaymentState): number {
-  if (order?.status === 'fulfilled') {
-    return 2;
-  }
-  if (order?.status === 'paid' || payment.kind === 'confirming') {
-    return 1;
-  }
-  return 0;
-}
-
-function PaymentProgress({ step, label, failed }: { step: number; label: string; failed: boolean }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.progress} accessibilityLiveRegion="polite" accessibilityLabel={label}>
-      <View style={styles.progressBars}>
-        {progressLabels.map((stepLabel, index) => (
-          <View key={stepLabel} style={styles.progressStep}>
-            {index === step && !failed ? (
-              <Skeleton width="100%" height={styles.progressBar.height} color={theme.accent} />
-            ) : (
-              <View
-                style={[
-                  styles.progressBar,
-                  {
-                    backgroundColor:
-                      index < step ? theme.accent : index === step ? theme.danger : theme.backgroundSelected,
-                  },
-                ]}
-              />
-            )}
-            <ThemedText type="caption" themeColor={index <= step ? 'text' : 'textSecondary'}>
-              {stepLabel}
-            </ThemedText>
-          </View>
-        ))}
-      </View>
-      <View style={styles.statusRow}>
-        <ThemedText type="smallBold" themeColor={failed ? 'danger' : 'text'}>
-          {label}
-        </ThemedText>
-      </View>
-    </View>
-  );
-}
-
-function progressLabel(order: GiftCard | null, payment: PaymentState): string {
-  if (order && order.status !== 'unpaid') {
-    return giftCardStatusLabel(order.status);
-  }
-  switch (payment.kind) {
-    case 'movingSavings':
-      return 'Moving money from your savings';
-    case 'bank':
-      return 'Waiting for your bank';
-    case 'ready':
-    case 'sending':
-      return 'Paying';
-    case 'confirming':
-      return 'Payment sent, confirming';
-    case 'failed':
-    case 'priceExpired':
-    case 'notSent':
-      return "Payment didn't go through";
-  }
-}
-
 const styles = StyleSheet.create({
-  section: {
-    gap: Spacing.three,
+  screen: {
+    flex: 1,
   },
-  card: {
-    borderWidth: 1,
-    borderRadius: Radius.medium,
-    padding: Spacing.three,
+  sheet: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: Layout.sheetWidth,
+  },
+  stage: {
+    flex: 1,
+  },
+  body: {
+    flex: 1,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three,
+  },
+  review: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.four,
     gap: Spacing.four,
   },
-  step: {
+  footer: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.two,
+    gap: Spacing.two,
+  },
+  section: {
     gap: Spacing.two,
   },
   termsLink: {
     textDecorationLine: 'underline',
   },
-  grid: {
+  merchantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  merchantText: {
+    flex: 1,
+    minWidth: 0,
+    gap: Spacing.half,
+  },
+  hero: {
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  heroAmount: {
+    fontFamily: FontFamily.bold,
+    fontSize: 56,
+    lineHeight: 64,
+    letterSpacing: -1.5,
+    fontVariant: ['tabular-nums'],
+  },
+  amountEntry: {
+    alignSelf: 'stretch',
+    minHeight: 64,
+    fontSize: 56,
+    lineHeight: 64,
+    letterSpacing: -1.5,
+    fontFamily: FontFamily.bold,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    padding: 0,
+  },
+  pill: {
+    paddingVertical: Spacing.one + 2,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+  },
+  chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: Spacing.two,
   },
   chip: {
-    flexBasis: '22%',
-    flexGrow: 1,
+    minWidth: 72,
   },
-  token: {
-    flexBasis: '45%',
-    flexGrow: 1,
-  },
-  amountEntry: {
-    borderWidth: 1,
-    borderRadius: Radius.medium,
+  group: {
+    borderRadius: Radius.large,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    minHeight: 72,
-    fontSize: 40,
-    fontFamily: FontFamily.semibold,
-    textAlign: 'center',
-    fontVariant: ['tabular-nums'],
+    paddingVertical: Spacing.one,
   },
-  centered: {
-    textAlign: 'center',
-  },
-  orderHead: {
-    gap: Spacing.one,
-  },
-  summary: {
-    gap: Spacing.one,
+  options: {
+    gap: Spacing.two,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
     gap: Spacing.three,
-    minHeight: 32,
+    minHeight: 44,
   },
   summaryLabel: {
     flexShrink: 0,
@@ -1207,33 +1197,5 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
-  },
-  outcome: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-  },
-  outcomeText: {
-    flex: 1,
-  },
-  progress: {
-    gap: Spacing.three,
-  },
-  progressBars: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  progressStep: {
-    flex: 1,
-    gap: Spacing.one,
-  },
-  progressBar: {
-    height: 4,
-    borderRadius: Radius.medium,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
   },
 });

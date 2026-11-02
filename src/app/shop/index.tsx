@@ -27,6 +27,7 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
+import { dismissedOrders } from '@/ctx/dismissed-orders';
 import { Merchant } from '@/ctx/merchant';
 import { MerchantPaging } from '@/ctx/merchant-paging';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
@@ -109,7 +110,7 @@ export default function ShopScreen() {
         if (!isSignedIn) {
           return;
         }
-        const loadedOrder = ctx.activeGiftCard().catch(() => null);
+        const loadedOrder = dismissedOrders.activeOrder().catch(() => null);
         const commitProfile = startProfileRead();
         commitProfile(await ctx.me());
         setActiveOrder(await loadedOrder);
@@ -308,7 +309,7 @@ export default function ShopScreen() {
               {activeOrder && (
                 <ActiveOrderCard
                   merchantName={activeOrder.merchantName}
-                  onPress={() => router.push(`/shop/${activeOrder.merchantId}`)}
+                  onPress={() => router.push(`/shop/pay/${activeOrder.merchantId}`)}
                 />
               )}
               {accountError}
