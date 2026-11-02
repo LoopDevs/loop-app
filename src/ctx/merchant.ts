@@ -1,7 +1,14 @@
 import { money } from '../money.ts';
 import { units } from '../stellar/units.ts';
 import { invalidAmountMessage, normalizeAmount } from './amount-input.ts';
-import type { GiftCard, GiftCardInfo, MerchantJson, MerchantRedeemLocation, MerchantRedeemType } from './client.ts';
+import type {
+  CompanyJson,
+  GiftCard,
+  GiftCardInfo,
+  MerchantJson,
+  MerchantRedeemLocation,
+  MerchantRedeemType,
+} from './client.ts';
 import { cashbackState } from './gift-card-status.ts';
 
 const basisPointsPerWhole = 10_000n;
@@ -23,6 +30,20 @@ function currencyDigits(currency: string): number {
   }
 }
 
+type MerchantDiscount = Pick<MerchantJson, 'userDiscount' | 'link'>;
+
+export class CompanyCashback {
+  private defaultBasisPoints: number | null = null;
+
+  learn(company: Pick<CompanyJson, 'defaultUserDiscountBasisPoints'> | undefined): void {
+    this.defaultBasisPoints = company?.defaultUserDiscountBasisPoints ?? null;
+  }
+
+  effective(merchantDefault: number): number {
+    return this.defaultBasisPoints ?? merchantDefault;
+  }
+}
+
 export class CashbackRate {
   static readonly quotedStatuses: readonly GiftCard['status'][] = ['unpaid', 'paid'];
 
@@ -32,9 +53,9 @@ export class CashbackRate {
     this.basisPoints = basisPoints;
   }
 
-  static ofMerchant({ userDiscount, link }: Pick<MerchantJson, 'userDiscount' | 'link'>): CashbackRate {
+  static ofMerchant({ userDiscount, link }: MerchantDiscount, company?: CompanyCashback): CashbackRate {
     const override = link?.userDiscountOverride ? link.userDiscountBasisPoints : undefined;
-    return new CashbackRate(override ?? userDiscount);
+    return new CashbackRate(override ?? company?.effective(userDiscount) ?? userDiscount);
   }
 
   static quotedFor(order: QuotedOrder, locale?: string): string | null {
@@ -110,9 +131,10 @@ export class Merchant {
   readonly redeemLocation?: MerchantRedeemLocation;
   readonly redeemType?: MerchantRedeemType;
   readonly info?: GiftCardInfo;
-  readonly cashback: CashbackRate;
+  private readonly discount: MerchantDiscount;
+  private readonly company?: CompanyCashback;
 
-  constructor(json: MerchantJson) {
+  constructor(json: MerchantJson, company?: CompanyCashback) {
     this.id = json.id;
     this.slug = json.slug;
     this.name = json.name;
@@ -127,7 +149,12 @@ export class Merchant {
     this.redeemLocation = json.redeemLocation || undefined;
     this.redeemType = json.redeemType || undefined;
     this.info = json.info;
-    this.cashback = CashbackRate.ofMerchant(json);
+    this.discount = { userDiscount: json.userDiscount, link: json.link };
+    this.company = company;
+  }
+
+  get cashback(): CashbackRate {
+    return CashbackRate.ofMerchant(this.discount, this.company);
   }
 
   static searchPattern(name: string): string {

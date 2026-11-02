@@ -12,7 +12,7 @@ import { OrderWake } from '@/ctx/order-wake';
 import { SocketEvent } from '@/ctx/socket-event';
 import { SocketWatch, type SocketPresence, type WatchedSocket } from '@/ctx/socket-watch';
 import { Deadline } from '@/ctx/deadline';
-import { Merchant } from '@/ctx/merchant';
+import { CompanyCashback, Merchant } from '@/ctx/merchant';
 import type { PayoutJson } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
 import { blockingServiceState, type BlockingServiceState } from '@/ctx/service-state';
@@ -202,12 +202,15 @@ export type UserJson = {
   oauthIdentities?: OAuthIdentityJson[];
 };
 
+export type CompanyJson = {
+  countries?: string[];
+  stableCurrencies?: string[];
+  defaultUserDiscountBasisPoints?: number | null;
+};
+
 export type MeJson = {
   user: UserJson;
-  company?: {
-    countries?: string[];
-    stableCurrencies?: string[];
-  };
+  company?: CompanyJson;
 };
 
 export type UserUpdate =
@@ -244,6 +247,7 @@ class CtxClient {
     this.userIdFrom(accessToken),
   );
   private serviceStateListener: ServiceStateListener | null = null;
+  private readonly companyCashback = new CompanyCashback();
   private readonly orderKeys = new OrderKeys(
     () => bytesToHex(randomBytes(16)),
     () => Date.now(),
@@ -327,7 +331,9 @@ class CtxClient {
   }
 
   async me(): Promise<Profile> {
-    return Profile.fromMe(await this.auth.sessionRequest<MeJson>('GET', '/me'));
+    const me = await this.auth.sessionRequest<MeJson>('GET', '/me');
+    this.companyCashback.learn(me.company);
+    return Profile.fromMe(me);
   }
 
   updateUser(update: UserUpdate): Promise<UserJson> {
@@ -363,13 +369,13 @@ class CtxClient {
       result: MerchantJson[] | null;
       pagination: Pagination;
     }>(`/merchants?${query}`);
-    return { result: (result ?? []).map((json) => new Merchant(json)), pagination };
+    return { result: (result ?? []).map((json) => new Merchant(json, this.companyCashback)), pagination };
   }
 
   async merchant(idOrSlug: string): Promise<Merchant> {
     if (await this.isSignedIn()) {
       const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
-      return new Merchant(json);
+      return new Merchant(json, this.companyCashback);
     }
     const query = new URLSearchParams({ slug: Merchant.exactPattern(idOrSlug) });
     const { result } = await this.catalogRequest<{ result: MerchantJson[] | null }>(`/merchants?${query}`);
@@ -377,7 +383,7 @@ class CtxClient {
     if (!json) {
       throw new Error('We couldn’t find that gift card.');
     }
-    return new Merchant(json);
+    return new Merchant(json, this.companyCashback);
   }
 
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
