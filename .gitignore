@@ -37,6 +37,7 @@ yarn-error.*
 !.env.example
 
 # signing keys and service credentials
+keys/
 credentials.json
 *.keystore
 *.jks
