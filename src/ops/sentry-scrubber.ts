@@ -23,6 +23,7 @@ const STATIC_ROUTE_WORDS = new Set([
   'shop',
   'pay',
   'wallet',
+  'orders',
   'cash-out',
   'cashback',
   'savings',
