@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "io.loopfinance.app",
       "sha256_cert_fingerprints": [
-        "44:D5:3A:68:AD:68:1E:27:B0:67:CA:7F:25:E5:78:69:E8:DE:71:53:D4:7F:21:EC:F8:3C:21:A6:3A:7E:9F:06"
+        "44:D5:3A:68:AD:68:1E:27:B0:67:CA:7F:25:E5:78:69:E8:DE:71:53:D4:7F:21:EC:F8:3C:21:A6:3A:7E:9F:06",
+        "EE:8D:8C:FA:1D:E8:DB:57:C8:FE:AB:59:83:9A:80:8B:4C:32:2E:C4:63:94:EB:B5:AE:F4:0B:2B:EB:32:9B:31"
       ]
     }
   }
