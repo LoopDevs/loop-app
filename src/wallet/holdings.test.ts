@@ -87,10 +87,10 @@ test('spendable USDC adds the savings withdrawal floor to the wallet balance', (
   assert.equal(held.spendable('XLM.EURC'), 0n);
 });
 
-test('savings holdings list each vault with shares at its withdrawal floor', () => {
-  assert.deepEqual(holdings({}, { savings: { 'XLM.USDC': '10' } }).savingsHoldings(), [
-    { currency: 'XLM.USDC', amount: Holdings.floorOf(units.parse('10')) },
-  ]);
+test('savings holdings list each vault at its full value while spending keeps the withdrawal floor', () => {
+  const held = holdings({}, { savings: { 'XLM.USDC': '10' } });
+  assert.deepEqual(held.savingsHoldings(), [{ currency: 'XLM.USDC', amount: units.parse('10') }]);
+  assert.equal(held.savings('XLM.USDC'), Holdings.floorOf(units.parse('10')));
   assert.deepEqual(holdings({}).savingsHoldings(), []);
   assert.equal(holdings({}).savings('XLM.USDC'), 0n);
 });
@@ -107,8 +107,8 @@ test('each savings currency counts only its own vault', () => {
     });
     assert.deepEqual(held.coverage('XLM.GBPLOOP', units.parse('3.5')), { kind: 'short' });
     assert.deepEqual(held.savingsHoldings(), [
-      { currency: 'XLM.USDC', amount: Holdings.floorOf(units.parse('10')) },
-      { currency: 'XLM.GBPLOOP', amount: Holdings.floorOf(units.parse('2')) },
+      { currency: 'XLM.USDC', amount: units.parse('10') },
+      { currency: 'XLM.GBPLOOP', amount: units.parse('2') },
     ]);
   } finally {
     delete network.vaults['XLM.GBPLOOP'];

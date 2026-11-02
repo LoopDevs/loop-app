@@ -85,7 +85,7 @@ export function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
         <FeatureCard
           icon={{ ios: 'leaf.fill', android: 'savings', web: 'savings' }}
           title="Savings"
-          detail={Savings.rateHeadline}
+          detail={Savings.rateHeadline()}
         />
       ),
     },
