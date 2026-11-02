@@ -12,15 +12,17 @@ import { Motion } from '@/constants/theme';
 
 const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const rollDuration = 900;
+const liveRollDuration = 420;
 const penceDelay = 260;
 
 type OdometerProps = {
   value: string;
   style: TextStyle & { fontSize: number; lineHeight: number };
   accessibilityLabel?: string;
+  tempo?: 'settle' | 'live';
 };
 
-export function Odometer({ value, style, accessibilityLabel }: OdometerProps) {
+export function Odometer({ value, style, accessibilityLabel, tempo = 'settle' }: OdometerProps) {
   const [availableWidth, setAvailableWidth] = useState(0);
   const [naturalWidth, setNaturalWidth] = useState(0);
   const scale = fitScale(availableWidth, naturalWidth);
@@ -55,9 +57,17 @@ export function Odometer({ value, style, accessibilityLabel }: OdometerProps) {
             );
           }
           const isPence = decimalIndex >= 0 && index > decimalIndex;
-          const delay = digitOrder * Motion.stagger + (isPence ? penceDelay : 0);
+          const delay = tempo === 'live' ? 0 : digitOrder * Motion.stagger + (isPence ? penceDelay : 0);
           digitOrder += 1;
-          return <DigitColumn key={keys[index]} digit={Number(character)} delay={delay} style={fitted} />;
+          return (
+            <DigitColumn
+              key={keys[index]}
+              digit={Number(character)}
+              delay={delay}
+              duration={tempo === 'live' ? liveRollDuration : rollDuration}
+              style={fitted}
+            />
+          );
         })}
       </View>
     </View>
@@ -99,10 +109,11 @@ function isDigit(character: string): boolean {
 type DigitColumnProps = {
   digit: number;
   delay: number;
+  duration: number;
   style: OdometerProps['style'];
 };
 
-function DigitColumn({ digit, delay, style }: DigitColumnProps) {
+function DigitColumn({ digit, delay, duration, style }: DigitColumnProps) {
   const reduceMotion = useReducedMotion();
   const position = useSharedValue(reduceMotion ? digit : 0);
   useEffect(() => {
@@ -110,11 +121,8 @@ function DigitColumn({ digit, delay, style }: DigitColumnProps) {
       position.value = digit;
       return;
     }
-    position.value = withDelay(
-      delay,
-      withTiming(digit, { duration: rollDuration, easing: Motion.easeOut }),
-    );
-  }, [digit, delay, reduceMotion, position]);
+    position.value = withDelay(delay, withTiming(digit, { duration, easing: Motion.easeOut }));
+  }, [digit, delay, duration, reduceMotion, position]);
   const rolling = useAnimatedStyle(() => ({
     transform: [{ translateY: -position.value * style.lineHeight }],
   }));
