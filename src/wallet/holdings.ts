@@ -88,7 +88,7 @@ export class Holdings {
   }
 
   savingsHoldings(): SavingsHolding[] {
-    return this.withdrawableSavings().map(({ currency, value }) => ({ currency, amount: Holdings.floorOf(value) }));
+    return this.withdrawableSavings().map(({ currency, value }) => ({ currency, amount: value }));
   }
 
   inWallet(currency: string): bigint {

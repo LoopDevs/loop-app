@@ -11,6 +11,7 @@ import { useScrimScroll } from '@/components/home-panel';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { SavingsCard } from '@/components/home-overview';
 import { PageHeader } from '@/components/page-header';
+import { SavingsTicker } from '@/components/savings-ticker';
 import { useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
 import { SplitLayout } from '@/components/split-layout';
@@ -30,7 +31,7 @@ import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
 import { strings } from '@/strings';
-import { Savings } from '@/wallet/savings';
+import { Savings, SavingsRate } from '@/wallet/savings';
 import { WalletBlocked } from '@/wallet/smart-wallet';
 
 const quickAmounts = ['25', '50', '100'];
@@ -132,7 +133,7 @@ export default function SavingsScreen() {
               {state === 'ready' && (
                 <View style={[styles.ratePill, { backgroundColor: theme.accent }]}>
                   <Text style={[styles.ratePillText, { color: theme.onAccent }]} maxFontSizeMultiplier={1.3}>
-                    {Savings.rateHeadline}
+                    {Savings.rateHeadline(view?.stable)}
                   </Text>
                 </View>
               )}
@@ -142,7 +143,7 @@ export default function SavingsScreen() {
             ) : (
               <>
                 <ThemedText type={wide ? 'title' : 'subtitle'} accessibilityRole="header" style={styles.heroTitle}>
-                  {Savings.rateHeadline}
+                  {Savings.rateHeadline()}
                 </ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.heroLine}>
                   Your savings grow every day. Your cashback lands here too, and you can take it out whenever you
@@ -237,7 +238,7 @@ function SavingsBalance({ view }: { view: HoldingsView | null }) {
   }
   const stable = view.stable ?? Rates.usd;
   const [first] = view.holdings.savingsHoldings();
-  const balance = first ? money.token(first.amount, first.currency) : money.ctx('0', stable);
+  const rate = first ? SavingsRate.fixedFor(first.currency) : null;
   const earned = view.account?.receivedCashback(new Set([stable])) ?? 0n;
   const earnedLine =
     earned > 0n
@@ -248,9 +249,18 @@ function SavingsBalance({ view }: { view: HoldingsView | null }) {
       <ThemedText type="small" themeColor="textSecondary">
         Savings
       </ThemedText>
-      <ThemedText type="title" accessibilityRole="header" style={styles.heroBalance}>
-        {balance}
-      </ThemedText>
+      {first && rate ? (
+        <SavingsTicker value={first.amount} currency={first.currency} rate={rate} />
+      ) : (
+        <ThemedText type="title" accessibilityRole="header" style={styles.heroBalance}>
+          {first ? money.token(first.amount, first.currency) : money.ctx('0', stable)}
+        </ThemedText>
+      )}
+      {rate && (
+        <ThemedText themeColor="textSecondary" style={styles.heroLine}>
+          {`Growing ${rate.figure()} a year, added to your savings every day.`}
+        </ThemedText>
+      )}
       <ThemedText themeColor="textSecondary" style={styles.heroLine}>
         {earnedLine}
       </ThemedText>
