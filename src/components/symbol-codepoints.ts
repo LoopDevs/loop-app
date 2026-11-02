@@ -10,6 +10,7 @@ const codepoints: Record<string, number> = {
   account_circle: 0xe853,
   add: 0xe145,
   apps: 0xe5c3,
+  arrow_back: 0xe5c4,
   arrow_forward: 0xe5c8,
   bolt: 0xea0b,
   cancel: 0xe5c9,

@@ -24,6 +24,15 @@ export default function ShopLayout() {
           headerBackButtonDisplayMode: 'minimal',
         }}
       />
+      <Stack.Screen
+        name="pay/[slug]"
+        options={{
+          title: 'Buy gift card',
+          presentation: 'modal',
+          headerShown: false,
+          animation: 'slide_from_bottom',
+        }}
+      />
     </Stack>
   );
 }

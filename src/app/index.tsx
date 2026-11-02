@@ -37,6 +37,7 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
@@ -89,9 +90,9 @@ export default function HomeScreen() {
   }, []);
 
   const openActiveOrder = useCallback(async () => {
-    const activeOrder = await ctx.activeGiftCard().catch(() => null);
+    const activeOrder = await dismissedOrders.activeOrder().catch(() => null);
     if (activeOrder && homeFocused.current) {
-      router.push(`/shop/${activeOrder.merchantId}`, { withAnchor: true });
+      router.push(`/shop/pay/${activeOrder.merchantId}`, { withAnchor: true });
     }
   }, [router]);
 
