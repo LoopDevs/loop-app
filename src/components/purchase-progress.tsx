@@ -10,7 +10,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 
-import { GiftCardFace } from '@/components/gift-card-face';
+import { GiftCardReveal, giftCardRevealMs } from '@/components/gift-card-reveal';
 import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
@@ -211,32 +211,37 @@ export function PurchaseDelivered({ order, onView, onDone }: DeliveredProps) {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const cashback = CashbackRate.shownFor(order);
+  const detailsDelayMs = giftCardRevealMs + 100;
+  const enterAfter = (delayMs: number) =>
+    reduceMotion ? undefined : FadeInDown.delay(delayMs).duration(Motion.state).easing(Motion.easeOut);
   return (
     <View style={styles.stage}>
       <View style={[styles.body, styles.delivered]}>
-        <View style={styles.headline} accessibilityLiveRegion="polite">
+        <Animated.View entering={enterAfter(0)} style={styles.headline} accessibilityLiveRegion="polite">
           <ThemedText type="subtitle" accessibilityRole="header" style={styles.centered}>
             Your gift card is ready
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.centered}>
             Open it to see the code and how to use it.
           </ThemedText>
-        </View>
-        <Animated.View entering={reduceMotion ? undefined : ZoomIn.duration(Motion.transition)} style={styles.card}>
-          <GiftCardFace giftCard={order} />
         </Animated.View>
+        <View style={styles.card}>
+          <GiftCardReveal giftCard={order} />
+        </View>
         {cashback && (
-          <View style={[styles.pill, { backgroundColor: theme.backgroundSelected }]}>
+          <Animated.View
+            entering={enterAfter(detailsDelayMs)}
+            style={[styles.pill, { backgroundColor: theme.backgroundSelected }]}>
             <ThemedText type="smallBold" themeColor="success">
               {cashback} cashback on its way to your savings
             </ThemedText>
-          </View>
+          </Animated.View>
         )}
       </View>
-      <View style={styles.footer}>
+      <Animated.View entering={enterAfter(detailsDelayMs + 150)} style={styles.footer}>
         <Button label="View gift card" variant="primary" onPress={onView} />
         <Button label="Done" variant="quiet" onPress={onDone} />
-      </View>
+      </Animated.View>
     </View>
   );
 }
