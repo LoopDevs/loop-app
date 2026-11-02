@@ -2,9 +2,10 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { Alert, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button, Field, Notice } from '@/components/ui/form';
 import { useScrimScroll } from '@/components/home-panel';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
@@ -18,7 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { useToast } from '@/components/ui/toast';
-import { FontFamily, Layout, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { Rates } from '@/ctx/rates';
 import type { HoldingsView } from '@/hooks/use-holdings';
@@ -44,6 +45,7 @@ export default function SavingsScreen() {
   const { busy, message, setMessage, run } = useBusyAction();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [adding, setAdding] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const pullToRefresh = async () => {
@@ -55,6 +57,8 @@ export default function SavingsScreen() {
     }
   };
   const savings = view?.holdings.withdrawableSavings() ?? [];
+  const [firstSaving] = view?.holdings.savingsHoldings() ?? [];
+  const savingsBalance = firstSaving ? money.token(firstSaving.amount, firstSaving.currency) : null;
 
   const withdraw = () =>
     run(async () => {
@@ -81,17 +85,8 @@ export default function SavingsScreen() {
     });
 
   const confirmWithdraw = () => {
-    const prompt = 'Move your savings back to your balance?';
-    if (Platform.OS === 'web') {
-      if (globalThis.confirm?.(prompt)) {
-        withdraw();
-      }
-      return;
-    }
-    Alert.alert('Withdraw savings', prompt, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Withdraw', onPress: withdraw },
-    ]);
+    setWithdrawing(false);
+    withdraw();
   };
 
   const addToSavings = () => {
@@ -99,7 +94,7 @@ export default function SavingsScreen() {
       openSignIn('Sign in to start saving.');
       return;
     }
-    setAdding((open) => !open);
+    setAdding(true);
   };
 
   return (
@@ -156,11 +151,9 @@ export default function SavingsScreen() {
               </>
             )}
             <View style={wide && styles.heroAction}>
-              <Button label="Add to savings" variant="primary" onPress={addToSavings} selected={adding} />
+              <Button label="Add to savings" variant="primary" onPress={addToSavings} />
             </View>
           </View>
-
-          {adding && <AddToSavings onClose={() => setAdding(false)} />}
 
           {state === 'setup' && (
             <Notice
@@ -178,7 +171,7 @@ export default function SavingsScreen() {
           {state === 'ready' && (
             <SavingsCard
               view={view}
-              onWithdraw={confirmWithdraw}
+              onWithdraw={() => setWithdrawing(true)}
               withdrawDisabled={busy || savings.length === 0}
               onCashback={() => router.push('/wallet/cashback')}
             />
@@ -203,6 +196,12 @@ export default function SavingsScreen() {
       </Animated.ScrollView>
       </KeyboardAvoid>
       <Animated.View pointerEvents="none" style={scrim} />
+      <BottomSheet open={adding} onClose={() => setAdding(false)} title="How much do you want to save?">
+        <AddToSavings onClose={() => setAdding(false)} />
+      </BottomSheet>
+      <BottomSheet open={withdrawing} onClose={() => setWithdrawing(false)} title="Move savings to your balance">
+        <WithdrawSavings balance={savingsBalance} onConfirm={confirmWithdraw} onClose={() => setWithdrawing(false)} />
+      </BottomSheet>
     </ThemedView>
   );
 }
@@ -289,16 +288,10 @@ function SavingsFacts() {
 }
 
 function AddToSavings({ onClose }: { onClose: () => void }) {
-  const theme = useTheme();
   const [input, setInput] = useState('');
   const amount = normalizeAmount(input);
   return (
-    <Animated.View
-      entering={FadeInDown.duration(Motion.state)}
-      style={[styles.card, styles.sheet, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      <ThemedText type="heading" accessibilityRole="header">
-        How much do you want to save?
-      </ThemedText>
+    <>
       <Field
         label={strings.field.amountInDollars}
         value={input}
@@ -317,7 +310,29 @@ function AddToSavings({ onClose }: { onClose: () => void }) {
       </ThemedText>
       <Button label="Coming soon" variant="primary" onPress={onClose} disabled />
       <Button label="Close" variant="quiet" onPress={onClose} />
-    </Animated.View>
+    </>
+  );
+}
+
+function WithdrawSavings({
+  balance,
+  onConfirm,
+  onClose,
+}: {
+  balance: string | null;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <ThemedText themeColor="textSecondary">
+        {balance
+          ? `${balance} goes back to your balance now and stops earning.`
+          : 'Your savings go back to your balance now and stop earning.'}
+      </ThemedText>
+      <Button label={balance ? `Move ${balance}` : 'Move savings'} variant="primary" onPress={onConfirm} />
+      <Button label="Cancel" variant="quiet" onPress={onClose} />
+    </>
   );
 }
 
@@ -406,9 +421,6 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  sheet: {
-    maxWidth: Layout.sheetWidth,
   },
   chips: {
     flexDirection: 'row',
