@@ -21,6 +21,7 @@ const STATIC_ROUTE_WORDS = new Set([
   'verify-email',
   'refresh-token',
   'shop',
+  'pay',
   'wallet',
   'cash-out',
   'cashback',
