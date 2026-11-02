@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, mock, test } from 'node:test';
 
+import { Platform } from 'react-native';
+
 import { errorReporting } from '../ops/error-reporting.ts';
 import { ctx, CtxError, type GiftCardOrderIn } from './client.ts';
 import { Deadline, RequestTimeoutError } from './deadline.ts';
@@ -12,11 +14,39 @@ type Sent = {
   body: unknown;
 };
 
+class FakeWebSocket {
+  onopen: (() => void) | null = null;
+  onmessage: ((message: { data: unknown }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  readonly sent: string[] = [];
+  closed = false;
+
+  constructor(
+    readonly url: string,
+    readonly protocols: undefined,
+    readonly options: { headers: Record<string, string> },
+  ) {
+    sockets.push(this);
+  }
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.closed = true;
+    this.onclose?.();
+  }
+}
+
 const realFetch = globalThis.fetch;
+const realWebSocket = globalThis.WebSocket;
 const realReportMessage = errorReporting.reportMessage;
 const apiUrl = 'https://staging.spend.ctx.com';
 
 let sent: Sent[] = [];
+let sockets: FakeWebSocket[] = [];
 let reported: string[] = [];
 let respond: (request: Sent) => Response | Promise<Response>;
 
@@ -37,8 +67,10 @@ async function signIn(userId: string): Promise<void> {
 
 beforeEach(() => {
   sent = [];
+  sockets = [];
   reported = [];
   respond = () => json({});
+  globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
   errorReporting.reportMessage = (message) => {
     reported.push(message);
   };
@@ -59,6 +91,7 @@ afterEach(async () => {
   respond = () => json({});
   await ctx.signOut();
   globalThis.fetch = realFetch;
+  globalThis.WebSocket = realWebSocket;
   errorReporting.reportMessage = realReportMessage;
 });
 
@@ -228,6 +261,27 @@ test('the catalog is read without a session and with one it uses the bearer toke
   assert.equal(sent[0].headers.Authorization, `Bearer ${accessToken('user-42')}`);
 });
 
+test('a signed-out merchant lookup matches the slug whole', async () => {
+  const merchant = (slug: string) => ({
+    id: `id-${slug}`,
+    slug,
+    name: slug,
+    country: 'US',
+    currency: 'USD',
+    denominationType: 'fixed',
+    denominationValues: ['25'],
+    userDiscount: 300,
+  });
+  const pagination = { page: 1, pages: 1, perPage: 20, total: 2 };
+  respond = () => json({ result: [merchant('babygap-us'), merchant('gap-us')], pagination });
+  const found = await ctx.merchant('gap-us');
+  assert.equal(new URL(sent[0].url).searchParams.get('slug'), '^gap-us$');
+  assert.equal(sent[0].headers.Authorization, undefined);
+  assert.equal(found.slug, 'gap-us');
+  respond = () => json({ result: [merchant('babygap-us')], pagination });
+  await assert.rejects(ctx.merchant('gap-us'), { message: 'We couldn’t find that gift card.' });
+});
+
 test('a missing gift card list reads as empty and status filters are joined', async () => {
   await signIn('user-42');
   respond = () => json({ result: null, pagination: { page: 1, pages: 0, perPage: 5, total: 0 } });
@@ -257,7 +311,8 @@ function card(overrides: Partial<Record<'cardFiatAmount' | 'merchantId' | 'cardF
     cardFiatAmount: '25.00',
     cardFiatCurrency: 'GBP',
     paymentId: 'p1',
-    paymentMethod: 'XLM.USDC',
+    paymentMethod: 'crypto',
+    paymentCryptoCurrency: 'XLM.USDC',
     ...overrides,
   };
 }
@@ -336,4 +391,52 @@ test('a gift card id is encoded into the path', async () => {
   respond = () => json(card({}));
   await ctx.giftCard('a/b?c');
   assert.equal(sent[0].url, `${apiUrl}/gift-cards/a%2Fb%3Fc`);
+});
+
+test('an account watch opens a socket with the session headers and relays account events', async () => {
+  await signIn('user-42');
+  await ctx.status();
+  const clientId = sent[0].headers['X-Client-Id'];
+  let changes = 0;
+
+  const close = await ctx.watchAccount(() => {
+    changes += 1;
+  });
+  const [socket] = sockets;
+  socket.onopen?.();
+  socket.onmessage?.({ data: JSON.stringify({ type: 'event', topic: 'order', data: {} }) });
+  socket.onmessage?.({ data: JSON.stringify({ type: 'event', topic: 'account', data: {} }) });
+  close();
+
+  assert.equal(sockets.length, 1);
+  assert.equal(socket.url, 'wss://staging.spend.ctx.com/ws');
+  assert.equal(socket.options.headers.Authorization, `Bearer ${accessToken('user-42')}`);
+  assert.equal(socket.options.headers['X-Client-Id'], clientId);
+  assert.deepEqual(socket.sent, [JSON.stringify({ action: 'subscribe', topic: 'account' })]);
+  assert.equal(changes, 1);
+  assert.equal(socket.closed, true);
+});
+
+test('an account watch on the web opens no socket', async () => {
+  await signIn('user-42');
+  Platform.OS = 'web';
+  try {
+    const close = await ctx.watchAccount(() => undefined);
+    close();
+  } finally {
+    Platform.OS = 'ios';
+  }
+
+  assert.equal(sockets.length, 0);
+});
+
+test('signing out closes an open account socket', async () => {
+  await signIn('user-42');
+  await ctx.watchAccount(() => undefined);
+  sockets[0].onopen?.();
+
+  await ctx.signOut();
+
+  assert.equal(sockets[0].closed, true);
+  assert.equal(sockets.length, 1);
 });

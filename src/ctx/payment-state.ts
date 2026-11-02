@@ -1,7 +1,6 @@
 export type PaymentState =
   | { kind: 'ready' }
-  | { kind: 'bank' }
-  | { kind: 'bankExpired' }
+  | { kind: 'bank'; linkOpen: boolean }
   | { kind: 'movingSavings' }
   | { kind: 'sending' }
   | { kind: 'confirming'; txId?: string; expiryLedger?: number }

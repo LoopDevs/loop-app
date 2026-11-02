@@ -36,7 +36,7 @@ import { socialSignIn } from '@/native/social-sign-in';
 import type { CountryChoice } from '@/ctx/profile';
 import type { SocialProvider } from '@/session/social-sign-in';
 import { passkey } from '@/wallet/passkey';
-import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
+import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
 
 type SignInListener = () => void;
 
@@ -257,6 +257,10 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
       if (error instanceof UnlinkedDevice) {
         setUnlinkedWallet(error.wallet);
         setStep('add-device');
+        return;
+      }
+      if (error instanceof WalletBlocked) {
+        finish();
         return;
       }
       throw error;

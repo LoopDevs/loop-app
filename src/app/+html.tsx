@@ -21,6 +21,7 @@ export default function Root({ children }: PropsWithChildren) {
     <html lang="en" {...htmlAttributes}>
       <head>
         <meta charSet="utf-8" />
+        <title>Loop</title>
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         <meta name="color-scheme" content="light" />

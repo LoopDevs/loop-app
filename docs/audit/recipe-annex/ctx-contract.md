@@ -6,7 +6,7 @@ What CTX spend-api does with each call the app makes. Read from `git -C ../spend
 
 - Customer role: `service_rbac.go:167-200`. It includes wallet deploy, sponsor, list, update and unlink, backup, recovery start and finish, bank-withdrawal create/get, and payment-method create/list/delete. Every customer permission is scoped `User=self`, except merchant get/list.
 - IDOR guard: the token's user id must equal the path user id; `GET /gift-cards/:id` targets the card's owner; the list forces `UserId` to the caller.
-- A customer cannot create a sponsored link: `Sponsored = true` is set only in deploy (`http_ep_user_wallet_smart.go:135`).
+- A customer can deploy sponsored wallets: the customer role includes deploy (`service_rbac.go:177`), deploy sets `Sponsored = true` (`http_ep_user_wallet_smart.go:91-135`, five wallets per user), and unlink is customer-reachable (`http_ep_wallet.go:169`). A customer token can plant a second sponsored wallet with arbitrary keys and unlink the real one; the app's pin and `WalletIdentity.prove` are the only defence (INV-4).
 - Sponsor and build take `walletId` from the path (`http_ep_user_wallet_smart.go:253-269`). Inactive links → 404; non-sponsored or non-XLM → `ErrSmartWalletNotSponsored`.
 - Recovery cancel has no customer permission (`http_router.go:253`).
 - Maintenance mode blocks everything except `/status`, `/me` and `/system/trigger` (`http_router.go:158`).

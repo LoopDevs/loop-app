@@ -21,6 +21,10 @@ export class CtxError extends Error {
     return this.bodyField('error');
   }
 
+  refusesToken(): boolean {
+    return this.status === 401 && this.errorName() === 'ErrTokenInvalid';
+  }
+
   bodyField(name: string): string | undefined {
     return CtxError.field(this.body, name);
   }

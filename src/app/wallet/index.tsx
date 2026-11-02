@@ -18,7 +18,7 @@ import Animated, {
 
 import { Button, Notice } from "@/components/ui/form";
 import { statusTone } from "@/components/gift-card-details";
-import { useScrimScroll, useScrollToTopOnFocus } from "@/components/home-panel";
+import { useScrimScroll, useScrollOnFocus } from "@/components/home-panel";
 import { MerchantDisc } from "@/components/merchant-mark";
 import { PageHeader } from "@/components/page-header";
 import { PressScale } from "@/components/ui/press-scale";
@@ -64,7 +64,7 @@ export default function WalletScreen() {
   const { scrollRef, onScroll, scrim } =
     useScrimScroll<FlatList<GiftCard>>();
   const wideScrollRef = useRef<ScrollViewInstance>(null);
-  useScrollToTopOnFocus(wideScrollRef);
+  useScrollOnFocus(wideScrollRef);
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
   const [sentPaymentIds, setSentPaymentIds] = useState<ReadonlySet<string>>(
     new Set(),

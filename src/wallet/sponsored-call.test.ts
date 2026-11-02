@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { bytesToHex } from '@noble/hashes/utils';
+import { ed25519 } from '@noble/curves/ed25519';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import {
   Account,
   Address,
@@ -29,6 +30,22 @@ const source = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const latestLedger = 1_000;
 const expiry = latestLedger + 60;
 const ruleIds = [1];
+
+const acceptedTransfer = {
+  hash: '8a34c6cec5fa431047969453b400f4bfeec33dfe6d3e0f3a1a94b30081317251',
+  ledger: 5_387_076,
+  wallet: 'CCRW6UVDONZEZLP5JSKMVTC7VIDBA4654FPJFUNMDWZIT3OGXBKMXQFE',
+  built: {
+    transaction:
+      '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',
+    digest: 'bc26a266e9c5430c960ce70b6062dd80d69c3a243135f7dda96e850b8a75cc94',
+    contextRuleIds: [1],
+    expiryLedger: 5_387_134,
+  },
+  devicePublicKey: '48678a1cb2ac8fb19fece868221d6dcf8396ace3630f52d8d46859991f20f52a',
+  deviceSignature:
+    '65879264a47b2b2358b234c861fe11e5669cfe42b074a4be822d271f15d31048a2b2b54424507a51f4b2ec233dfe7f27a2123e5c1d7f9dba3c3c55eb70218d06',
+};
 
 type Shape = {
   amount?: bigint;
@@ -144,10 +161,19 @@ test('a well-formed sponsored transfer verifies to the digest computed independe
   assert.equal(bytesToHex(call.digest), built.digest);
 });
 
-test('the testnet digest is pinned to a known vector', { skip: network.passphrase !== Networks.TESTNET }, () => {
-  const call = SponsoredCall.verify(build(), wallet, ruleIds, latestLedger);
-  assert.equal(bytesToHex(call.digest), '294da97bf121422755e26aa747a8bf151ed3b1b1bbf22788f6091028972c84c5');
-});
+test(
+  'a transfer testnet accepted verifies to the digest its device key signed',
+  { skip: network.passphrase !== Networks.TESTNET },
+  () => {
+    const { built, wallet: acceptedWallet, ledger, devicePublicKey, deviceSignature } = acceptedTransfer;
+
+    const call = SponsoredCall.verify(built, acceptedWallet, built.contextRuleIds, ledger);
+
+    assert.equal(call.method, 'transfer');
+    assert.ok(ed25519.verify(hexToBytes(deviceSignature), call.digest, hexToBytes(devicePublicKey)));
+    assert.equal(ed25519.verify(hexToBytes(deviceSignature), hash(call.digest), hexToBytes(devicePublicKey)), false);
+  },
+);
 
 test('a transaction with more than one operation is refused', () => {
   rejects(build({ extraOperation: true }), /exactly one operation/);

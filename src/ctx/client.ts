@@ -1,5 +1,6 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
@@ -9,6 +10,7 @@ import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { signInReportMessage } from '@/ctx/sign-in-report';
 import { OrderWake } from '@/ctx/order-wake';
 import { SocketEvent } from '@/ctx/socket-event';
+import { SocketWatch, type SocketPresence, type WatchedSocket } from '@/ctx/socket-watch';
 import { Deadline } from '@/ctx/deadline';
 import { Merchant } from '@/ctx/merchant';
 import type { PayoutJson } from '@/ctx/payout';
@@ -238,7 +240,9 @@ export type SponsoredResult = {
 };
 
 class CtxClient {
-  private readonly auth = new SessionAuth(this.send.bind(this), tokenStore);
+  private readonly auth = new SessionAuth(this.send.bind(this), tokenStore, (accessToken) =>
+    this.userIdFrom(accessToken),
+  );
   private serviceStateListener: ServiceStateListener | null = null;
   private readonly orderKeys = new OrderKeys(
     () => bytesToHex(randomBytes(16)),
@@ -314,6 +318,10 @@ class CtxClient {
     await this.auth.clearSession();
   }
 
+  onSessionEnd(listener: () => void): () => void {
+    return this.auth.onSessionEnd(listener);
+  }
+
   async userId(): Promise<string> {
     return this.userIdFrom(await this.auth.requireAccessToken());
   }
@@ -340,7 +348,7 @@ class CtxClient {
       query.set('name', pattern);
     }
     if (ids) {
-      query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
+      query.set('ids', ids.map((id) => Merchant.exactPattern(id)).join(','));
     }
     if (category) {
       query.set('category', category);
@@ -363,9 +371,9 @@ class CtxClient {
       const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
       return new Merchant(json);
     }
-    const query = new URLSearchParams({ slug: idOrSlug });
+    const query = new URLSearchParams({ slug: Merchant.exactPattern(idOrSlug) });
     const { result } = await this.catalogRequest<{ result: MerchantJson[] | null }>(`/merchants?${query}`);
-    const json = result?.[0];
+    const json = result?.find((merchant) => merchant.slug === idOrSlug);
     if (!json) {
       throw new Error('We couldn’t find that gift card.');
     }
@@ -421,11 +429,15 @@ class CtxClient {
   }
 
   watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
-    return this.openSocket('giftcard', (raw) => {
-      if (OrderWake.concerns(raw, orderId)) {
-        wake.signal();
-      }
-    });
+    return this.openSocket(
+      'giftcard',
+      (raw) => {
+        if (OrderWake.concerns(raw, orderId)) {
+          wake.signal();
+        }
+      },
+      { attach: () => wake.attach(), detach: () => wake.detach() },
+    );
   }
 
   watchAccount(onChange: () => void): Promise<() => void> {
@@ -436,23 +448,37 @@ class CtxClient {
     });
   }
 
-  private async openSocket(topic: string, onMessage: (raw: unknown) => void): Promise<() => void> {
-    const accessToken = await this.auth.requireAccessToken();
+  private openSocket(
+    topic: string,
+    onMessage: (raw: unknown) => void,
+    presence?: SocketPresence,
+  ): Promise<() => void> {
+    if (Platform.OS === 'web') {
+      return Promise.resolve(() => undefined);
+    }
+    const watch = new SocketWatch(
+      this.auth,
+      (accessToken) => this.connectSocket(accessToken),
+      topic,
+      onMessage,
+      presence,
+    );
+    return watch.start();
+  }
+
+  private connectSocket(accessToken: string): WatchedSocket {
     const HeaderSocket = WebSocket as unknown as new (
       url: string,
       protocols: undefined,
       options: { headers: Record<string, string> },
-    ) => WebSocket;
-    const socket = new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
+    ) => WatchedSocket;
+    return new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'X-Client-Id': this.clientId,
         'X-App-Version': this.appVersion,
       },
     });
-    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic }));
-    socket.onmessage = (message) => onMessage(message.data);
-    return () => socket.close();
   }
 
   async giftCards({ merchantId, status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {

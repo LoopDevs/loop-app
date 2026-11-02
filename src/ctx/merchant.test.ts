@@ -118,6 +118,11 @@ test('a search name is matched literally', () => {
   assert.equal(Merchant.searchPattern('A.B*C+?'), 'A\\.B\\*C\\+\\?');
 });
 
+test('a lookup key is matched whole', () => {
+  assert.equal(Merchant.exactPattern('gap-us'), '^gap-us$');
+  assert.equal(Merchant.exactPattern('a.b'), '^a\\.b$');
+});
+
 test('the tile hue is stable for a name and within the colour wheel', () => {
   const hue = new Merchant(json).tileHue();
   assert.equal(new Merchant({ ...json, id: 'm2' }).tileHue(), hue);

@@ -1,8 +1,10 @@
+import { maxPollIntervalMs, pollIntervalMs } from "@/ctx/gift-card-status";
 import { SocketEvent } from "@/ctx/socket-event";
 
 export class OrderWake {
   private release: (() => void) | null = null;
   private signalled = false;
+  private attached = false;
 
   static concerns(raw: unknown, orderId: string): boolean {
     const event = SocketEvent.parse(raw);
@@ -11,6 +13,19 @@ export class OrderWake {
     }
     const data = event.data as { id?: unknown } | null | undefined;
     return data?.id === orderId;
+  }
+
+  attach(): void {
+    this.attached = true;
+  }
+
+  detach(): void {
+    this.attached = false;
+    this.signal();
+  }
+
+  interval(): number {
+    return this.attached ? maxPollIntervalMs : pollIntervalMs;
   }
 
   signal(): void {

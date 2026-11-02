@@ -30,7 +30,7 @@ import { money } from '@/money';
 import { units } from '@/stellar/units';
 import { strings } from '@/strings';
 import { Savings } from '@/wallet/savings';
-import { UnlinkedDevice } from '@/wallet/smart-wallet';
+import { WalletBlocked } from '@/wallet/smart-wallet';
 
 const quickAmounts = ['25', '50', '100'];
 
@@ -40,7 +40,7 @@ export default function SavingsScreen() {
   const toast = useToast();
   const { wide } = usePageLayout();
   const { openSignIn } = useSignIn();
-  const { state, wallet, view, refresh, reload } = useWallet();
+  const { state, wallet, view, refresh, reload, problem } = useWallet();
   const { busy, message, setMessage, run } = useBusyAction();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [adding, setAdding] = useState(false);
@@ -64,7 +64,7 @@ export default function SavingsScreen() {
       try {
         for (const { currency, shares } of savings) {
           const result = await wallet.withdraw(currency, shares).catch((error: unknown) => {
-            if (error instanceof UnlinkedDevice) {
+            if (error instanceof WalletBlocked) {
               reload();
             }
             throw error;
@@ -169,6 +169,10 @@ export default function SavingsScreen() {
               actionLabel="Go to Home"
               onAction={() => router.navigate('/')}
             />
+          )}
+
+          {state === 'blocked' && (
+            <Notice tone="neutral" message={problem} actionLabel="Go to Home" onAction={() => router.navigate('/')} />
           )}
 
           {state === 'ready' && (

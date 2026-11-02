@@ -131,7 +131,15 @@ export class Merchant {
   }
 
   static searchPattern(name: string): string {
-    return name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return Merchant.escapedPattern(name.trim());
+  }
+
+  static exactPattern(value: string): string {
+    return `^${Merchant.escapedPattern(value)}$`;
+  }
+
+  private static escapedPattern(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   static idsByRecentPurchase(giftCards: Pick<GiftCard, 'merchantId'>[], limit: number): string[] {

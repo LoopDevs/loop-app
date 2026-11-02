@@ -1,8 +1,10 @@
 import { units } from '../stellar/units.ts';
+import { BankPayment } from './bank-payment.ts';
 import type { GiftCard, GiftCardOrderIn } from './client.ts';
 
 export type OrderedCard = Pick<GiftCard, 'merchantId' | 'cardFiatAmount' | 'cardFiatCurrency'>;
-export type PlacedCard = OrderedCard & Pick<GiftCard, 'status' | 'created'>;
+type RailedCard = Pick<GiftCard, 'paymentMethod' | 'paymentCryptoCurrency'>;
+export type PlacedCard = OrderedCard & RailedCard & Pick<GiftCard, 'status' | 'created'>;
 
 export class OrderRequest {
   static readonly clockSkewMs = 5 * 60_000;
@@ -28,8 +30,15 @@ export class OrderRequest {
     return (
       card.status === 'unpaid' &&
       this.matches(card) &&
+      this.onRail(card) &&
       Date.parse(card.created) >= this.askedAt - OrderRequest.clockSkewMs
     );
+  }
+
+  private onRail(card: RailedCard): boolean {
+    return this.asked.cryptoCurrency === undefined
+      ? BankPayment.isBank(card)
+      : card.paymentCryptoCurrency === this.asked.cryptoCurrency;
   }
 
   sameAs(order: GiftCardOrderIn): boolean {
@@ -43,6 +52,7 @@ export class OrderRequest {
 }
 
 export class OrderKeys {
+  static readonly pendingForMs = 30 * 60_000;
   private readonly newKey: () => string;
   private readonly now: () => number;
   private pending: { request: OrderRequest; key: string } | null = null;
@@ -53,9 +63,10 @@ export class OrderKeys {
   }
 
   keyFor(order: GiftCardOrderIn): string {
-    if (!this.pending || !this.pending.request.sameAs(order)) {
+    const now = this.now();
+    if (!this.pending || !this.pending.request.sameAs(order) || now - this.pending.request.askedAt > OrderKeys.pendingForMs) {
       this.pending = {
-        request: new OrderRequest({ ...order }, this.now()),
+        request: new OrderRequest({ ...order }, now),
         key: this.newKey(),
       };
     }
