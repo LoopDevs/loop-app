@@ -393,6 +393,20 @@ test('a gift card id is encoded into the path', async () => {
   assert.equal(sent[0].url, `${apiUrl}/gift-cards/a%2Fb%3Fc`);
 });
 
+test('the active order is the newest in-progress card that is not skipped', async () => {
+  await signIn('user-42');
+  const pagination = { page: 1, pages: 1, perPage: 5, total: 2 };
+  respond = (request) =>
+    request.url.endsWith('/gift-cards/g2')
+      ? json({ ...card({}), id: 'g2' })
+      : json({ result: [card({}), { ...card({}), id: 'g2' }], pagination });
+  const active = await ctx.activeGiftCard('m1', (candidate) => candidate.id === 'g1');
+  assert.equal(active?.id, 'g2');
+  assert.equal(sent[1].url, `${apiUrl}/gift-cards/g2`);
+  respond = () => json({ result: [card({})], pagination });
+  assert.equal(await ctx.activeGiftCard('m1', () => true), null);
+});
+
 test('an account watch opens a socket with the session headers and relays account events', async () => {
   await signIn('user-42');
   await ctx.status();

@@ -515,9 +515,9 @@ class CtxClient {
     };
   }
 
-  async activeGiftCard(merchantId?: string): Promise<GiftCard | null> {
+  async activeGiftCard(merchantId?: string, skip?: (order: GiftCard) => boolean): Promise<GiftCard | null> {
     const { result } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], perPage: 5 });
-    const newest = result[0];
+    const newest = result.find((order) => !skip?.(order));
     return newest ? this.giftCard(newest.id) : null;
   }
 
