@@ -63,6 +63,7 @@ export class CtxResponse {
         'paymentCryptoAddress',
         'paymentCryptoTxId',
         'paymentUrlExpiration',
+        'plaidLinkToken',
         'cashbackAmount',
         'cashbackCurrency',
       )

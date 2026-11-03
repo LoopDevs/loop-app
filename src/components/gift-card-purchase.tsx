@@ -23,6 +23,7 @@ import { loopLinks } from '@/constants/loop-links';
 import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
+import { BankLink } from '@/ctx/bank-link';
 import { BankPayment } from '@/ctx/bank-payment';
 import { BuyPrice, type BuyQuote } from '@/ctx/buy-price';
 import { BuyTimer } from '@/ctx/buy-timer';
@@ -544,17 +545,37 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
       await showResult(result);
     });
 
+  const approveInLink = async (giftCard: GiftCard, token: string) => {
+    const outcome = await BankLink.present(token).catch((error: unknown) => {
+      errorReporting.reportError(error, `Bank approval could not open for order ${giftCard.id}`);
+      return null;
+    });
+    if (!outcome || outcome.kind === 'approved' || !mounted.current) {
+      return;
+    }
+    if (outcome.errorCode) {
+      errorReporting.reportMessage(`Bank approval left with ${outcome.errorCode} for order ${giftCard.id}`);
+    }
+    if (outcome.displayMessage) {
+      toast(outcome.displayMessage);
+    }
+  };
+
   const approveAtBank = async (giftCard: GiftCard) => {
-    const link = BankPayment.openLink(giftCard);
-    if (!link) {
+    const token = BankPayment.linkToken(giftCard);
+    const link = token ? null : BankPayment.openLink(giftCard);
+    if (token) {
+      await approveInLink(giftCard, token);
+    } else if (link) {
+      await openBrowserAsync(link, {
+        presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+      });
+    } else {
       if (BankPayment.linkRefused(giftCard)) {
         errorReporting.reportMessage(`Bank approval link refused for order ${giftCard.id}`);
       }
       return;
     }
-    await openBrowserAsync(link, {
-      presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
-    });
     const fetched = await ctx.giftCard(giftCard.id).catch(() => null);
     if (fetched && mounted.current) {
       setOrder((held) => OneTapBuy.merged(held, fetched));
