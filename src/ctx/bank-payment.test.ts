@@ -56,14 +56,32 @@ test('a bank order is charged once CTX marks the payment paid', () => {
 });
 
 test('the approval link is open while the order is unpaid and the link is live', () => {
-  assert.equal(BankPayment.link(bankOrder(), now), 'https://secure.plaid.com/hl/abc');
+  assert.equal(BankPayment.approvable(bankOrder(), now), true);
   assert.equal(BankPayment.linkExpired(bankOrder(), now), false);
 });
 
 test('the approval link closes when it expires', () => {
   const expired = bankOrder({ paymentUrlExpiration: earlier });
-  assert.equal(BankPayment.link(expired, now), null);
+  assert.equal(BankPayment.approvable(expired, now), false);
   assert.equal(BankPayment.linkExpired(expired, now), true);
+});
+
+test('a native link token is offered for approval while the order is unpaid', () => {
+  const native = bankOrder({ paymentUrl: undefined, plaidLinkToken: 'link-sandbox-1' });
+  assert.equal(BankPayment.linkToken(native), 'link-sandbox-1');
+  assert.equal(BankPayment.openLink(native), null);
+  assert.equal(BankPayment.approvalReady(native), true);
+  assert.equal(BankPayment.approvable(native, now), true);
+  assert.equal(BankPayment.approvable({ ...native, paymentUrlExpiration: earlier }, now), false);
+  assert.equal(BankPayment.linkToken(bankOrder()), null);
+  assert.equal(BankPayment.linkToken({ ...native, status: 'paid', paymentStatus: 'paid' }), null);
+  assert.equal(BankPayment.linkToken({ ...native, paymentMethod: 'crypto' }), null);
+});
+
+test('an order with neither a token nor an approval link is not ready to approve', () => {
+  assert.equal(BankPayment.approvalReady(bankOrder({ paymentUrl: undefined })), false);
+  assert.equal(BankPayment.approvalReady(bankOrder({ paymentUrl: 'https://evil.test/hl/abc' })), false);
+  assert.equal(BankPayment.approvalReady(bankOrder({ status: 'paid', paymentStatus: 'paid' })), false);
 });
 
 test('the open link ignores time and only needs an unpaid bank order with a link', () => {
@@ -75,7 +93,7 @@ test('the open link ignores time and only needs an unpaid bank order with a link
 
 test('a link without a readable expiry stays open', () => {
   assert.equal(BankPayment.linkExpired(bankOrder({ paymentUrlExpiration: undefined }), now), false);
-  assert.equal(BankPayment.link(bankOrder({ paymentUrlExpiration: 'soon' }), now), 'https://secure.plaid.com/hl/abc');
+  assert.equal(BankPayment.approvable(bankOrder({ paymentUrlExpiration: 'soon' }), now), true);
 });
 
 test('only an https link on a plaid host is offered for approval', () => {
@@ -97,13 +115,23 @@ test('a link that is present but not offered for approval counts as refused', ()
 test('a paid or settled order has no link and is never expired', () => {
   for (const status of ['paid', 'fulfilled', 'expired', 'rejected'] as const) {
     const order = bankOrder({ status, paymentUrlExpiration: earlier });
-    assert.equal(BankPayment.link(order, now), null);
+    assert.equal(BankPayment.approvable(order, now), false);
     assert.equal(BankPayment.linkExpired(order, now), false);
   }
 });
 
 test('a crypto order never offers a bank link', () => {
-  assert.equal(BankPayment.link(bankOrder({ paymentMethod: 'crypto' }), now), null);
+  assert.equal(BankPayment.approvable(bankOrder({ paymentMethod: 'crypto' }), now), false);
+});
+
+test('an unpaid order with a live token resumes waiting for the bank', () => {
+  const native = bankOrder({ paymentUrl: undefined, plaidLinkToken: 'link-sandbox-1' });
+  assert.deepEqual(BankPayment.resumed(native, now), {
+    order: native,
+    payment: { kind: 'bank', linkOpen: true },
+    follow: true,
+    sent: null,
+  });
 });
 
 test('an unpaid order with a live link resumes waiting for the bank', () => {

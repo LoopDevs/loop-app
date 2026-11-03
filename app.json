@@ -138,7 +138,15 @@
           "faceIDPermission": "Loop uses Face ID to unlock the app and to approve payments from your wallet on this device."
         }
       ],
-      "expo-local-authentication"
+      "expo-local-authentication",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 25
+          }
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "fingerprint"

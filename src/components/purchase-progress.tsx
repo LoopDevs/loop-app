@@ -62,9 +62,9 @@ export function PurchaseProgress({
   const outcome = order ? outcomeText(order, payment.kind === 'confirming') : null;
   const submitted = order?.status === 'paid' || payment.kind === 'confirming';
   const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
-  const bankLink = order && payment.kind === 'bank' && payment.linkOpen ? BankPayment.openLink(order) : null;
+  const bankApproval = order && payment.kind === 'bank' && payment.linkOpen ? BankPayment.approvalReady(order) : false;
   const bankExpired = order?.status === 'unpaid' && payment.kind === 'bank' && !payment.linkOpen;
-  const bankChecking = order?.status === 'unpaid' && payment.kind === 'bank' && payment.linkOpen && bankLink === null;
+  const bankChecking = order?.status === 'unpaid' && payment.kind === 'bank' && payment.linkOpen && !bankApproval;
   const paymentFailed = order?.status === 'unpaid' && payment.kind === 'failed';
   const failed = paymentFailed || outcome !== null;
   const cancellable = order !== null && !working && !submitted && DismissedOrders.cancellable(order);
@@ -95,14 +95,14 @@ export function PurchaseProgress({
       : giftCardStatusLabel(order?.status ?? 'unpaid')
     : submitted
       ? 'Your gift card is on its way'
-      : bankLink
+      : bankApproval
         ? 'Approve the payment in your banking app'
         : bankExpired
           ? 'The bank link has expired'
           : bankChecking
             ? 'Checking with your bank…'
             : 'Buying your gift card…';
-  const detail = failed ? null : bankLink || bankExpired ? null : 'This only takes a moment.';
+  const detail = failed ? null : bankApproval || bankExpired ? null : 'This only takes a moment.';
 
   return (
     <View style={styles.stage}>
@@ -150,7 +150,7 @@ export function PurchaseProgress({
             message="Start again to get a new link. If you already approved the payment, your gift card is still on its way."
           />
         )}
-        {bankLink && order && (
+        {bankApproval && order && (
           <Button label="Approve at your bank" variant="primary" onPress={() => onApprove(order)} disabled={busy} />
         )}
         {(paymentFailed || bankExpired) && (

@@ -120,8 +120,11 @@ export type GiftCardOrderIn = {
   cryptoCurrency?: PaymentCurrency;
 };
 
+export type OrderPlatform = 'android' | 'ios';
+
 type GiftCardOrderBody = GiftCardOrderIn & {
   rewardType: 'cashback';
+  platform?: OrderPlatform;
 };
 
 export type GiftCard = {
@@ -143,6 +146,7 @@ export type GiftCard = {
   paymentCryptoTxId?: string;
   paymentUrl?: string;
   paymentUrlExpiration?: string;
+  plaidLinkToken?: string;
   number?: string;
   pin?: string;
   redeemUrl?: string;
@@ -387,7 +391,7 @@ class CtxClient {
   }
 
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
-    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
+    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback', ...this.orderPlatform() };
     const idempotencyKey = this.orderKeys.keyFor(order);
     const card = await this.sentOrder(body, idempotencyKey);
     if (!new OrderRequest(order).matches(card)) {
@@ -396,6 +400,11 @@ class CtxClient {
     }
     this.orderKeys.settle(idempotencyKey);
     return card;
+  }
+
+  private orderPlatform(): Pick<GiftCardOrderBody, 'platform'> {
+    const os = Platform.OS;
+    return os === 'android' || os === 'ios' ? { platform: os } : {};
   }
 
   private async sentOrder(body: GiftCardOrderBody, idempotencyKey: string): Promise<GiftCard> {
