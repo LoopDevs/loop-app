@@ -106,6 +106,19 @@ test('an unknown provider is not shown', () => {
   assert.equal(profile.signInProviderLabel(), null);
 });
 
+test('a user without a legal name confirms the name the sign-in gave', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', name: 'Ada Lovelace' }, company });
+  assert.equal(profile.needsName(), true);
+  assert.equal(profile.nameSuggestion(), 'Ada Lovelace');
+  assert.deepEqual(profile.legalNameUpdate(' Ada  Lovelace '), { legalName: 'Ada Lovelace' });
+  assert.equal(Profile.fromMe(newUser).nameSuggestion(), '');
+});
+
+test('a saved legal name is suggested over the sign-in name', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', name: 'Ada', legalName: 'Ada Lovelace' }, company });
+  assert.equal(profile.nameSuggestion(), 'Ada Lovelace');
+});
+
 test('the passkey is labelled with the account email', () => {
   const relay = { id: 'u1', email: 'abc123@privaterelay.appleid.com' };
   assert.equal(Profile.fromMe({ user: relay, company }).passkeyLabel(), 'abc123@privaterelay.appleid.com');
@@ -202,10 +215,10 @@ test('a legal name needs a first and last name', () => {
   assert.equal(Profile.legalNameProblem('   '), Profile.legalNameMessage);
 });
 
-test('a user has a bank identity once a full legal name is saved', () => {
-  assert.equal(Profile.fromMe({ user: { id: 'u1' }, company }).hasBankIdentity(), false);
-  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane' }, company }).hasBankIdentity(), false);
-  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' }, company }).hasBankIdentity(), true);
+test('a user needs a name until a full legal name is saved', () => {
+  assert.equal(Profile.fromMe({ user: { id: 'u1' }, company }).needsName(), true);
+  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane' }, company }).needsName(), true);
+  assert.equal(Profile.fromMe({ user: { id: 'u1', legalName: 'Jane Doe' }, company }).needsName(), false);
 });
 
 test('a legal name update sends the tidied name and nothing when unchanged or incomplete', () => {
@@ -218,7 +231,7 @@ test('a legal name update sends the tidied name and nothing when unchanged or in
 test('a saved legal name carries over when the user is updated', () => {
   const profile = Profile.fromMe({ user: { id: 'u1' }, company }).withUser({ id: 'u1', legalName: 'Jane Doe' });
   assert.equal(profile.legalName, 'Jane Doe');
-  assert.equal(profile.hasBankIdentity(), true);
+  assert.equal(profile.needsName(), false);
 });
 
 test('an update applies locally and keeps the rest of the user', () => {
@@ -233,4 +246,21 @@ test('an update applies locally and keeps the rest of the user', () => {
   assert.equal(updated.signInProviderLabel(), 'Signed in with Apple');
   assert.deepEqual(updated.cashbackDestinations(), profile.cashbackDestinations());
   assert.equal(profile.savesCashback(), false);
+});
+
+test('a remembered bank is only sent when it changes', () => {
+  const fresh = Profile.fromMe({ user: { id: 'u1' }, company });
+  assert.equal(fresh.bank, null);
+  assert.deepEqual(fresh.bankUpdate({ id: 'ins_117650', name: 'Monzo' }), {
+    bankInstitutionId: 'ins_117650',
+    bankInstitutionName: 'Monzo',
+  });
+  assert.equal(fresh.bankUpdate(null), null);
+  const remembered = fresh.withUpdate({ bankInstitutionId: 'ins_117650', bankInstitutionName: 'Monzo' });
+  assert.deepEqual(remembered.bank, { id: 'ins_117650', name: 'Monzo' });
+  assert.equal(remembered.bankUpdate({ id: 'ins_117650', name: 'Monzo' }), null);
+  assert.deepEqual(remembered.bankUpdate({ id: 'ins_1', name: 'Starling' }), {
+    bankInstitutionId: 'ins_1',
+    bankInstitutionName: 'Starling',
+  });
 });

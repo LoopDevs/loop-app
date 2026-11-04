@@ -18,33 +18,65 @@ import { TransferEvents, type LedgerRange, type TransferSearchResult } from './t
 const simulationSource = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
 export class Soroban {
+  static readonly hedgeMs = 1000;
+
   private readonly servers: rpc.Server[];
+  private readonly hedgeMs: number;
   private preferred = 0;
 
-  constructor(servers: rpc.Server[]) {
+  constructor(servers: rpc.Server[], hedgeMs = Soroban.hedgeMs) {
     this.servers = servers;
+    this.hedgeMs = hedgeMs;
   }
 
   static forUrls(urls: string[]): Soroban {
     return new Soroban(urls.map((url) => new rpc.Server(url, { timeout: Deadline.requestMs })));
   }
 
-  private async call<T>(request: (server: rpc.Server) => Promise<T>): Promise<T> {
-    let transportError: unknown;
-    for (let attempt = 0; attempt < this.servers.length; attempt++) {
-      const index = (this.preferred + attempt) % this.servers.length;
-      try {
-        const result = await request(this.servers[index]);
-        this.preferred = index;
-        return result;
-      } catch (error) {
-        if (!(error instanceof Error)) {
-          throw error;
+  private call<T>(request: (server: rpc.Server) => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const count = this.servers.length;
+      let started = 0;
+      let failed = 0;
+      let settled = false;
+      let hedge: ReturnType<typeof setTimeout> | undefined;
+      const settle = (outcome: () => void) => {
+        if (settled) {
+          return;
         }
-        transportError = error;
-      }
-    }
-    throw transportError;
+        settled = true;
+        clearTimeout(hedge);
+        outcome();
+      };
+      const start = () => {
+        clearTimeout(hedge);
+        const index = (this.preferred + started) % count;
+        started += 1;
+        if (started < count) {
+          hedge = setTimeout(start, this.hedgeMs);
+        }
+        request(this.servers[index]).then(
+          (result) =>
+            settle(() => {
+              this.preferred = index;
+              resolve(result);
+            }),
+          (error: unknown) => {
+            if (!(error instanceof Error)) {
+              settle(() => reject(error));
+              return;
+            }
+            failed += 1;
+            if (failed === count) {
+              settle(() => reject(error));
+            } else if (started < count && !settled) {
+              start();
+            }
+          },
+        );
+      };
+      start();
+    });
   }
 
   async latestLedger(): Promise<number> {

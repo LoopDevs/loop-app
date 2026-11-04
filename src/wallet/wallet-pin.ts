@@ -20,6 +20,8 @@ type LinkShape = {
 
 type SignWithPasskey = (challenge: Uint8Array) => Promise<PasskeyAssertion>;
 
+export type AddressOf = (credentialId: Uint8Array) => Promise<string>;
+
 export class WalletPin {
   readonly key: string;
   readonly pendingKey: string;
@@ -40,14 +42,14 @@ export class WalletPin {
     const usable = links.filter(
       (candidate) => candidate.sponsored && candidate.chain === 'XLM' && candidate.status === 'active',
     );
-    if (!pinned) {
-      return usable[0] ?? null;
+    return usable.find((candidate) => candidate.address === pinned?.address) ?? usable[0] ?? null;
+  }
+
+  static current(pinned: PinnedWallet | null, address: string, passkeyPublicKey: Uint8Array): PinnedWallet | null {
+    if (!pinned || pinned.address !== address || pinned.passkeyPublicKey !== base64.encode(passkeyPublicKey)) {
+      return null;
     }
-    const match = usable.find((candidate) => candidate.address === pinned.address);
-    if (!match) {
-      throw new Error("Your account doesn't list the wallet created on this device. Contact support.");
-    }
-    return match;
+    return pinned;
   }
 
   async read(): Promise<PinnedWallet | null> {
@@ -99,11 +101,16 @@ export class WalletPin {
     return created;
   }
 
-  async admits(pinned: PinnedWallet | null, address: string, checked: WalletCheck): Promise<boolean> {
+  async admits(
+    pinned: PinnedWallet | null,
+    address: string,
+    checked: WalletCheck,
+    addressOf: AddressOf,
+  ): Promise<boolean> {
     if (checked.thisDevice === 'unlinked') {
       return false;
     }
-    return pinned !== null || (await this.pinCreatedHere(address, checked.passkeyPublicKey));
+    return pinned !== null || (await this.pinCreatedHere(address, checked.passkeyPublicKey, addressOf));
   }
 
   async confirmThisDevice(
@@ -123,9 +130,12 @@ export class WalletPin {
     }
   }
 
-  async pinCreatedHere(address: string, passkeyPublicKey: Uint8Array): Promise<boolean> {
+  async pinCreatedHere(address: string, passkeyPublicKey: Uint8Array, addressOf: AddressOf): Promise<boolean> {
     const pending = await this.pendingPasskey();
     if (!pending || bytesToHex(pending.publicKey) !== bytesToHex(passkeyPublicKey)) {
+      return false;
+    }
+    if ((await addressOf(base64.decode(pending.credentialId))) !== address) {
       return false;
     }
     await this.write({ address, passkeyPublicKey: base64.encode(passkeyPublicKey) });

@@ -1,5 +1,6 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
@@ -9,8 +10,9 @@ import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { signInReportMessage } from '@/ctx/sign-in-report';
 import { OrderWake } from '@/ctx/order-wake';
 import { SocketEvent } from '@/ctx/socket-event';
+import { SocketWatch, type SocketPresence, type WatchedSocket } from '@/ctx/socket-watch';
 import { Deadline } from '@/ctx/deadline';
-import { Merchant } from '@/ctx/merchant';
+import { CompanyCashback, Merchant } from '@/ctx/merchant';
 import type { PayoutJson } from '@/ctx/payout';
 import { Profile } from '@/ctx/profile';
 import { blockingServiceState, type BlockingServiceState } from '@/ctx/service-state';
@@ -117,10 +119,14 @@ export type GiftCardOrderIn = {
   fiatAmount: string;
   fiatCurrency: string;
   cryptoCurrency?: PaymentCurrency;
+  chooseBank?: boolean;
 };
+
+export type OrderPlatform = 'android' | 'ios';
 
 type GiftCardOrderBody = GiftCardOrderIn & {
   rewardType: 'cashback';
+  platform?: OrderPlatform;
 };
 
 export type GiftCard = {
@@ -142,6 +148,7 @@ export type GiftCard = {
   paymentCryptoTxId?: string;
   paymentUrl?: string;
   paymentUrlExpiration?: string;
+  plaidLinkToken?: string;
   number?: string;
   pin?: string;
   redeemUrl?: string;
@@ -194,26 +201,33 @@ export type OAuthIdentityJson = {
 export type UserJson = {
   id: string;
   email?: string;
+  name?: string;
   legalName?: string;
   country?: string;
   stableCurrency?: string;
   cashbackDestination?: CashbackDestination;
+  bankInstitutionId?: string;
+  bankInstitutionName?: string;
   oauthIdentities?: OAuthIdentityJson[];
+};
+
+export type CompanyJson = {
+  countries?: string[];
+  stableCurrencies?: string[];
+  defaultUserDiscountBasisPoints?: number | null;
 };
 
 export type MeJson = {
   user: UserJson;
-  company?: {
-    countries?: string[];
-    stableCurrencies?: string[];
-  };
+  company?: CompanyJson;
 };
 
 export type UserUpdate =
   | { country: string }
   | { stableCurrency: string }
   | { cashbackDestination: CashbackDestination }
-  | { legalName: string };
+  | { legalName: string }
+  | { bankInstitutionId: string; bankInstitutionName: string };
 
 export type BalanceJson = {
   currency: string;
@@ -239,8 +253,11 @@ export type SponsoredResult = {
 };
 
 class CtxClient {
-  private readonly auth = new SessionAuth(this.send.bind(this), tokenStore);
+  private readonly auth = new SessionAuth(this.send.bind(this), tokenStore, (accessToken) =>
+    this.userIdFrom(accessToken),
+  );
   private serviceStateListener: ServiceStateListener | null = null;
+  private readonly companyCashback = new CompanyCashback();
   private readonly orderKeys = new OrderKeys(
     () => bytesToHex(randomBytes(16)),
     () => Date.now(),
@@ -315,12 +332,18 @@ class CtxClient {
     await this.auth.clearSession();
   }
 
+  onSessionEnd(listener: () => void): () => void {
+    return this.auth.onSessionEnd(listener);
+  }
+
   async userId(): Promise<string> {
     return this.userIdFrom(await this.auth.requireAccessToken());
   }
 
   async me(): Promise<Profile> {
-    return Profile.fromMe(await this.auth.sessionRequest<MeJson>('GET', '/me'));
+    const me = await this.auth.sessionRequest<MeJson>('GET', '/me');
+    this.companyCashback.learn(me.company);
+    return Profile.fromMe(me);
   }
 
   updateUser(update: UserUpdate): Promise<UserJson> {
@@ -341,7 +364,7 @@ class CtxClient {
       query.set('name', pattern);
     }
     if (ids) {
-      query.set('ids', ids.map((id) => Merchant.searchPattern(id)).join(','));
+      query.set('ids', ids.map((id) => Merchant.exactPattern(id)).join(','));
     }
     if (category) {
       query.set('category', category);
@@ -356,25 +379,25 @@ class CtxClient {
       result: MerchantJson[] | null;
       pagination: Pagination;
     }>(`/merchants?${query}`);
-    return { result: (result ?? []).map((json) => new Merchant(json)), pagination };
+    return { result: (result ?? []).map((json) => new Merchant(json, this.companyCashback)), pagination };
   }
 
   async merchant(idOrSlug: string): Promise<Merchant> {
     if (await this.isSignedIn()) {
       const json = await this.auth.sessionRequest<MerchantJson>('GET', `/merchants/${encodeURIComponent(idOrSlug)}`);
-      return new Merchant(json);
+      return new Merchant(json, this.companyCashback);
     }
-    const query = new URLSearchParams({ slug: idOrSlug });
+    const query = new URLSearchParams({ slug: Merchant.exactPattern(idOrSlug) });
     const { result } = await this.catalogRequest<{ result: MerchantJson[] | null }>(`/merchants?${query}`);
-    const json = result?.[0];
+    const json = result?.find((merchant) => merchant.slug === idOrSlug);
     if (!json) {
       throw new Error('We couldn’t find that gift card.');
     }
-    return new Merchant(json);
+    return new Merchant(json, this.companyCashback);
   }
 
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
-    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
+    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback', ...this.orderPlatform() };
     const idempotencyKey = this.orderKeys.keyFor(order);
     const card = await this.sentOrder(body, idempotencyKey);
     if (!new OrderRequest(order).matches(card)) {
@@ -383,6 +406,11 @@ class CtxClient {
     }
     this.orderKeys.settle(idempotencyKey);
     return card;
+  }
+
+  private orderPlatform(): Pick<GiftCardOrderBody, 'platform'> {
+    const os = Platform.OS;
+    return os === 'android' || os === 'ios' ? { platform: os } : {};
   }
 
   private async sentOrder(body: GiftCardOrderBody, idempotencyKey: string): Promise<GiftCard> {
@@ -421,12 +449,23 @@ class CtxClient {
     );
   }
 
+  async saveGiftCardCode(id: string, number: string, pin: string): Promise<GiftCard> {
+    return this.checked(
+      CtxResponse.giftCard,
+      await this.auth.sessionRequest('PUT', `/gift-cards/${encodeURIComponent(id)}/number`, { number, pin }),
+    );
+  }
+
   watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
-    return this.openSocket('giftcard', (raw) => {
-      if (OrderWake.concerns(raw, orderId)) {
-        wake.signal();
-      }
-    });
+    return this.openSocket(
+      'giftcard',
+      (raw) => {
+        if (OrderWake.concerns(raw, orderId)) {
+          wake.signal();
+        }
+      },
+      { attach: () => wake.attach(), detach: () => wake.detach() },
+    );
   }
 
   watchAccount(onChange: () => void): Promise<() => void> {
@@ -437,23 +476,37 @@ class CtxClient {
     });
   }
 
-  private async openSocket(topic: string, onMessage: (raw: unknown) => void): Promise<() => void> {
-    const accessToken = await this.auth.requireAccessToken();
+  private openSocket(
+    topic: string,
+    onMessage: (raw: unknown) => void,
+    presence?: SocketPresence,
+  ): Promise<() => void> {
+    if (Platform.OS === 'web') {
+      return Promise.resolve(() => undefined);
+    }
+    const watch = new SocketWatch(
+      this.auth,
+      (accessToken) => this.connectSocket(accessToken),
+      topic,
+      onMessage,
+      presence,
+    );
+    return watch.start();
+  }
+
+  private connectSocket(accessToken: string): WatchedSocket {
     const HeaderSocket = WebSocket as unknown as new (
       url: string,
       protocols: undefined,
       options: { headers: Record<string, string> },
-    ) => WebSocket;
-    const socket = new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
+    ) => WatchedSocket;
+    return new HeaderSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws`, undefined, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'X-Client-Id': this.clientId,
         'X-App-Version': this.appVersion,
       },
     });
-    socket.onopen = () => socket.send(JSON.stringify({ action: 'subscribe', topic }));
-    socket.onmessage = (message) => onMessage(message.data);
-    return () => socket.close();
   }
 
   async giftCards({ merchantId, status, notStatus, order, page, perPage }: GiftCardQuery): Promise<GiftCardPage> {
@@ -490,9 +543,9 @@ class CtxClient {
     };
   }
 
-  async activeGiftCard(merchantId?: string): Promise<GiftCard | null> {
+  async activeGiftCard(merchantId?: string, skip?: (order: GiftCard) => boolean): Promise<GiftCard | null> {
     const { result } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], perPage: 5 });
-    const newest = result[0];
+    const newest = result.find((order) => !skip?.(order));
     return newest ? this.giftCard(newest.id) : null;
   }
 

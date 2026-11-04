@@ -8,6 +8,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
+import { ConfirmIdentity } from '@/components/confirm-identity';
 import { CountryMenu } from '@/components/country-menu';
 import { Button, Notice } from '@/components/ui/form';
 import { HomeActions } from '@/components/home-actions';
@@ -20,6 +21,7 @@ import {
   MerchantCover,
   SectionHeading,
 } from '@/components/merchant-card';
+import { PageTitle } from '@/components/page-title';
 import { PressScale } from '@/components/ui/press-scale';
 import { SignInButton, useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
@@ -35,6 +37,7 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
@@ -43,9 +46,9 @@ import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { Savings } from '@/wallet/savings';
-import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
+import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
 
-type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'wallet';
+type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'confirm-identity' | 'wallet';
 
 const featuredShown = 5;
 const stripShown = 10;
@@ -59,7 +62,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>(Platform.OS === 'web' ? 'signed-out' : 'loading');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
-  const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
+  const [blockedWallet, setBlockedWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
   const [sessionRead, setSessionRead] = useState(false);
   const { view, refresh } = useHoldings(wallet);
@@ -87,9 +90,9 @@ export default function HomeScreen() {
   }, []);
 
   const openActiveOrder = useCallback(async () => {
-    const activeOrder = await ctx.activeGiftCard().catch(() => null);
+    const activeOrder = await dismissedOrders.activeOrder().catch(() => null);
     if (activeOrder && homeFocused.current) {
-      router.push(`/shop/${activeOrder.merchantId}`, { withAnchor: true });
+      router.push(`/shop/pay/${activeOrder.merchantId}`, { withAnchor: true });
     }
   }, [router]);
 
@@ -100,9 +103,9 @@ export default function HomeScreen() {
       const loaded = await SmartWallet.load();
       await Promise.all([showWallet(loaded), loaded && Platform.OS !== 'web' ? openActiveOrder() : undefined]);
     } catch (error) {
-      if (error instanceof UnlinkedDevice) {
-        setUnlinkedWallet(error.wallet);
-        setScreen('unlinked-device');
+      if (error instanceof WalletBlocked) {
+        setBlockedWallet(error.wallet);
+        setScreen(error instanceof UnlinkedDevice ? 'unlinked-device' : 'confirm-identity');
         return;
       }
       walletLoadStarted.current = false;
@@ -234,6 +237,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <PageTitle />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -285,8 +289,12 @@ export default function HomeScreen() {
             </Animated.View>
           )}
 
-          {screen === 'unlinked-device' && unlinkedWallet && (
-            <AddDevice wallet={unlinkedWallet} onAdded={loadWallet} />
+          {screen === 'unlinked-device' && blockedWallet && (
+            <AddDevice wallet={blockedWallet} onAdded={loadWallet} />
+          )}
+
+          {screen === 'confirm-identity' && blockedWallet && (
+            <ConfirmIdentity wallet={blockedWallet} onConfirmed={loadWallet} />
           )}
 
           {message !== '' && <Notice message={message} />}
@@ -456,13 +464,13 @@ function SavingsNudge({ onPress }: { onPress: () => void }) {
     <PressScale
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Savings. ${Savings.rateHeadline}. ${Savings.riskShort}.`}
+      accessibilityLabel={`Savings. ${Savings.rateHeadline()}. ${Savings.riskShort}.`}
       style={[styles.nudge, { backgroundColor: theme.accentSoft }]}>
       <View style={[styles.nudgeIcon, { backgroundColor: theme.accent }]}>
         <SymbolView name={{ ios: 'leaf', android: 'savings', web: 'savings' }} size={20} tintColor={theme.onAccent} />
       </View>
       <View style={styles.nudgeText}>
-        <ThemedText type="smallBold">{Savings.rateHeadline}</ThemedText>
+        <ThemedText type="smallBold">{Savings.rateHeadline()}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           Let your cashback grow in savings. {Savings.riskShort}.
         </ThemedText>

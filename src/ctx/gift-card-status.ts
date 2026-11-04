@@ -3,7 +3,7 @@ import type { GiftCard } from '@/ctx/client';
 export type CashbackState = 'none' | 'pending' | 'credited' | 'reversed';
 
 export const pollIntervalMs = 3000;
-const maxPollIntervalMs = 30000;
+export const maxPollIntervalMs = 30000;
 
 export function pollDelayMs(polls: number): number {
   return Math.min(maxPollIntervalMs, pollIntervalMs * 2 ** Math.floor(polls / 10));

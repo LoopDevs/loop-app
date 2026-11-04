@@ -34,6 +34,14 @@ test('ctx routes token codes through the peg and fiat codes through fiat', () =>
   assert.equal(money.ctx('abc', 'XLM', 'en-US'), 'abc XLM');
 });
 
+test('name says the currency in plain words and labels amount fields with it', () => {
+  assert.equal(money.name('XLM.GBPLOOP'), 'Pounds');
+  assert.equal(money.name('USD'), 'Dollars');
+  assert.equal(money.name('XLM.EURC'), 'Euros');
+  assert.equal(money.name('XLM'), 'Balance');
+  assert.equal(money.amountLabel('XLM.GBPLOOP'), 'Amount in pounds');
+});
+
 test('payment keeps every significant decimal and the token symbol', () => {
   assert.equal(money.payment('25.6789000', 'XLM.USDC', 'en-US'), '25.6789 USDC');
   assert.equal(money.payment('0.0000001', 'XLM', 'en-US'), '0.0000001 XLM');

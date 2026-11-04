@@ -9,6 +9,7 @@ import { GiftCardDetails } from '@/components/gift-card-details';
 import { GiftCardFace } from '@/components/gift-card-face';
 import { useScrimScroll } from '@/components/home-panel';
 import { OrderHelp } from '@/components/order-help';
+import { PageTitle } from '@/components/page-title';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
 import { OrderDetailSkeleton } from '@/components/ui/skeleton';
@@ -33,9 +34,11 @@ import {
   giftCardStatusLabel,
   outcomeText,
   pollDelayMs,
+  settledStatuses,
   wasCharged,
 } from '@/ctx/gift-card-status';
 import { CashbackRate } from '@/ctx/merchant';
+import { OrderWake } from '@/ctx/order-wake';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { usePaymentSent } from '@/hooks/use-sent-payment';
 import { useSessionOwner } from '@/hooks/use-session-owner';
@@ -82,9 +85,10 @@ export default function GiftCardScreen() {
 
   useEffect(() => {
     let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let polls = 0;
+    const wake = new OrderWake();
+    let stopWatching: Promise<() => void> | null = null;
     const load = async () => {
+      let polls = 0;
       try {
         const { userId, changed } = await readSession();
         if (!active) {
@@ -97,14 +101,26 @@ export default function GiftCardScreen() {
           setMessage(signInMessage);
           return;
         }
-        const loaded = await ctx.giftCard(id);
+        let loaded = await ctx.giftCard(id);
         if (!active) {
           return;
         }
         setGiftCard(loaded);
-        if (loaded.status === 'paid') {
-          timer = setTimeout(load, pollDelayMs(polls));
+        while (active && !settledStatuses.includes(loaded.status)) {
+          stopWatching ??= ctx.watchOrder(id, wake).catch(() => () => undefined);
+          await wake.wait(Math.max(wake.interval(), pollDelayMs(polls)));
           polls += 1;
+          if (!active) {
+            return;
+          }
+          try {
+            loaded = await ctx.giftCard(id);
+          } catch {
+            continue;
+          }
+          if (active) {
+            setGiftCard(loaded);
+          }
         }
       } catch (error) {
         if (active) {
@@ -119,7 +135,8 @@ export default function GiftCardScreen() {
     load();
     return () => {
       active = false;
-      clearTimeout(timer);
+      wake.signal();
+      void stopWatching?.then((stop) => stop());
     };
   }, [id, attempt, readSession]);
 
@@ -138,6 +155,7 @@ export default function GiftCardScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <PageTitle title={shownGiftCard ? `${shownGiftCard.merchantName} gift card` : 'Gift card'} />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -166,7 +184,7 @@ export default function GiftCardScreen() {
               ))}
           </View>
         )}
-        {shownGiftCard && <GiftCardSummary giftCard={shownGiftCard} wide={wide} />}
+        {shownGiftCard && <GiftCardSummary giftCard={shownGiftCard} wide={wide} onChange={setGiftCard} />}
         <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
@@ -187,7 +205,13 @@ function sentenceCase(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean }) {
+type GiftCardSummaryProps = {
+  giftCard: GiftCard;
+  wide: boolean;
+  onChange: (giftCard: GiftCard) => void;
+};
+
+function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
   const theme = useTheme();
   const { gutter } = usePageLayout();
   const reduceMotion = useReducedMotion();
@@ -195,8 +219,9 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const payment = usePaymentSent(giftCard);
   const outcome = payment === undefined ? null : outcomeText(giftCard, payment.kind !== 'notSent');
   const sentTxId = payment?.kind === 'sent' ? payment.txId : undefined;
-  const processing = giftCard.status === 'paid';
   const byBank = BankPayment.isBank(giftCard);
+  const processing = giftCard.status === 'paid';
+  const awaitingBank = giftCard.status === 'unpaid' && byBank;
   const paid = byBank
     ? BankPayment.charged(giftCard)
       ? amountInMoney(giftCard.paymentFiatAmount, giftCard.paymentFiatCurrency)
@@ -238,9 +263,13 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
         <View style={[styles.heroInner, pageWidth]}>
           <GiftCardFace giftCard={giftCard} style={styles.heroCard} />
           <View style={styles.heroStatus}>
-            {processing && <ActivityIndicator size="small" color={theme.textSecondary} />}
+            {(processing || awaitingBank) && <ActivityIndicator size="small" color={theme.textSecondary} />}
             <Text style={[styles.heroStatusText, { color: theme.text }]} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
-              {processing ? 'Processing. Your code shows here when it is ready.' : giftCardStatusLabel(giftCard.status)}
+              {processing
+                ? 'Processing. Your code shows here when it is ready.'
+                : awaitingBank
+                  ? 'Waiting for your bank to confirm the payment.'
+                  : giftCardStatusLabel(giftCard.status)}
             </Text>
           </View>
         </View>
@@ -257,13 +286,13 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
               </>
             }>
             {outcome ? <Notice message={outcome} /> : null}
-            <GiftCardDetails giftCard={giftCard} />
+            <GiftCardDetails giftCard={giftCard} onChange={onChange} />
           </SplitLayout>
         </PageWidth>
       ) : (
         <View style={[styles.body, styles.section]}>
           {outcome ? <Notice message={outcome} /> : null}
-          <GiftCardDetails giftCard={giftCard} />
+          <GiftCardDetails giftCard={giftCard} onChange={onChange} />
           {summary}
           <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
         </View>

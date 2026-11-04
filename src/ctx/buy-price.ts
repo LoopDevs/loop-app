@@ -45,6 +45,13 @@ export class BuyPrice {
     return units.format(price, 2);
   }
 
+  static inTokens(shown: bigint, usdPrice: bigint): bigint | null {
+    if (usdPrice <= 0n) {
+      return null;
+    }
+    return (shown * Rates.one + usdPrice - 1n) / usdPrice;
+  }
+
   private static withinTolerance(price: bigint, shown: bigint): boolean {
     return price * BuyPrice.basisPoints <= shown * (BuyPrice.basisPoints + BuyPrice.toleranceBasisPoints);
   }

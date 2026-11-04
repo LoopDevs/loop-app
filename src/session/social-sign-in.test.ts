@@ -177,6 +177,13 @@ test('oauthLoginBody omits the nonce when the provider took none', () => {
   assert.deepEqual(oauthLoginBody('google', { idToken: 'token' }), { provider: 'google', idToken: 'token' });
 });
 
+test('oauthLoginBody carries the name Apple gives on first consent', () => {
+  assert.deepEqual(
+    oauthLoginBody('apple', { idToken: 'token', nonce: 'n', givenName: 'Ada', familyName: 'Lovelace' }),
+    { provider: 'apple', idToken: 'token', nonce: 'n', givenName: 'Ada', familyName: 'Lovelace' },
+  );
+});
+
 test('newSignInNonce is 64 hex characters and differs on every call', () => {
   const nonces = new Set(Array.from({ length: 50 }, () => newSignInNonce()));
   assert.equal(nonces.size, 50);

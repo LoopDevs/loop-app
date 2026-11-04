@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PageTitle } from '@/components/page-title';
 import { FontFamily, Layout, MaxContentWidth, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
@@ -30,6 +31,7 @@ export function PageHeader({
   const pageWidth = width === 'page' ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
   return (
     <View style={[styles.header, { paddingTop: topInset + Spacing.three }]}>
+      <PageTitle title={title} />
       <View style={[styles.inner, pageWidth]}>
         <View style={styles.titleRow}>
           <View style={styles.titleBlock}>

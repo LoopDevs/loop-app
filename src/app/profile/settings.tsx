@@ -15,6 +15,7 @@ import { Button, Notice } from "@/components/ui/form";
 import { useScrimScroll } from "@/components/home-panel";
 import { ListGroup, ListRow } from "@/components/ui/list-row";
 import { PageHeader } from "@/components/page-header";
+import { PageTitle } from "@/components/page-title";
 import { useOnSignIn, useSignIn } from "@/components/sign-in";
 import { SiteFooter } from "@/components/site-footer";
 import { OrderRowsSkeleton } from "@/components/ui/skeleton";
@@ -37,7 +38,7 @@ import { usePageLayout } from "@/hooks/use-page-layout";
 import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
 import { runningUpdateId } from "@/updates/update-checker";
-import { SmartWallet, UnlinkedDevice } from "@/wallet/smart-wallet";
+import { SmartWallet, UnlinkedDevice, WalletBlocked } from "@/wallet/smart-wallet";
 
 type SettingsSection = "account" | "help" | "data";
 
@@ -358,6 +359,7 @@ export default function SettingsScreen() {
     return (
       <ThemedView style={styles.container}>
         <StatusBar style="dark" />
+        <PageTitle title="Settings" />
         <Animated.ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.wideScroll}
@@ -405,6 +407,7 @@ export default function SettingsScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
+      <PageTitle title="Settings" />
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -450,6 +453,9 @@ function SpendingDevice() {
           (error: unknown) => {
             if (error instanceof UnlinkedDevice) {
               return { wallet: error.wallet, thisDevice: false };
+            }
+            if (error instanceof WalletBlocked) {
+              return { wallet: error.wallet, thisDevice: true };
             }
             throw error;
           },

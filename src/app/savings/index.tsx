@@ -2,14 +2,16 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { Alert, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button, Field, Notice } from '@/components/ui/form';
 import { useScrimScroll } from '@/components/home-panel';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { SavingsCard } from '@/components/home-overview';
 import { PageHeader } from '@/components/page-header';
+import { SavingsTicker } from '@/components/savings-ticker';
 import { useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
 import { SplitLayout } from '@/components/split-layout';
@@ -18,7 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { useToast } from '@/components/ui/toast';
-import { FontFamily, Layout, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { Rates } from '@/ctx/rates';
 import type { HoldingsView } from '@/hooks/use-holdings';
@@ -27,10 +29,10 @@ import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
+import type { PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
-import { strings } from '@/strings';
-import { Savings, type DepositInput } from '@/wallet/savings';
-import { UnlinkedDevice } from '@/wallet/smart-wallet';
+import { Savings, SavingsRate, type DepositInput } from '@/wallet/savings';
+import { WalletBlocked } from '@/wallet/smart-wallet';
 
 const quickAmounts = ['25', '50', '100'];
 
@@ -40,10 +42,11 @@ export default function SavingsScreen() {
   const toast = useToast();
   const { wide } = usePageLayout();
   const { openSignIn } = useSignIn();
-  const { state, wallet, view, refresh, reload } = useWallet();
+  const { state, wallet, view, refresh, reload, problem } = useWallet();
   const { busy, message, setMessage, run } = useBusyAction();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
   const [adding, setAdding] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const pullToRefresh = async () => {
@@ -55,10 +58,14 @@ export default function SavingsScreen() {
     }
   };
   const savings = view?.holdings.withdrawableSavings() ?? [];
-  const depositable = view?.holdings.inWallet(Savings.depositCurrency) ?? 0n;
+  const stable = view?.stable ?? Rates.usd;
+  const depositCurrency = Savings.depositCurrencyFor(stable);
+  const depositable = view?.holdings.inWallet(depositCurrency) ?? 0n;
+  const [firstSaving] = view?.holdings.savingsHoldings() ?? [];
+  const savingsBalance = firstSaving ? money.token(firstSaving.amount, firstSaving.currency) : null;
 
-  const reloadIfUnlinked = (error: unknown): never => {
-    if (error instanceof UnlinkedDevice) {
+  const reloadIfBlocked = (error: unknown): never => {
+    if (error instanceof WalletBlocked) {
       reload();
     }
     throw error;
@@ -71,7 +78,7 @@ export default function SavingsScreen() {
       }
       try {
         for (const { currency, shares } of savings) {
-          const result = await wallet.withdraw(currency, shares).catch(reloadIfUnlinked);
+          const result = await wallet.withdraw(currency, shares).catch(reloadIfBlocked);
           if (result.error) {
             setMessage(result.error);
             return;
@@ -88,9 +95,9 @@ export default function SavingsScreen() {
       if (!wallet) {
         return;
       }
-      const currency = Savings.depositCurrency;
+      const currency = depositCurrency;
       const outcome = await Savings.sendDeposit(
-        () => wallet.deposit(currency, amount).catch(reloadIfUnlinked),
+        () => wallet.deposit(currency, amount).catch(reloadIfBlocked),
         wallet.vaultCall(),
         input,
       );
@@ -108,17 +115,8 @@ export default function SavingsScreen() {
     });
 
   const confirmWithdraw = () => {
-    const prompt = 'Move your savings back to your balance?';
-    if (Platform.OS === 'web') {
-      if (globalThis.confirm?.(prompt)) {
-        withdraw();
-      }
-      return;
-    }
-    Alert.alert('Withdraw savings', prompt, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Withdraw', onPress: withdraw },
-    ]);
+    setWithdrawing(false);
+    withdraw();
   };
 
   const addToSavings = () => {
@@ -126,7 +124,7 @@ export default function SavingsScreen() {
       openSignIn('Sign in to start saving.');
       return;
     }
-    setAdding((open) => !open);
+    setAdding(true);
   };
 
   return (
@@ -164,7 +162,7 @@ export default function SavingsScreen() {
               {state === 'ready' && (
                 <View style={[styles.ratePill, { backgroundColor: theme.accent }]}>
                   <Text style={[styles.ratePillText, { color: theme.onAccent }]} maxFontSizeMultiplier={1.3}>
-                    {Savings.rateHeadline}
+                    {Savings.rateHeadline(view?.stable)}
                   </Text>
                 </View>
               )}
@@ -174,7 +172,7 @@ export default function SavingsScreen() {
             ) : (
               <>
                 <ThemedText type={wide ? 'title' : 'subtitle'} accessibilityRole="header" style={styles.heroTitle}>
-                  {Savings.rateHeadline}
+                  {Savings.rateHeadline()}
                 </ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.heroLine}>
                   Your savings grow every day. Your cashback lands here too, and you can take it out whenever you
@@ -183,19 +181,9 @@ export default function SavingsScreen() {
               </>
             )}
             <View style={wide && styles.heroAction}>
-              <Button label="Add to savings" variant="primary" onPress={addToSavings} selected={adding} />
+              <Button label="Add to savings" variant="primary" onPress={addToSavings} />
             </View>
           </View>
-
-          {adding && (
-            <AddToSavings
-              depositable={depositable}
-              busy={busy}
-              ready={state === 'ready'}
-              onDeposit={deposit}
-              onClose={() => setAdding(false)}
-            />
-          )}
 
           {state === 'setup' && (
             <Notice
@@ -206,10 +194,14 @@ export default function SavingsScreen() {
             />
           )}
 
+          {state === 'blocked' && (
+            <Notice tone="neutral" message={problem} actionLabel="Go to Home" onAction={() => router.navigate('/')} />
+          )}
+
           {state === 'ready' && (
             <SavingsCard
               view={view}
-              onWithdraw={confirmWithdraw}
+              onWithdraw={() => setWithdrawing(true)}
               withdrawDisabled={busy || savings.length === 0}
               onCashback={() => router.push('/wallet/cashback')}
             />
@@ -234,6 +226,20 @@ export default function SavingsScreen() {
       </Animated.ScrollView>
       </KeyboardAvoid>
       <Animated.View pointerEvents="none" style={scrim} />
+      <BottomSheet open={adding} onClose={() => setAdding(false)} title="How much do you want to save?">
+        <AddToSavings
+          stable={stable}
+          currency={depositCurrency}
+          depositable={depositable}
+          busy={busy}
+          ready={state === 'ready'}
+          onDeposit={deposit}
+          onClose={() => setAdding(false)}
+        />
+      </BottomSheet>
+      <BottomSheet open={withdrawing} onClose={() => setWithdrawing(false)} title="Move savings to your balance">
+        <WithdrawSavings balance={savingsBalance} onConfirm={confirmWithdraw} onClose={() => setWithdrawing(false)} />
+      </BottomSheet>
     </ThemedView>
   );
 }
@@ -269,7 +275,7 @@ function SavingsBalance({ view }: { view: HoldingsView | null }) {
   }
   const stable = view.stable ?? Rates.usd;
   const [first] = view.holdings.savingsHoldings();
-  const balance = first ? money.token(first.amount, first.currency) : money.ctx('0', stable);
+  const rate = first ? SavingsRate.fixedFor(first.currency) : null;
   const earned = view.account?.receivedCashback(new Set([stable])) ?? 0n;
   const earnedLine =
     earned > 0n
@@ -280,9 +286,18 @@ function SavingsBalance({ view }: { view: HoldingsView | null }) {
       <ThemedText type="small" themeColor="textSecondary">
         Savings
       </ThemedText>
-      <ThemedText type="title" accessibilityRole="header" style={styles.heroBalance}>
-        {balance}
-      </ThemedText>
+      {first && rate ? (
+        <SavingsTicker value={first.amount} currency={first.currency} rate={rate} />
+      ) : (
+        <ThemedText type="title" accessibilityRole="header" style={styles.heroBalance}>
+          {first ? money.token(first.amount, first.currency) : money.ctx('0', stable)}
+        </ThemedText>
+      )}
+      {rate && (
+        <ThemedText themeColor="textSecondary" style={styles.heroLine}>
+          {`Growing ${rate.figure()} a year, added to your savings every day.`}
+        </ThemedText>
+      )}
       <ThemedText themeColor="textSecondary" style={styles.heroLine}>
         {earnedLine}
       </ThemedText>
@@ -320,6 +335,8 @@ function SavingsFacts() {
 }
 
 type AddToSavingsProps = {
+  stable: string;
+  currency: PaymentCurrency;
   depositable: bigint;
   busy: boolean;
   ready: boolean;
@@ -327,8 +344,7 @@ type AddToSavingsProps = {
   onClose: () => void;
 };
 
-function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
-  const theme = useTheme();
+function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
   const [input, setInput] = useState('');
   const [max, setMax] = useState<bigint | null>(null);
   const amount = normalizeAmount(input);
@@ -352,14 +368,9 @@ function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSav
     });
   };
   return (
-    <Animated.View
-      entering={FadeInDown.duration(Motion.state)}
-      style={[styles.card, styles.sheet, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      <ThemedText type="heading" accessibilityRole="header">
-        How much do you want to save?
-      </ThemedText>
+    <>
       <Field
-        label={strings.field.amountInDollars}
+        label={money.amountLabel(stable)}
         value={input}
         onChangeText={edit}
         keyboardType="decimal-pad"
@@ -368,7 +379,7 @@ function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSav
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
             <Button
-              label={money.fiat(quick, 'USD')}
+              label={money.ctx(quick, stable)}
               selected={max === null && amount === quick}
               onPress={() => edit(quick)}
             />
@@ -388,7 +399,7 @@ function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSav
       </View>
       <ThemedText type="small" themeColor="textSecondary">
         {ready
-          ? `You have ${money.token(depositable, Savings.depositCurrency)} in your balance to add.`
+          ? `You have ${money.token(depositable, currency)} in your balance to add.`
           : 'Finish setting up Loop on Home to start saving.'}
       </ThemedText>
       <Button
@@ -398,7 +409,29 @@ function AddToSavings({ depositable, busy, ready, onDeposit, onClose }: AddToSav
         disabled={busy || !ready || depositAmount === null}
       />
       <Button label="Close" variant="quiet" onPress={onClose} />
-    </Animated.View>
+    </>
+  );
+}
+
+function WithdrawSavings({
+  balance,
+  onConfirm,
+  onClose,
+}: {
+  balance: string | null;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <ThemedText themeColor="textSecondary">
+        {balance
+          ? `${balance} goes back to your balance now and stops earning.`
+          : 'Your savings go back to your balance now and stop earning.'}
+      </ThemedText>
+      <Button label={balance ? `Move ${balance}` : 'Move savings'} variant="primary" onPress={onConfirm} />
+      <Button label="Cancel" variant="quiet" onPress={onClose} />
+    </>
   );
 }
 
@@ -487,9 +520,6 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  sheet: {
-    maxWidth: Layout.sheetWidth,
   },
   chips: {
     flexDirection: 'row',

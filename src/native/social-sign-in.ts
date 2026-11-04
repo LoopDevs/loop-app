@@ -33,10 +33,18 @@ async function appleCredential(): Promise<SocialCredential | null> {
   const nonce = newSignInNonce();
   try {
     const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL],
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
       nonce,
     });
-    return { idToken: requireIdToken('apple', credential.identityToken), nonce };
+    return {
+      idToken: requireIdToken('apple', credential.identityToken),
+      nonce,
+      givenName: credential.fullName?.givenName ?? undefined,
+      familyName: credential.fullName?.familyName ?? undefined,
+    };
   } catch (error) {
     if (hasErrorCode(error, 'ERR_REQUEST_CANCELED')) {
       return null;

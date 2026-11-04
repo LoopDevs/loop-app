@@ -15,11 +15,11 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
 import { Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { invalidAmountMessage, normalizeAmount } from '@/ctx/amount-input';
+import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
-import { strings } from '@/strings';
 import { network } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { PayRequest } from '@/wallet/pay-request';
@@ -29,7 +29,6 @@ type Step = 'method' | 'app' | 'waiting' | 'done' | 'bank-amount' | 'bank-detail
 
 const quickAmounts = ['25', '50', '100'];
 const checkEveryMs = 4000;
-const currency = 'USD';
 const bankDetails = {
   name: 'Loop Finance',
   sortCode: '00-00-00',
@@ -56,10 +55,11 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
   const [input, setInput] = useState('');
   const [received, setReceived] = useState<bigint>(0n);
   const [startingTotal, setStartingTotal] = useState<bigint | null>(null);
+  const stable = view?.stable ?? Rates.usd;
   const total = view?.stable ? view.holdings.totalIn(view.stable) : null;
   const amount = normalizeAmount(input);
   const validAmount = amount !== null && Number(amount) > 0;
-  const shownAmount = validAmount ? money.fiat(amount, currency) : '';
+  const shownAmount = validAmount ? money.ctx(amount, stable) : '';
   const payRequest = new PayRequest(wallet.address, validAmount ? amount : null).uri();
   const reference = `LOOP${wallet.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase()}`;
 
@@ -112,7 +112,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
   const amountPicker = (onSubmit: () => void) => (
     <>
       <Field
-        label={strings.field.amountInDollars}
+        label={money.amountLabel(stable)}
         value={input}
         onChangeText={setInput}
         keyboardType="decimal-pad"
@@ -122,7 +122,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
-            <Button label={money.fiat(quick, currency)} selected={amount === quick} onPress={() => setInput(quick)} />
+            <Button label={money.ctx(quick, stable)} selected={amount === quick} onPress={() => setInput(quick)} />
           </View>
         ))}
       </View>
@@ -151,7 +151,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
           <ListGroup>
             <ListRow
               label="From another app"
-              detail="Send dollars from an app you already use"
+              detail="Send money from an app you already use"
               onPress={() => setStep('app')}
             />
             <ListRow
@@ -170,7 +170,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
       {step === 'app' && (
         <Animated.View key="app" entering={FadeIn.duration(Motion.state)} style={styles.step}>
           <ThemedText type="heading" accessibilityRole="header">
-            Add dollars from your app
+            Add money from your app
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             Choose an amount if you like, then open your app to send it. You can also change the amount there.
@@ -186,7 +186,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
           <ThemedText type="small" themeColor="textSecondary" style={styles.centered}>
             On a computer? Scan this with your phone.
           </ThemedText>
-          <ListGroup footer="If your app can't open the request, send dollars to these account details instead.">
+          <ListGroup footer="If your app can't open the request, send money to these account details instead.">
             <ListRow
               label="Copy account details"
               detail={`${wallet.address.slice(0, 6)}…${wallet.address.slice(-6)}`}
@@ -224,7 +224,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
             tintColor={theme.success}
           />
           <ThemedText type="heading" accessibilityRole="header" accessibilityLiveRegion="polite">
-            {`${money.ctx(units.format(received, units.decimals), view?.stable ?? currency)} added`}
+            {`${money.ctx(units.format(received, units.decimals), stable)} added`}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {"It's in your balance and ready to spend on gift cards."}

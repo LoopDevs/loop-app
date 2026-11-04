@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import type { GiftCard } from '@/ctx/client';
 import { SentPayments } from '@/ctx/sent-payments';
 import { PaymentCheck, type OrderPayment } from '@/wallet/payment-search';
-import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
+import { SmartWallet, WalletBlocked } from '@/wallet/smart-wallet';
 
 export const sentPayments = new SentPayments(AsyncStorage);
 
 export function paymentCheck(): PaymentCheck {
   return new PaymentCheck(sentPayments, () =>
     SmartWallet.load().catch((error: unknown) => {
-      if (error instanceof UnlinkedDevice) {
+      if (error instanceof WalletBlocked) {
         return error.wallet;
       }
       throw error;

@@ -1,4 +1,4 @@
-import { useFocusEffect, useScrollToTop } from 'expo-router';
+import { useFocusEffect, useNavigation, useScrollToTop } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { useCallback, useRef, type ComponentProps, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
@@ -13,6 +13,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { Odometer } from '@/components/odometer';
 import { Elevation, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { ScrollMemory } from '@/hooks/scroll-memory';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
@@ -31,14 +32,21 @@ type Scrollable = NonNullable<Parameters<typeof useScrollToTop>[0]['current']>;
 
 type OffsetScrollable = { scrollTo?: (options: object) => void; scrollToOffset?: (options: object) => void };
 
-export function useScrollToTopOnFocus(ref: { current: Scrollable | null }) {
+export function useScrollOnFocus(ref: { current: Scrollable | null }, readOffset?: () => number) {
   useScrollToTop(ref);
+  const navigation = useNavigation();
+  const memory = useRef(new ScrollMemory()).current;
   useFocusEffect(
     useCallback(() => {
+      const focused = navigation.getState();
       const target = ref.current as unknown as OffsetScrollable | null;
-      target?.scrollTo?.({ y: 0, animated: false });
-      target?.scrollToOffset?.({ offset: 0, animated: false });
-    }, [ref]),
+      const y = memory.arrive() ?? 0;
+      target?.scrollTo?.({ y, animated: false });
+      target?.scrollToOffset?.({ offset: y, animated: false });
+      return () => {
+        memory.leave(ScrollMemory.coveredBy(focused, navigation.getState()), readOffset?.() ?? null);
+      };
+    }, [ref, navigation, memory, readOffset]),
   );
 }
 
@@ -46,7 +54,6 @@ export function useScrimScroll<T extends Scrollable = ScrollViewInstance>(onNear
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const scrollRef = useRef<T>(null);
-  useScrollToTopOnFocus(scrollRef);
   const offset = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
     offset.value = event.contentOffset.y;
@@ -58,6 +65,8 @@ export function useScrimScroll<T extends Scrollable = ScrollViewInstance>(onNear
   const fade = useAnimatedStyle(() => ({
     opacity: interpolate(offset.value, [0, scrimFadeDistance], [0, 1], 'clamp'),
   }));
+  const readOffset = useCallback(() => offset.get(), [offset]);
+  useScrollOnFocus(scrollRef, readOffset);
   const scrim = [
     styles.scrim,
     { height: insets.top, backgroundColor: theme.chrome, borderBottomColor: theme.border },

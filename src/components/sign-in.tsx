@@ -33,10 +33,10 @@ import { useTheme } from '@/hooks/use-theme';
 import { strings } from '@/strings';
 import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
-import type { CountryChoice } from '@/ctx/profile';
+import { type CountryChoice, Profile } from '@/ctx/profile';
 import type { SocialProvider } from '@/session/social-sign-in';
 import { passkey } from '@/wallet/passkey';
-import { SmartWallet, UnlinkedDevice } from '@/wallet/smart-wallet';
+import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
 
 type SignInListener = () => void;
 
@@ -193,17 +193,18 @@ export function SignInScreen() {
   );
 }
 
-type SignInStep = 'email' | 'code' | 'country' | 'secure' | 'add-device';
+type SignInStep = 'email' | 'code' | 'name' | 'country' | 'secure' | 'add-device';
 
 const stepNumbers: Record<SignInStep, number> = {
   email: 1,
   code: 2,
-  country: 3,
-  secure: 4,
-  'add-device': 4,
+  name: 3,
+  country: 4,
+  secure: 5,
+  'add-device': 5,
 };
 
-const stepCount = 4;
+const stepCount = 5;
 const resendCooldownMs = 30_000;
 
 type SignInFormProps = {
@@ -216,9 +217,11 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const [step, setStep] = useState<SignInStep>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [name, setName] = useState('');
   const [unlinkedWallet, setUnlinkedWallet] = useState<SmartWallet | null>(null);
   const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
   const resendBlocked = codeSentAt !== null;
+  const nameReady = Profile.legalNameProblem(name) === null;
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
@@ -239,13 +242,33 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const continueToWallet = async () => {
     onAuthenticated();
     const loaded = await ctx.me();
-    if (loaded.needsSetup()) {
-      setProfile(loaded);
+    setProfile(loaded);
+    if (loaded.needsName()) {
+      setName(loaded.nameSuggestion());
+      setStep('name');
+      return;
+    }
+    await continueSetup(loaded);
+  };
+
+  const continueSetup = async (current: Profile) => {
+    if (current.needsSetup()) {
       setStep('country');
       return;
     }
     await openWallet();
   };
+
+  const confirmName = () =>
+    run(async () => {
+      if (!profile) {
+        return;
+      }
+      const update = profile.legalNameUpdate(name);
+      const current = update ? profile.withUser(await ctx.updateUser(update)) : profile;
+      setProfile(current);
+      await continueSetup(current);
+    });
 
   const openWallet = async () => {
     try {
@@ -257,6 +280,10 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
       if (error instanceof UnlinkedDevice) {
         setUnlinkedWallet(error.wallet);
         setStep('add-device');
+        return;
+      }
+      if (error instanceof WalletBlocked) {
+        finish();
         return;
       }
       throw error;
@@ -404,6 +431,36 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
               <Button label="Change email" variant="quiet" onPress={changeEmail} disabled={busy} />
             </View>
           </View>
+        </Animated.View>
+      )}
+      {step === 'name' && (
+        <Animated.View key="name" entering={FadeIn.duration(Motion.state)} style={styles.form}>
+          <View style={styles.intro}>
+            <ThemedText type="subtitle" accessibilityRole="header">
+              Your name
+            </ThemedText>
+            <ThemedText themeColor="textSecondary">
+              Use the name on your bank account. Your bank checks it when you pay.
+            </ThemedText>
+          </View>
+          <Field
+            value={name}
+            onChangeText={setName}
+            label={strings.field.fullName}
+            disabled={busy}
+            autoCapitalize="words"
+            autoComplete="name"
+            textContentType="name"
+            autoFocus={name === ''}
+            returnKeyType="done"
+            onSubmitEditing={() => nameReady && !busy && confirmName()}
+          />
+          <Button
+            label={busy ? 'Saving…' : 'Continue'}
+            variant="primary"
+            onPress={confirmName}
+            disabled={busy || !nameReady}
+          />
         </Animated.View>
       )}
       {step === 'country' && profile && (

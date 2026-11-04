@@ -31,6 +31,7 @@ export class IdentityNotConfirmed extends Error {
 }
 
 export class DeviceKey {
+  private static readonly creating = new Map<string, Promise<string>>();
   readonly secretName: string;
   readonly publicKeyName: string;
   private readonly storage: DeviceKeyStorage;
@@ -53,7 +54,19 @@ export class DeviceKey {
     return this.storage.read(this.publicKeyName, false);
   }
 
-  async create(): Promise<string> {
+  create(): Promise<string> {
+    const pending = DeviceKey.creating.get(this.publicKeyName);
+    if (pending) {
+      return pending;
+    }
+    const creating = this.existingOrNewKey().finally(() => {
+      DeviceKey.creating.delete(this.publicKeyName);
+    });
+    DeviceKey.creating.set(this.publicKeyName, creating);
+    return creating;
+  }
+
+  private async existingOrNewKey(): Promise<string> {
     const existing = await this.storage.read(this.publicKeyName, false);
     if (existing) {
       return existing;

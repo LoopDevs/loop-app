@@ -2,7 +2,10 @@ import type { GiftCard } from './client.ts';
 import type { ShownOrder } from './one-tap-buy.ts';
 import type { PaymentCurrency } from '../stellar/network.ts';
 
-type BankOrder = Pick<GiftCard, 'status' | 'paymentStatus' | 'paymentMethod' | 'paymentUrl' | 'paymentUrlExpiration'>;
+type BankOrder = Pick<
+  GiftCard,
+  'status' | 'paymentStatus' | 'paymentMethod' | 'paymentUrl' | 'paymentUrlExpiration' | 'plaidLinkToken'
+>;
 
 type BankProfile = {
   stableCurrency?: string;
@@ -18,6 +21,7 @@ export type BankRail = {
 
 export class BankPayment {
   static readonly option = 'bank';
+  static readonly approvalHost = 'plaid.com';
   static readonly rails: readonly BankRail[] = [
     {
       country: 'GB',
@@ -49,12 +53,31 @@ export class BankPayment {
     return order.paymentStatus === 'paid';
   }
 
-  static openLink(order: BankOrder): string | null {
-    return BankPayment.awaitingApproval(order) && order.paymentUrl ? order.paymentUrl : null;
+  static awaitingApproval(order: BankOrder): boolean {
+    return BankPayment.isBank(order) && order.status === 'unpaid';
   }
 
-  static link(order: BankOrder, now: number): string | null {
-    return BankPayment.linkExpired(order, now) ? null : BankPayment.openLink(order);
+  static openLink(order: BankOrder): string | null {
+    if (!BankPayment.awaitingApproval(order) || !order.paymentUrl) {
+      return null;
+    }
+    return BankPayment.isApprovalHost(order.paymentUrl) ? order.paymentUrl : null;
+  }
+
+  static linkToken(order: BankOrder): string | null {
+    return BankPayment.awaitingApproval(order) && order.plaidLinkToken ? order.plaidLinkToken : null;
+  }
+
+  static linkRefused(order: BankOrder): boolean {
+    return BankPayment.awaitingApproval(order) && !!order.paymentUrl && !BankPayment.isApprovalHost(order.paymentUrl);
+  }
+
+  static approvalReady(order: BankOrder): boolean {
+    return BankPayment.linkToken(order) !== null || BankPayment.openLink(order) !== null;
+  }
+
+  static approvable(order: BankOrder, now: number): boolean {
+    return !BankPayment.linkExpired(order, now) && BankPayment.approvalReady(order);
   }
 
   static linkExpired(order: BankOrder, now: number): boolean {
@@ -62,15 +85,13 @@ export class BankPayment {
       return false;
     }
     const expiresAt = Date.parse(order.paymentUrlExpiration ?? '');
-    return Number.isNaN(expiresAt) || expiresAt <= now;
+    return !Number.isNaN(expiresAt) && expiresAt <= now;
   }
 
-  static resumed(order: GiftCard, now: number): ShownOrder | null {
+  static resumed(order: GiftCard, now: number): ShownOrder {
     if (order.status === 'unpaid') {
-      if (!BankPayment.link(order, now)) {
-        return null;
-      }
-      return { order, payment: { kind: 'bank' }, follow: true, sent: null };
+      const linkOpen = BankPayment.approvable(order, now);
+      return { order, payment: { kind: 'bank', linkOpen }, follow: true, sent: null };
     }
     return { order, payment: { kind: 'ready' }, follow: order.status === 'paid', sent: null };
   }
@@ -92,7 +113,15 @@ export class BankPayment {
     }
   }
 
-  private static awaitingApproval(order: BankOrder): boolean {
-    return BankPayment.isBank(order) && order.status === 'unpaid';
+  private static isApprovalHost(link: string): boolean {
+    try {
+      const { protocol, hostname } = new URL(link);
+      return (
+        protocol === 'https:' &&
+        (hostname === BankPayment.approvalHost || hostname.endsWith(`.${BankPayment.approvalHost}`))
+      );
+    } catch {
+      return false;
+    }
   }
 }

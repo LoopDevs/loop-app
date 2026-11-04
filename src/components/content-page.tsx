@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Notice } from '@/components/ui/form';
+import { PageTitle } from '@/components/page-title';
 import { SiteFooter } from '@/components/site-footer';
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
@@ -79,6 +80,7 @@ export function SitePage({ title, lead, detail, width = 'content', intro, childr
   return (
     <ThemedView style={styles.screen}>
       <Stack.Screen options={{ title }} />
+      <PageTitle title={title} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View
           style={[

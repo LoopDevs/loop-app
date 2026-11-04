@@ -1,6 +1,7 @@
 import { loopLinks } from '../constants/loop-links.ts';
 import { offeredCurrencies, stablePeg, type PaymentCurrency } from '../stellar/network.ts';
 import { Savings } from '../wallet/savings.ts';
+import type { BankInstitution } from './bank-link.ts';
 import type { CashbackDestination, MeJson, UserJson, UserUpdate } from './client.ts';
 
 const regionalIndicatorOffset = 0x1f1e6 - 'A'.charCodeAt(0);
@@ -21,10 +22,12 @@ export class Profile {
   static readonly legalNameMessage = 'Enter your first and last name as they appear on your bank account.';
 
   readonly email?: string;
+  readonly name?: string;
   readonly legalName?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
   readonly cashbackDestination: CashbackDestination;
+  readonly bank: BankInstitution | null;
   readonly signInProviders: string[];
   readonly countries: string[];
   readonly stableCurrencies: string[];
@@ -33,10 +36,15 @@ export class Profile {
     this.user = user;
     this.id = user.id;
     this.email = user.email;
+    this.name = user.name;
     this.legalName = user.legalName;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
     this.cashbackDestination = user.cashbackDestination ?? 'account';
+    this.bank =
+      user.bankInstitutionId && user.bankInstitutionName
+        ? { id: user.bankInstitutionId, name: user.bankInstitutionName }
+        : null;
     this.signInProviders = (user.oauthIdentities ?? []).map((identity) => identity.provider);
     this.countries = company?.countries ?? [];
     this.stableCurrencies = (company?.stableCurrencies ?? []).filter((currency) => offeredCurrencies.has(currency));
@@ -95,8 +103,12 @@ export class Profile {
     return this.email?.trim() || 'Loop wallet';
   }
 
-  hasBankIdentity(): boolean {
-    return Profile.legalNameProblem(this.legalName ?? '') === null;
+  needsName(): boolean {
+    return Profile.legalNameProblem(this.legalName ?? '') !== null;
+  }
+
+  nameSuggestion(): string {
+    return this.legalName ?? this.name ?? '';
   }
 
   legalNameUpdate(legalName: string): UserUpdate | null {
@@ -128,6 +140,13 @@ export class Profile {
       return null;
     }
     return { cashbackDestination: destination };
+  }
+
+  bankUpdate(institution: BankInstitution | null): UserUpdate | null {
+    if (!institution || (institution.id === this.bank?.id && institution.name === this.bank.name)) {
+      return null;
+    }
+    return { bankInstitutionId: institution.id, bankInstitutionName: institution.name };
   }
 
   signInProviderLabel(): string | null {

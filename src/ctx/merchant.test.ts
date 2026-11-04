@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { MerchantJson } from './client.ts';
-import { CashbackRate, Merchant } from './merchant.ts';
+import { CashbackRate, CompanyCashback, Merchant } from './merchant.ts';
 
 const json: MerchantJson = {
   id: 'm1',
@@ -45,6 +45,36 @@ test('an override of zero is a zero rate', () => {
 test('a link without an override keeps the merchant default', () => {
   assert.equal(new Merchant({ ...json, link: {} }).cashbackBasisPoints(), 250);
   assert.equal(new Merchant({ ...json, link: { userDiscountOverride: true } }).cashbackBasisPoints(), 250);
+});
+
+test('the company default rate replaces the merchant default', () => {
+  const company = new CompanyCashback();
+  company.learn({ defaultUserDiscountBasisPoints: 500 });
+  assert.equal(new Merchant(json, company).cashbackBasisPoints(), 500);
+  assert.equal(new Merchant({ ...json, link: {} }, company).cashbackBasisPoints(), 500);
+  assert.equal(new Merchant(json, company).cashbackEstimate('25.00', 'en-US'), '$1.25');
+});
+
+test('a link override beats the company default', () => {
+  const company = new CompanyCashback();
+  company.learn({ defaultUserDiscountBasisPoints: 500 });
+  const merchant = new Merchant(
+    { ...json, link: { userDiscountOverride: true, userDiscountBasisPoints: 400 } },
+    company,
+  );
+  assert.equal(merchant.cashbackBasisPoints(), 400);
+});
+
+test('a company default learned later reaches merchants already loaded', () => {
+  const company = new CompanyCashback();
+  const merchant = new Merchant(json, company);
+  assert.equal(merchant.cashbackBasisPoints(), 250);
+  company.learn({ defaultUserDiscountBasisPoints: 500 });
+  assert.equal(merchant.cashbackBasisPoints(), 500);
+  company.learn({ defaultUserDiscountBasisPoints: null });
+  assert.equal(merchant.cashbackBasisPoints(), 250);
+  company.learn(undefined);
+  assert.equal(merchant.cashbackBasisPoints(), 250);
 });
 
 test('the shown rate, label and estimate all come from the one resolved cashback rate', () => {
@@ -116,6 +146,11 @@ test('estimate is null for an amount that is not a positive number', () => {
 test('a search name is matched literally', () => {
   assert.equal(Merchant.searchPattern(' Toys"R"Us (US) '), 'Toys"R"Us \\(US\\)');
   assert.equal(Merchant.searchPattern('A.B*C+?'), 'A\\.B\\*C\\+\\?');
+});
+
+test('a lookup key is matched whole', () => {
+  assert.equal(Merchant.exactPattern('gap-us'), '^gap-us$');
+  assert.equal(Merchant.exactPattern('a.b'), '^a\\.b$');
 });
 
 test('the tile hue is stable for a name and within the colour wheel', () => {
