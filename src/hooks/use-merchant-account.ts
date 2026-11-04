@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import { useOnSignIn } from '@/components/sign-in';
 import { cachedMerchant, loadMerchant } from '@/components/storefront';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
@@ -11,7 +12,7 @@ import { useBusyAction } from '@/hooks/use-busy-action';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { SmartWallet } from '@/wallet/smart-wallet';
 
-export function useMerchantAccount(slug: string, { withActiveOrder = false } = {}) {
+export function useMerchantAccount(slug: string, { withActiveOrder = false, walletOnlyWithoutBank = false } = {}) {
   const { busy, message, load: track } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
@@ -49,13 +50,19 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false } = {
         const profileLoad = ctx.me().then((loaded) => {
           setProfile(loaded);
           setSignedIn(true);
+          return loaded;
         });
-        const walletLoad = SmartWallet.load()
-          .catch(SmartWallet.unlessBlocked)
-          .then((loaded) => {
-            setWallet((current) => (loaded?.sameAs(current) ? current : loaded));
-            setWalletChecked(true);
-          });
+        const loadWallet = () => SmartWallet.load().catch(SmartWallet.unlessBlocked);
+        const walletLoad = (
+          walletOnlyWithoutBank
+            ? Promise.all([merchantLoad, profileLoad]).then(([loadedMerchant, loadedProfile]) =>
+                BankPayment.offered(loadedMerchant.currency, loadedProfile) ? null : loadWallet(),
+              )
+            : loadWallet()
+        ).then((loaded) => {
+          setWallet((current) => (loaded?.sameAs(current) ? current : loaded));
+          setWalletChecked(true);
+        });
         const orderLoad = withActiveOrder
           ? merchantLoad
               .then((loaded) => dismissedOrders.activeOrder(loaded.id).catch(() => null))
@@ -63,7 +70,7 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false } = {
           : null;
         await Promise.all([merchantLoad, profileLoad, walletLoad, orderLoad]);
       }),
-    [track, slug, readSession, withActiveOrder],
+    [track, slug, readSession, withActiveOrder, walletOnlyWithoutBank],
   );
 
   useFocusEffect(

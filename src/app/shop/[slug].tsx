@@ -41,7 +41,7 @@ export default function MerchantScreen() {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const { merchant, wallet, walletChecked, profile, signedIn, activeOrder, busy, message, load, setProfile } =
-    useMerchantAccount(slug, { withActiveOrder: true });
+    useMerchantAccount(slug, { withActiveOrder: true, walletOnlyWithoutBank: true });
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
