@@ -42,3 +42,22 @@ test('a success without a bank remembers nothing', () => {
     institution: null,
   });
 });
+
+const event = (eventName: string, viewName: string, institutionName?: string) =>
+  ({ eventName, metadata: { linkSessionId: 's1', viewName, institutionName } }) as never;
+
+test('handing off to the bank reports the bank being approved in', () => {
+  assert.deepEqual(BankLink.progress(event('OPEN_OAUTH', 'OAUTH', 'Monzo')), { step: 'atBank', bankName: 'Monzo' });
+  assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'OAUTH')), { step: 'atBank', bankName: null });
+});
+
+test('coming back from the bank is reported once Link resumes', () => {
+  assert.deepEqual(BankLink.progress(event('CLOSE_OAUTH', 'OAUTH')), { step: 'backFromBank' });
+  assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'CONNECTED')), { step: 'backFromBank' });
+  assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'LOADING')), { step: 'backFromBank' });
+});
+
+test('other Link events are not progress', () => {
+  assert.equal(BankLink.progress(event('OPEN', 'CONSENT')), null);
+  assert.equal(BankLink.progress(event('TRANSITION_VIEW', 'CONSENT')), null);
+});
