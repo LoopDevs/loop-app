@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { useId, useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PressScale } from '@/components/ui/press-scale';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
@@ -82,6 +82,7 @@ type ButtonProps = {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  busy?: boolean;
   selected?: boolean;
   accessibilityLabel?: string;
   variant?: ButtonVariant;
@@ -91,6 +92,7 @@ export function Button({
   label,
   onPress,
   disabled = false,
+  busy = false,
   selected,
   accessibilityLabel,
   variant = 'secondary',
@@ -119,13 +121,14 @@ export function Button({
     <PressScale
       {...webChoiceState}
       onPress={press}
-      disabled={disabled}
+      disabled={disabled || busy}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ disabled, selected }}
-      aria-disabled={disabled}
-      style={{ opacity: disabled ? 0.45 : 1 }}>
+      accessibilityState={{ disabled: disabled || busy, busy, selected }}
+      aria-disabled={disabled || busy}
+      style={{ opacity: disabled && !busy ? 0.45 : 1 }}>
       <View style={[styles.button, surface, selected && styles.selected]}>
+        {busy && <ActivityIndicator size="small" color={labelColor} />}
         <Text maxFontSizeMultiplier={1.6} style={[styles.label, { color: labelColor }]}>
           {label}
         </Text>
@@ -208,8 +211,10 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   button: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: Spacing.two,
     minHeight: 50,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.four,

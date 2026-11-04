@@ -35,6 +35,11 @@ type Props = {
 
 type Stage = 'amount' | 'approve' | 'expired' | 'paid' | 'other';
 
+type PayPhase = {
+  step: 'ordering' | 'opening';
+  viaPicker: boolean;
+};
+
 const stageTickMs = 30_000;
 const leftNote = 'If you already approved it at your bank, the card will still arrive.';
 
@@ -66,6 +71,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const [syncedOrder, setSyncedOrder] = useState(activeOrder);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showingTerms, setShowingTerms] = useState(false);
+  const [phase, setPhase] = useState<PayPhase | null>(null);
   const now = useNow(stageTickMs);
   const mounted = useRef(true);
   const resumed = useRef<string | null>(null);
@@ -103,6 +109,9 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const range = merchant.rangeLabel();
   const stage = stageOf(order, now);
   const canPay = !busy && fiatAmount !== null && amountProblem === null;
+  const choosingBank = busy && phase?.viaPicker === true;
+  const payingWithBank = busy && !choosingBank;
+  const busyLabel = (opening: string) => (phase?.step === 'opening' ? opening : 'Setting up…');
   const bankName = profile.bank?.name ?? null;
 
   const changeAmount = (next: string) => {
@@ -142,6 +151,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   };
 
   const approve = async (giftCard: GiftCard) => {
+    setPhase((current) => ({ step: 'opening', viaPicker: current?.viaPicker ?? false }));
     const token = BankPayment.linkToken(giftCard);
     const link = token ? null : BankPayment.openLink(giftCard);
     if (token && process.env.EXPO_OS !== 'web') {
@@ -188,31 +198,36 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
         return;
       }
       setAmountError(null);
-      let created: GiftCard;
+      setPhase({ step: 'ordering', viaPicker: differentBank.current });
       try {
-        created = await ctx.orderGiftCard({
-          merchantId: merchant.id,
-          fiatAmount,
-          fiatCurrency: merchant.currency,
-          ...(differentBank.current ? { chooseBank: true } : {}),
-        });
-      } catch (error) {
-        haptics.error();
-        const name = error instanceof CtxError ? error.errorName() : undefined;
-        const amountMessage = amountErrorMessage(name, merchant);
-        if (amountMessage) {
-          setAmountError(amountMessage);
+        let created: GiftCard;
+        try {
+          created = await ctx.orderGiftCard({
+            merchantId: merchant.id,
+            fiatAmount,
+            fiatCurrency: merchant.currency,
+            ...(differentBank.current ? { chooseBank: true } : {}),
+          });
+        } catch (error) {
+          haptics.error();
+          const name = error instanceof CtxError ? error.errorName() : undefined;
+          const amountMessage = amountErrorMessage(name, merchant);
+          if (amountMessage) {
+            setAmountError(amountMessage);
+            return;
+          }
+          throw new Error(BankPayment.refusalMessage(name) ?? OneTapBuy.notBoughtMessage);
+        }
+        if (!mounted.current) {
           return;
         }
-        throw new Error(BankPayment.refusalMessage(name) ?? OneTapBuy.notBoughtMessage);
+        resumed.current = created.id;
+        setOrder(created);
+        haptics.tap();
+        await approve(created);
+      } finally {
+        setPhase(null);
       }
-      if (!mounted.current) {
-        return;
-      }
-      resumed.current = created.id;
-      setOrder(created);
-      haptics.tap();
-      await approve(created);
     });
 
   const startPay = (chooseBank = false) => {
@@ -236,16 +251,21 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       if (!order) {
         return;
       }
-      const fetched = await ctx.giftCard(order.id);
-      if (!mounted.current) {
-        return;
+      setPhase({ step: 'ordering', viaPicker: false });
+      try {
+        const fetched = await ctx.giftCard(order.id);
+        if (!mounted.current) {
+          return;
+        }
+        if (fetched.status !== 'unpaid') {
+          showCard(fetched);
+          return;
+        }
+        setOrder(fetched);
+        await approve(fetched);
+      } finally {
+        setPhase(null);
       }
-      if (fetched.status !== 'unpaid') {
-        showCard(fetched);
-        return;
-      }
-      setOrder(fetched);
-      await approve(fetched);
     });
 
   const resume = useEffectEvent((giftCard: GiftCard, orderStage: Stage) => {
@@ -344,8 +364,8 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       {message !== '' && <Notice message={message} />}
       <Button
         label={
-          busy
-            ? `Opening ${bankName ?? 'your bank'}…`
+          payingWithBank
+            ? busyLabel(`Opening ${bankName ?? 'your bank'}…`)
             : fiatAmount && amountProblem === null
               ? `Pay ${merchant.shortAmount(fiatAmount)} ${bankName ? `with ${bankName}` : 'by bank'}`
               : 'Pay by bank'
@@ -353,8 +373,17 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
         variant="primary"
         onPress={() => startPay()}
         disabled={!canPay}
+        busy={payingWithBank}
       />
-      {bankName && <Button label="Use a different bank" variant="quiet" onPress={() => startPay(true)} disabled={!canPay} />}
+      {bankName && (
+        <Button
+          label={choosingBank ? busyLabel('Opening your bank list…') : 'Use a different bank'}
+          variant="quiet"
+          onPress={() => startPay(true)}
+          disabled={!canPay}
+          busy={choosingBank}
+        />
+      )}
       <ThemedText type="small" themeColor="textSecondary">
         You approve the payment in your banking app. Cashback is paid in pounds.
       </ThemedText>
