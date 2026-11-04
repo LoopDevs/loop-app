@@ -38,6 +38,7 @@ import {
   wasCharged,
 } from '@/ctx/gift-card-status';
 import { CashbackRate } from '@/ctx/merchant';
+import { OrderWake } from '@/ctx/order-wake';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { usePaymentSent } from '@/hooks/use-sent-payment';
 import { useSessionOwner } from '@/hooks/use-session-owner';
@@ -84,9 +85,10 @@ export default function GiftCardScreen() {
 
   useEffect(() => {
     let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let polls = 0;
+    const wake = new OrderWake();
+    let stopWatching: Promise<() => void> | null = null;
     const load = async () => {
+      let polls = 0;
       try {
         const { userId, changed } = await readSession();
         if (!active) {
@@ -99,14 +101,26 @@ export default function GiftCardScreen() {
           setMessage(signInMessage);
           return;
         }
-        const loaded = await ctx.giftCard(id);
+        let loaded = await ctx.giftCard(id);
         if (!active) {
           return;
         }
         setGiftCard(loaded);
-        if (!settledStatuses.includes(loaded.status)) {
-          timer = setTimeout(load, pollDelayMs(polls));
+        while (active && !settledStatuses.includes(loaded.status)) {
+          stopWatching ??= ctx.watchOrder(id, wake).catch(() => () => undefined);
+          await wake.wait(Math.max(wake.interval(), pollDelayMs(polls)));
           polls += 1;
+          if (!active) {
+            return;
+          }
+          try {
+            loaded = await ctx.giftCard(id);
+          } catch {
+            continue;
+          }
+          if (active) {
+            setGiftCard(loaded);
+          }
         }
       } catch (error) {
         if (active) {
@@ -121,7 +135,8 @@ export default function GiftCardScreen() {
     load();
     return () => {
       active = false;
-      clearTimeout(timer);
+      wake.signal();
+      void stopWatching?.then((stop) => stop());
     };
   }, [id, attempt, readSession]);
 

@@ -118,6 +118,7 @@ export type GiftCardOrderIn = {
   fiatAmount: string;
   fiatCurrency: string;
   cryptoCurrency?: PaymentCurrency;
+  chooseBank?: boolean;
 };
 
 export type OrderPlatform = 'android' | 'ios';
@@ -204,6 +205,8 @@ export type UserJson = {
   country?: string;
   stableCurrency?: string;
   cashbackDestination?: CashbackDestination;
+  bankInstitutionId?: string;
+  bankInstitutionName?: string;
   oauthIdentities?: OAuthIdentityJson[];
 };
 
@@ -222,7 +225,8 @@ export type UserUpdate =
   | { country: string }
   | { stableCurrency: string }
   | { cashbackDestination: CashbackDestination }
-  | { legalName: string };
+  | { legalName: string }
+  | { bankInstitutionId: string; bankInstitutionName: string };
 
 export type BalanceJson = {
   currency: string;

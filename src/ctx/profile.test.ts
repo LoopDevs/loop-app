@@ -247,3 +247,20 @@ test('an update applies locally and keeps the rest of the user', () => {
   assert.deepEqual(updated.cashbackDestinations(), profile.cashbackDestinations());
   assert.equal(profile.savesCashback(), false);
 });
+
+test('a remembered bank is only sent when it changes', () => {
+  const fresh = Profile.fromMe({ user: { id: 'u1' }, company });
+  assert.equal(fresh.bank, null);
+  assert.deepEqual(fresh.bankUpdate({ id: 'ins_117650', name: 'Monzo' }), {
+    bankInstitutionId: 'ins_117650',
+    bankInstitutionName: 'Monzo',
+  });
+  assert.equal(fresh.bankUpdate(null), null);
+  const remembered = fresh.withUpdate({ bankInstitutionId: 'ins_117650', bankInstitutionName: 'Monzo' });
+  assert.deepEqual(remembered.bank, { id: 'ins_117650', name: 'Monzo' });
+  assert.equal(remembered.bankUpdate({ id: 'ins_117650', name: 'Monzo' }), null);
+  assert.deepEqual(remembered.bankUpdate({ id: 'ins_1', name: 'Starling' }), {
+    bankInstitutionId: 'ins_1',
+    bankInstitutionName: 'Starling',
+  });
+});

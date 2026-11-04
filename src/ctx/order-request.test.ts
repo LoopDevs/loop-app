@@ -59,6 +59,7 @@ test('an order for another merchant, amount or currency gets its own idempotency
   assert.equal(keys.keyFor({ ...request.asked, fiatAmount: '30' }), 'key-3');
   assert.equal(keys.keyFor({ ...request.asked, fiatCurrency: 'CAD' }), 'key-4');
   assert.equal(keys.keyFor({ ...request.asked, cryptoCurrency: 'XLM' }), 'key-5');
+  assert.equal(keys.keyFor({ ...request.asked, chooseBank: true }), 'key-6');
 });
 
 test('settling an earlier key keeps the key of the current request', () => {
