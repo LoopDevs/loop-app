@@ -2,6 +2,7 @@ export const strings = {
   field: {
     email: 'Email',
     code: 'Code',
+    fullName: 'First and last name',
     searchCountries: 'Search countries or currencies',
     accountName: 'Name on the account',
     sortCode: 'Sort code, 6 digits',

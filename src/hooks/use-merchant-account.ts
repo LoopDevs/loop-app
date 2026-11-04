@@ -90,6 +90,5 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false, wall
     busy,
     message,
     load,
-    setProfile,
   };
 }

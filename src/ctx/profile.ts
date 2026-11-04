@@ -21,6 +21,7 @@ export class Profile {
   static readonly legalNameMessage = 'Enter your first and last name as they appear on your bank account.';
 
   readonly email?: string;
+  readonly name?: string;
   readonly legalName?: string;
   readonly country?: string;
   readonly stableCurrency?: string;
@@ -33,6 +34,7 @@ export class Profile {
     this.user = user;
     this.id = user.id;
     this.email = user.email;
+    this.name = user.name;
     this.legalName = user.legalName;
     this.country = user.country;
     this.stableCurrency = user.stableCurrency;
@@ -95,8 +97,12 @@ export class Profile {
     return this.email?.trim() || 'Loop wallet';
   }
 
-  hasBankIdentity(): boolean {
-    return Profile.legalNameProblem(this.legalName ?? '') === null;
+  needsName(): boolean {
+    return Profile.legalNameProblem(this.legalName ?? '') !== null;
+  }
+
+  nameSuggestion(): string {
+    return this.legalName ?? this.name ?? '';
   }
 
   legalNameUpdate(legalName: string): UserUpdate | null {

@@ -13,12 +13,16 @@ export type SocialSignInEnv = {
 export type SocialCredential = {
   idToken: string;
   nonce?: string;
+  givenName?: string;
+  familyName?: string;
 };
 
 export type OAuthLoginBody = {
   provider: SocialProvider;
   idToken: string;
   nonce?: string;
+  givenName?: string;
+  familyName?: string;
 };
 
 const nonceByteLength = 32;
@@ -81,6 +85,12 @@ export function oauthLoginBody(provider: SocialProvider, credential: SocialCrede
   const body: OAuthLoginBody = { provider, idToken: credential.idToken };
   if (credential.nonce) {
     body.nonce = credential.nonce;
+  }
+  if (credential.givenName) {
+    body.givenName = credential.givenName;
+  }
+  if (credential.familyName) {
+    body.familyName = credential.familyName;
   }
   return body;
 }
