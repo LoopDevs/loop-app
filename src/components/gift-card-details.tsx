@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { externalUrl, useOpenExternal } from '@/components/external-link';
+import { RedeemBrowser } from '@/components/redeem-browser';
 import { Button, Notice } from '@/components/ui/form';
 import { PressScale } from '@/components/ui/press-scale';
 import { ThemedText } from '@/components/ui/themed-text';
@@ -33,9 +34,16 @@ export function statusTone(status: GiftCard['status']): 'success' | 'danger' | '
   }
 }
 
-export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
+type GiftCardDetailsProps = {
+  giftCard: GiftCard;
+  onChange?: (giftCard: GiftCard) => void;
+};
+
+export function GiftCardDetails({ giftCard, onChange }: GiftCardDetailsProps) {
   useBlockScreenCapture();
   const theme = useTheme();
+  const toast = useToast();
+  const [browsing, setBrowsing] = useState(false);
   const openExternal = useOpenExternal();
   const redeemUrl = giftCard.redeemUrl && externalUrl.isWeb(giftCard.redeemUrl) ? giftCard.redeemUrl : null;
   const hasCode = Boolean(
@@ -73,7 +81,25 @@ export function GiftCardDetails({ giftCard }: { giftCard: GiftCard }) {
           {giftCard.redeemUrlChallenge && <CopyableSecret label="Code" value={giftCard.redeemUrlChallenge} />}
         </View>
       )}
-      {redeemUrl && <Button label="Open redeem page" variant="primary" onPress={() => openExternal(redeemUrl)} />}
+      {redeemUrl && (
+        <Button
+          label="Open redeem page"
+          variant={hasCode ? 'secondary' : 'primary'}
+          onPress={() => (process.env.EXPO_OS === 'web' ? openExternal(redeemUrl) : setBrowsing(true))}
+        />
+      )}
+      {browsing && redeemUrl && (
+        <RedeemBrowser
+          giftCard={giftCard}
+          url={redeemUrl}
+          onSaved={(saved) => {
+            setBrowsing(false);
+            onChange?.(saved);
+            toast('Card details saved to your wallet');
+          }}
+          onClose={() => setBrowsing(false)}
+        />
+      )}
       {giftCard.info?.instructions && (
         <Collapsible title="How to use">
           <ThemedText type="small">{giftCard.info.instructions}</ThemedText>
