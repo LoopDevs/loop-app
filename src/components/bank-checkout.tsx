@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 
 import { AmountChip, AmountEntry } from '@/components/purchase-amount';
 import { PurchaseTerms, purchaseTermsKey } from '@/components/purchase-terms';
@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
-import { type BankInstitution, BankLink } from '@/ctx/bank-link';
+import { type BankInstitution, BankLink, type BankLinkProgress } from '@/ctx/bank-link';
 import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
@@ -36,8 +36,9 @@ type Props = {
 type Stage = 'amount' | 'approve' | 'expired' | 'paid' | 'other';
 
 type PayPhase = {
-  step: 'ordering' | 'opening';
+  step: 'ordering' | 'opening' | 'atBank' | 'checking';
   viaPicker: boolean;
+  bank: string | null;
 };
 
 const stageTickMs = 30_000;
@@ -111,7 +112,44 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const canPay = !busy && fiatAmount !== null && amountProblem === null;
   const choosingBank = busy && phase?.viaPicker === true;
   const payingWithBank = busy && !choosingBank;
-  const busyLabel = (opening: string) => (phase?.step === 'opening' ? opening : 'Setting up…');
+  const busyLabel = (opening: string) => {
+    switch (phase?.step) {
+      case 'opening':
+        return opening;
+      case 'atBank':
+        return `Approve in ${phase.bank ?? bankName ?? 'your banking app'}…`;
+      case 'checking':
+        return 'Checking with your bank…';
+      default:
+        return 'Setting up…';
+    }
+  };
+
+  const advance = (progress: BankLinkProgress) =>
+    setPhase((current) => {
+      if (!current) {
+        return current;
+      }
+      if (progress.step === 'atBank' && current.step === 'opening') {
+        return { ...current, step: 'atBank', bank: progress.bankName ?? current.bank };
+      }
+      if (progress.step === 'backFromBank' && current.step === 'atBank') {
+        return { ...current, step: 'checking' };
+      }
+      return current;
+    });
+
+  useEffect(() => {
+    if (phase?.step !== 'atBank') {
+      return;
+    }
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        advance({ step: 'backFromBank' });
+      }
+    });
+    return () => subscription.remove();
+  }, [phase?.step]);
   const bankName = profile.bank?.name ?? null;
 
   const changeAmount = (next: string) => {
@@ -151,11 +189,11 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   };
 
   const approve = async (giftCard: GiftCard) => {
-    setPhase((current) => ({ step: 'opening', viaPicker: current?.viaPicker ?? false }));
+    setPhase((current) => ({ step: 'opening', viaPicker: current?.viaPicker ?? false, bank: current?.bank ?? null }));
     const token = BankPayment.linkToken(giftCard);
     const link = token ? null : BankPayment.openLink(giftCard);
     if (token && process.env.EXPO_OS !== 'web') {
-      const outcome = await BankLink.present(token).catch((error: unknown) => {
+      const outcome = await BankLink.present(token, advance).catch((error: unknown) => {
         errorReporting.reportError(error, `Bank approval could not open for order ${giftCard.id}`);
         return null;
       });
@@ -198,7 +236,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
         return;
       }
       setAmountError(null);
-      setPhase({ step: 'ordering', viaPicker: differentBank.current });
+      setPhase({ step: 'ordering', viaPicker: differentBank.current, bank: null });
       try {
         let created: GiftCard;
         try {
@@ -251,7 +289,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       if (!order) {
         return;
       }
-      setPhase({ step: 'ordering', viaPicker: false });
+      setPhase({ step: 'ordering', viaPicker: false, bank: null });
       try {
         const fetched = await ctx.giftCard(order.id);
         if (!mounted.current) {
