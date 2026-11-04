@@ -199,6 +199,7 @@ export type OAuthIdentityJson = {
 export type UserJson = {
   id: string;
   email?: string;
+  name?: string;
   legalName?: string;
   country?: string;
   stableCurrency?: string;

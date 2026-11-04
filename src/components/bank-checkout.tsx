@@ -7,7 +7,7 @@ import { StyleSheet, View } from 'react-native';
 import { AmountChip, AmountEntry } from '@/components/purchase-amount';
 import { PurchaseTerms, purchaseTermsKey } from '@/components/purchase-terms';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
-import { Button, Field, Notice } from '@/components/ui/form';
+import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
 import { Radius, Spacing } from '@/constants/theme';
@@ -19,7 +19,7 @@ import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
 import { OneTapBuy } from '@/ctx/one-tap-buy';
-import { Profile } from '@/ctx/profile';
+import type { Profile } from '@/ctx/profile';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useNow } from '@/hooks/use-now';
 import { useTheme } from '@/hooks/use-theme';
@@ -31,7 +31,6 @@ type Props = {
   merchant: Merchant;
   profile: Profile;
   activeOrder: GiftCard | null;
-  onProfile: (profile: Profile) => void;
 };
 
 type Stage = 'amount' | 'approve' | 'expired' | 'paid' | 'other';
@@ -55,14 +54,13 @@ function stageOf(order: GiftCard | null, now: number): Stage {
   return BankPayment.approvable(order, now) ? 'approve' : 'expired';
 }
 
-export function BankCheckout({ merchant, profile, activeOrder, onProfile }: Props) {
+export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const router = useRouter();
   const theme = useTheme();
   const toast = useToast();
   const { busy, message, setMessage, run } = useBusyAction();
   const [amount, setAmount] = useState(firstAmount(merchant));
   const [amountError, setAmountError] = useState<string | null>(null);
-  const [legalName, setLegalName] = useState('');
   const [order, setOrder] = useState<GiftCard | null>(activeOrder);
   const [syncedOrder, setSyncedOrder] = useState(activeOrder);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -98,12 +96,10 @@ export function BankCheckout({ merchant, profile, activeOrder, onProfile }: Prop
 
   const fiatAmount = normalizeAmount(amount);
   const amountProblem = merchant.amountProblem(amount);
-  const legalNameNeeded = !profile.hasBankIdentity();
-  const legalNameProblem = legalNameNeeded ? Profile.legalNameProblem(legalName) : null;
   const estimate = merchant.cashbackEstimate(fiatAmount ?? '');
   const range = merchant.rangeLabel();
   const stage = stageOf(order, now);
-  const canPay = !busy && fiatAmount !== null && amountProblem === null && legalNameProblem === null;
+  const canPay = !busy && fiatAmount !== null && amountProblem === null;
 
   const changeAmount = (next: string) => {
     setAmount(next);
@@ -164,10 +160,6 @@ export function BankCheckout({ merchant, profile, activeOrder, onProfile }: Prop
       setAmountError(null);
       let created: GiftCard;
       try {
-        const identity = legalNameNeeded ? profile.legalNameUpdate(legalName) : null;
-        if (identity) {
-          onProfile(profile.withUser(await ctx.updateUser(identity)));
-        }
         created = await ctx.orderGiftCard({
           merchantId: merchant.id,
           fiatAmount,
@@ -317,22 +309,6 @@ export function BankCheckout({ merchant, profile, activeOrder, onProfile }: Prop
                 />
               ))}
       </View>
-      {legalNameNeeded && (
-        <View style={styles.field}>
-          <Field
-            label="Name on your bank account"
-            value={legalName}
-            onChangeText={setLegalName}
-            placeholder="First and last name"
-            autoCapitalize="words"
-            autoComplete="name"
-            textContentType="name"
-          />
-          <ThemedText type="small" themeColor="textSecondary">
-            Your bank checks this name when you approve the payment.
-          </ThemedText>
-        </View>
-      )}
       {message !== '' && <Notice message={message} />}
       <Button
         label={fiatAmount && amountProblem === null ? `Pay ${merchant.shortAmount(fiatAmount)} by bank` : 'Pay by bank'}
@@ -374,9 +350,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: Spacing.two,
-  },
-  field: {
     gap: Spacing.two,
   },
 });

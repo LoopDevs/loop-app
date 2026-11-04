@@ -17,7 +17,7 @@ import { PayTopBar } from '@/components/pay-top-bar';
 import { AmountChip, AmountEntry } from '@/components/purchase-amount';
 import { PurchaseConfirm, PurchaseDelivered, PurchaseProgress } from '@/components/purchase-progress';
 import { PurchaseTerms, purchaseTermsKey } from '@/components/purchase-terms';
-import { Button, Field, Notice } from '@/components/ui/form';
+import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
 import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
@@ -45,7 +45,7 @@ import {
   type SignedTransfer,
 } from '@/ctx/payment-state';
 import { PriceWindow } from '@/ctx/price-window';
-import { Profile } from '@/ctx/profile';
+import type { Profile } from '@/ctx/profile';
 import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
@@ -70,7 +70,6 @@ type Props = {
   merchant: Merchant;
   wallet: SmartWallet;
   profile: Profile;
-  onProfile: (profile: Profile) => void;
   onClose: () => void;
 };
 
@@ -136,7 +135,7 @@ const inFlightPayments = new InFlightPayments();
 const oneTapBuy = new OneTapBuy();
 const noRates = new Rates(new Map());
 
-export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose }: Props) {
+export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -145,7 +144,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
   const { busy, message, setMessage, run } = useBusyAction();
   const [amount, setAmount] = useState(firstAmount(merchant));
   const [amountError, setAmountError] = useState<string | null>(null);
-  const [legalName, setLegalName] = useState('');
   const [refusedCurrencies, setRefusedCurrencies] = useState<ReadonlySet<PaymentCurrency>>(new Set());
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const [order, setOrder] = useState<GiftCard | null>(null);
@@ -183,8 +181,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
   const payWith: PayWith | null = bankOffered ? BankPayment.option : currency;
   const byBank = payWith === BankPayment.option;
   const bankOrder = order ? BankPayment.isBank(order) : byBank;
-  const legalNameNeeded = byBank && !profile.hasBankIdentity();
-  const legalNameProblem = legalNameNeeded ? Profile.legalNameProblem(legalName) : null;
   const usdPrice = currency ? (view?.holdings.rates ?? noRates).usdPrice(currency) : null;
   const fiatAmount = normalizeAmount(amount);
   const amountProblem = merchant.amountProblem(amount);
@@ -572,10 +568,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
 
   const createBankOrder = async (cardAmount: string): Promise<GiftCard | null> => {
     try {
-      const identity = legalNameNeeded ? profile.legalNameUpdate(legalName) : null;
-      if (identity) {
-        onProfile(profile.withUser(await ctx.updateUser(identity)));
-      }
       return await ctx.orderGiftCard({
         merchantId: merchant.id,
         fiatAmount: cardAmount,
@@ -625,7 +617,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
     !oneTapBuy.busy &&
     fiatAmount !== null &&
     amountProblem === null &&
-    (byBank ? legalNameProblem === null : walletReady);
+    (byBank || walletReady);
 
   const buy = () => {
     if (!canBuy || !fiatAmount) {
@@ -877,23 +869,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
                 {!byBank && <SummaryRow label="Your balance" value={balanceText} />}
                 {short && <InlineError text={notEnoughMessage} />}
               </View>
-
-              {legalNameNeeded && (
-                <View style={styles.section}>
-                  <Field
-                    label="Name on your bank account"
-                    value={legalName}
-                    onChangeText={setLegalName}
-                    placeholder="First and last name"
-                    autoCapitalize="words"
-                    autoComplete="name"
-                    textContentType="name"
-                  />
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Your bank checks this name when you approve the payment.
-                  </ThemedText>
-                </View>
-              )}
             </ScrollView>
             <View style={styles.footer}>
               {message !== '' && <Notice message={message} />}

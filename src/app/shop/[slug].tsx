@@ -40,8 +40,10 @@ export default function MerchantScreen() {
   const router = useRouter();
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const { merchant, wallet, walletChecked, profile, signedIn, activeOrder, busy, message, load, setProfile } =
-    useMerchantAccount(slug, { withActiveOrder: true, walletOnlyWithoutBank: true });
+  const { merchant, wallet, walletChecked, profile, signedIn, activeOrder, busy, message, load } = useMerchantAccount(
+    slug,
+    { withActiveOrder: true, walletOnlyWithoutBank: true },
+  );
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
@@ -82,7 +84,7 @@ export default function MerchantScreen() {
       </View>
     ) : profile && BankPayment.offered(merchant.currency, profile) ? (
       <View style={cardStyle}>
-        <BankCheckout merchant={merchant} profile={profile} activeOrder={activeOrder} onProfile={setProfile} />
+        <BankCheckout merchant={merchant} profile={profile} activeOrder={activeOrder} />
       </View>
     ) : profile && wallet ? (
       <View style={cardStyle}>
