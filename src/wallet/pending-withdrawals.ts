@@ -1,5 +1,5 @@
 import type { PaymentCurrency } from '../stellar/network.ts';
-import type { PendingWithdrawal } from './savings-top-up.ts';
+import type { PendingVaultCall } from './vault-call.ts';
 
 export type PendingWithdrawalStorage = {
   getItem(key: string): Promise<string | null>;
@@ -11,7 +11,7 @@ export class PendingWithdrawals {
   static readonly keyPrefix = 'savings.withdrawal.';
 
   private readonly storage: PendingWithdrawalStorage;
-  private readonly unsaved = new Map<string, PendingWithdrawal>();
+  private readonly unsaved = new Map<string, PendingVaultCall>();
 
   constructor(storage: PendingWithdrawalStorage) {
     this.storage = storage;
@@ -21,13 +21,13 @@ export class PendingWithdrawals {
     return `${PendingWithdrawals.keyPrefix}${address}.${currency}`;
   }
 
-  async get(address: string, currency: PaymentCurrency): Promise<PendingWithdrawal | undefined> {
+  async get(address: string, currency: PaymentCurrency): Promise<PendingVaultCall | undefined> {
     const key = PendingWithdrawals.keyOf(address, currency);
     const stored = PendingWithdrawals.parse(await this.storage.getItem(key));
     return this.unsaved.get(key) ?? stored;
   }
 
-  async set(address: string, currency: PaymentCurrency, withdrawal: PendingWithdrawal): Promise<void> {
+  async set(address: string, currency: PaymentCurrency, withdrawal: PendingVaultCall): Promise<void> {
     const key = PendingWithdrawals.keyOf(address, currency);
     try {
       await this.storage.setItem(key, JSON.stringify(withdrawal));
@@ -44,7 +44,7 @@ export class PendingWithdrawals {
     await this.storage.removeItem(key);
   }
 
-  private static parse(stored: string | null): PendingWithdrawal | undefined {
+  private static parse(stored: string | null): PendingVaultCall | undefined {
     if (!stored) {
       return undefined;
     }

@@ -19,7 +19,7 @@ export default function PayScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { merchant, wallet, profile, signedIn, busy, message, load, setProfile } = useMerchantAccount(slug);
+  const { merchant, wallet, walletChecked, profile, signedIn, busy, message, load } = useMerchantAccount(slug);
   const close = () => {
     if (router.canGoBack()) {
       router.back();
@@ -56,7 +56,8 @@ export default function PayScreen() {
   );
 
   const content = () => {
-    if (!merchant || (signedIn === null && message === '')) {
+    const settling = signedIn === null || (signedIn && !walletChecked);
+    if (!merchant || (settling && message === '')) {
       return (
         <View style={[styles.fallback, { paddingTop: topPadding }]}>
           <PayTopBar title={title} onClose={close} />
@@ -81,7 +82,7 @@ export default function PayScreen() {
       );
     }
     return (
-      <GiftCardPurchase merchant={merchant} wallet={wallet} profile={profile} onProfile={setProfile} onClose={close} />
+      <GiftCardPurchase merchant={merchant} wallet={wallet} profile={profile} onClose={close} />
     );
   };
 

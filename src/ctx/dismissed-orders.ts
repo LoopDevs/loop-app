@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { BankPayment } from './bank-payment.ts';
 import { ctx, type GiftCard } from './client.ts';
 import { OneTapBuy } from './one-tap-buy.ts';
 
@@ -24,7 +25,7 @@ export class DismissedOrders {
   }
 
   static hidden(order: GiftCard, ids: ReadonlySet<string>): boolean {
-    return ids.has(order.id) && DismissedOrders.cancellable(order);
+    return DismissedOrders.cancellable(order) && (ids.has(order.id) || BankPayment.isBank(order));
   }
 
   static parse(stored: string | null): string[] {

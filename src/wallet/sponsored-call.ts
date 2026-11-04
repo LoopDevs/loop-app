@@ -28,16 +28,31 @@ export type ExpectedWithdrawal = {
   shares: bigint;
 };
 
+export type ExpectedDeposit = {
+  from: string;
+  vault: string;
+  token: Token;
+  amount: bigint;
+};
+
+export type ContractCall = {
+  contract: string;
+  method: string;
+  args: xdr.ScVal[];
+};
+
 export class SponsoredCall {
   readonly contract: string;
   readonly method: string;
   readonly args: xdr.ScVal[];
+  readonly nested: ContractCall[];
   readonly digest: Uint8Array;
 
-  private constructor(contract: string, method: string, args: xdr.ScVal[], digest: Uint8Array) {
-    this.contract = contract;
-    this.method = method;
-    this.args = args;
+  private constructor(root: ContractCall, nested: ContractCall[], digest: Uint8Array) {
+    this.contract = root.contract;
+    this.method = root.method;
+    this.args = root.args;
+    this.nested = nested;
     this.digest = digest;
   }
 
@@ -69,14 +84,15 @@ export class SponsoredCall {
     if (Address.fromScAddress(credentials.address.address).toString() !== wallet) {
       throw new Error('The authorization is for a different wallet');
     }
-    if (rootInvocation.subInvocations.length > 0) {
-      throw new Error('The authorization covers nested calls');
+    const { subInvocations } = rootInvocation;
+    if (1 + subInvocations.length !== ruleIds.length) {
+      throw new Error('The authorization covers nested calls the wallet rules do not');
     }
-    const authorized = rootInvocation.function;
-    if (authorized.type !== 'sorobanAuthorizedFunctionTypeContractFn') {
-      throw new Error('The authorization must cover a contract call');
+    if (subInvocations.some((invocation) => invocation.subInvocations.length > 0)) {
+      throw new Error('The authorization covers nested calls inside nested calls');
     }
-    const call = authorized.contractFn;
+    const call = SponsoredCall.contractFn(rootInvocation.function);
+    const nested = subInvocations.map((invocation) => SponsoredCall.contractFn(invocation.function));
     if (
       operation.func.type !== 'hostFunctionTypeInvokeContract' ||
       !operation.func.invokeContract.equals(call)
@@ -98,12 +114,22 @@ export class SponsoredCall {
     if (bytesToHex(digest) !== built.digest.toLowerCase()) {
       throw new Error('The digest to sign does not match the transaction');
     }
-    return new SponsoredCall(
-      Address.fromScAddress(call.contractAddress).toString(),
-      call.functionName.toStringStrict(),
-      call.args,
-      digest,
-    );
+    return new SponsoredCall(SponsoredCall.contractCall(call), nested.map(SponsoredCall.contractCall), digest);
+  }
+
+  private static contractFn(authorized: xdr.SorobanAuthorizedFunction): xdr.InvokeContractArgs {
+    if (authorized.type !== 'sorobanAuthorizedFunctionTypeContractFn') {
+      throw new Error('The authorization must cover a contract call');
+    }
+    return authorized.contractFn;
+  }
+
+  private static contractCall(call: xdr.InvokeContractArgs): ContractCall {
+    return {
+      contract: Address.fromScAddress(call.contractAddress).toString(),
+      method: call.functionName.toStringStrict(),
+      args: call.args,
+    };
   }
 
   requirePayment({ from, token, amount, orderAddress }: ExpectedPayment): SignedTransfer {
@@ -144,8 +170,48 @@ export class SponsoredCall {
     return minimums[0];
   }
 
+  requireDeposit({ from, vault, token, amount }: ExpectedDeposit): void {
+    if (
+      this.contract !== vault ||
+      this.method !== 'deposit' ||
+      !this.argsAre(['scvVec', 'scvVec', 'scvAddress', 'scvBool']) ||
+      ![this.args[0], this.args[1]].every((amounts) => this.vecOf(amounts).every((each) => each.type === 'scvI128'))
+    ) {
+      throw new Error('The transaction is not a deposit into the savings vault');
+    }
+    const [desired, minimums, owner, invest] = this.nativeArgs() as [bigint[], bigint[], string, boolean];
+    if (desired.length !== 1 || desired[0] !== amount) {
+      throw new Error('The deposit amount does not match the request');
+    }
+    if (minimums.length !== 1 || minimums[0] > amount) {
+      throw new Error('The deposit minimum is above the amount');
+    }
+    if (owner !== from || invest !== true) {
+      throw new Error('The deposit does not match the request');
+    }
+    if (this.nested.length !== 1) {
+      throw new Error(`The deposit must authorize exactly one ${token.symbol} transfer`);
+    }
+    const [transfer] = this.nested;
+    if (
+      transfer.contract !== token.contract ||
+      transfer.method !== 'transfer' ||
+      !SponsoredCall.argsOfTypes(transfer.args, ['scvAddress', 'scvAddress', 'scvI128'])
+    ) {
+      throw new Error(`The deposit transfer is not a ${token.symbol} transfer`);
+    }
+    const [payer, to, transferred] = transfer.args.map((arg) => scValToNative(arg)) as [string, string, bigint];
+    if (payer !== from || to !== vault || transferred !== amount) {
+      throw new Error('The deposit transfer does not match the request');
+    }
+  }
+
   private argsAre(types: xdr.ScVal['type'][]): boolean {
-    return this.args.length === types.length && this.args.every((arg, index) => arg.type === types[index]);
+    return SponsoredCall.argsOfTypes(this.args, types);
+  }
+
+  private static argsOfTypes(args: xdr.ScVal[], types: xdr.ScVal['type'][]): boolean {
+    return args.length === types.length && args.every((arg, index) => arg.type === types[index]);
   }
 
   private vecOf(value: xdr.ScVal): xdr.ScVal[] {

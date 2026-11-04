@@ -2,7 +2,10 @@ import type { GiftCard } from './client.ts';
 import type { ShownOrder } from './one-tap-buy.ts';
 import type { PaymentCurrency } from '../stellar/network.ts';
 
-type BankOrder = Pick<GiftCard, 'status' | 'paymentStatus' | 'paymentMethod' | 'paymentUrl' | 'paymentUrlExpiration'>;
+type BankOrder = Pick<
+  GiftCard,
+  'status' | 'paymentStatus' | 'paymentMethod' | 'paymentUrl' | 'paymentUrlExpiration' | 'plaidLinkToken'
+>;
 
 type BankProfile = {
   stableCurrency?: string;
@@ -50,6 +53,10 @@ export class BankPayment {
     return order.paymentStatus === 'paid';
   }
 
+  static awaitingApproval(order: BankOrder): boolean {
+    return BankPayment.isBank(order) && order.status === 'unpaid';
+  }
+
   static openLink(order: BankOrder): string | null {
     if (!BankPayment.awaitingApproval(order) || !order.paymentUrl) {
       return null;
@@ -57,12 +64,20 @@ export class BankPayment {
     return BankPayment.isApprovalHost(order.paymentUrl) ? order.paymentUrl : null;
   }
 
+  static linkToken(order: BankOrder): string | null {
+    return BankPayment.awaitingApproval(order) && order.plaidLinkToken ? order.plaidLinkToken : null;
+  }
+
   static linkRefused(order: BankOrder): boolean {
     return BankPayment.awaitingApproval(order) && !!order.paymentUrl && !BankPayment.isApprovalHost(order.paymentUrl);
   }
 
-  static link(order: BankOrder, now: number): string | null {
-    return BankPayment.linkExpired(order, now) ? null : BankPayment.openLink(order);
+  static approvalReady(order: BankOrder): boolean {
+    return BankPayment.linkToken(order) !== null || BankPayment.openLink(order) !== null;
+  }
+
+  static approvable(order: BankOrder, now: number): boolean {
+    return !BankPayment.linkExpired(order, now) && BankPayment.approvalReady(order);
   }
 
   static linkExpired(order: BankOrder, now: number): boolean {
@@ -75,7 +90,7 @@ export class BankPayment {
 
   static resumed(order: GiftCard, now: number): ShownOrder {
     if (order.status === 'unpaid') {
-      const linkOpen = BankPayment.link(order, now) !== null;
+      const linkOpen = BankPayment.approvable(order, now);
       return { order, payment: { kind: 'bank', linkOpen }, follow: true, sent: null };
     }
     return { order, payment: { kind: 'ready' }, follow: order.status === 'paid', sent: null };
@@ -96,10 +111,6 @@ export class BankPayment {
       default:
         return null;
     }
-  }
-
-  private static awaitingApproval(order: BankOrder): boolean {
-    return BankPayment.isBank(order) && order.status === 'unpaid';
   }
 
   private static isApprovalHost(link: string): boolean {

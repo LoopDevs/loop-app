@@ -324,7 +324,7 @@ test('an order is sent as a cashback order and a matching card is returned', asy
   assert.equal(placed.id, 'g1');
   assert.equal(sent[0].method, 'POST');
   assert.equal(sent[0].url, `${apiUrl}/gift-cards`);
-  assert.deepEqual(sent[0].body, { ...order, rewardType: 'cashback' });
+  assert.deepEqual(sent[0].body, { ...order, rewardType: 'cashback', platform: 'ios' });
   assert.deepEqual(reported, []);
 });
 

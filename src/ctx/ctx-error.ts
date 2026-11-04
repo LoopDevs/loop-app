@@ -6,6 +6,7 @@ export class CtxError extends Error {
   static readonly requestFailedMessage = "That didn't go through. Try again.";
   static readonly knownMessages: Readonly<Record<string, string>> = {
     ErrInvalidCode: "That code didn't work. Check it and try again, or send a new one.",
+    ErrSavingsUnavailable: "Savings isn't available right now.",
   };
 
   readonly status: number;

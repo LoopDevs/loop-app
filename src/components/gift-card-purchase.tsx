@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dismissBrowser, openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
-import { Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeInLeft,
   FadeInRight,
@@ -12,17 +12,18 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ExternalLink } from '@/components/external-link';
 import { LogoDisc } from '@/components/merchant-mark';
 import { PayTopBar } from '@/components/pay-top-bar';
+import { AmountChip, AmountEntry } from '@/components/purchase-amount';
 import { PurchaseConfirm, PurchaseDelivered, PurchaseProgress } from '@/components/purchase-progress';
-import { Button, Field, Notice } from '@/components/ui/form';
+import { PurchaseTerms, purchaseTermsKey } from '@/components/purchase-terms';
+import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
-import { loopLinks } from '@/constants/loop-links';
 import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
+import { BankLink } from '@/ctx/bank-link';
 import { BankPayment } from '@/ctx/bank-payment';
 import { BuyPrice, type BuyQuote } from '@/ctx/buy-price';
 import { BuyTimer } from '@/ctx/buy-timer';
@@ -44,7 +45,7 @@ import {
   type SignedTransfer,
 } from '@/ctx/payment-state';
 import { PriceWindow } from '@/ctx/price-window';
-import { Profile } from '@/ctx/profile';
+import type { Profile } from '@/ctx/profile';
 import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
@@ -54,7 +55,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
-import { network, offeredTokens, onlyPaymentCurrency, type PaymentCurrency, type Token } from '@/stellar/network';
+import { network, offeredTokens, onlyPaymentCurrency, type PaymentCurrency } from '@/stellar/network';
 import { soroban } from '@/stellar/soroban';
 import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
@@ -69,7 +70,6 @@ type Props = {
   merchant: Merchant;
   wallet: SmartWallet;
   profile: Profile;
-  onProfile: (profile: Profile) => void;
   onClose: () => void;
 };
 
@@ -134,14 +134,8 @@ const pendingTopUps = new PendingWithdrawals(AsyncStorage);
 const inFlightPayments = new InFlightPayments();
 const oneTapBuy = new OneTapBuy();
 const noRates = new Rates(new Map());
-const purchaseTermsKey = (userId: string) => `loop.purchaseTermsAccepted.${userId}`;
-const purchaseTerms = [
-  "Once your gift card is delivered, you can't cancel or return it, except where the law gives you that right. If a card is faulty or never arrives, contact support and we will put it right.",
-  'Cashback is credited to your Loop account once your gift card is delivered.',
-  "Each gift card is subject to the brand's own terms, including where it can be used and any expiry date.",
-];
 
-export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose }: Props) {
+export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -150,8 +144,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
   const { busy, message, setMessage, run } = useBusyAction();
   const [amount, setAmount] = useState(firstAmount(merchant));
   const [amountError, setAmountError] = useState<string | null>(null);
-  const [legalName, setLegalName] = useState('');
-  const [chosen, setChosen] = useState<PayWith | null>(null);
   const [refusedCurrencies, setRefusedCurrencies] = useState<ReadonlySet<PaymentCurrency>>(new Set());
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const [order, setOrder] = useState<GiftCard | null>(null);
@@ -184,17 +176,11 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
   const currencies = offeredTokens.map((token) => token.currency);
   const stable = view?.stable ?? Rates.usd;
   const bankOffered = BankPayment.offered(merchant.currency, profile);
-  const chosenCurrency = chosen === BankPayment.option ? null : chosen;
   const currency =
-    onlyPaymentCurrency ??
-    chosenCurrency ??
-    view?.holdings.preferredCurrency(currencies, stable, refusedCurrencies) ??
-    null;
-  const payWith: PayWith | null = chosen ?? (bankOffered ? BankPayment.option : currency);
+    onlyPaymentCurrency ?? view?.holdings.preferredCurrency(currencies, stable, refusedCurrencies) ?? null;
+  const payWith: PayWith | null = bankOffered ? BankPayment.option : currency;
   const byBank = payWith === BankPayment.option;
   const bankOrder = order ? BankPayment.isBank(order) : byBank;
-  const legalNameNeeded = byBank && !profile.hasBankIdentity();
-  const legalNameProblem = legalNameNeeded ? Profile.legalNameProblem(legalName) : null;
   const usdPrice = currency ? (view?.holdings.rates ?? noRates).usdPrice(currency) : null;
   const fiatAmount = normalizeAmount(amount);
   const amountProblem = merchant.amountProblem(amount);
@@ -536,7 +522,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
         const refusal = onlyPaymentCurrency ? null : currencyRefusalMessage(name, tokenSymbol(payWith));
         if (refusal && refusesCurrency(name)) {
           setRefusedCurrencies((refused) => new Set([...refused, payWith]));
-          setChosen(null);
         }
         setMessage(refusal ?? OneTapBuy.notBoughtMessage);
         return;
@@ -544,17 +529,37 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
       await showResult(result);
     });
 
+  const approveInLink = async (giftCard: GiftCard, token: string) => {
+    const outcome = await BankLink.present(token).catch((error: unknown) => {
+      errorReporting.reportError(error, `Bank approval could not open for order ${giftCard.id}`);
+      return null;
+    });
+    if (!outcome || outcome.kind === 'approved' || !mounted.current) {
+      return;
+    }
+    if (outcome.errorCode) {
+      errorReporting.reportMessage(`Bank approval left with ${outcome.errorCode} for order ${giftCard.id}`);
+    }
+    if (outcome.displayMessage) {
+      toast(outcome.displayMessage);
+    }
+  };
+
   const approveAtBank = async (giftCard: GiftCard) => {
-    const link = BankPayment.openLink(giftCard);
-    if (!link) {
+    const token = BankPayment.linkToken(giftCard);
+    const link = token ? null : BankPayment.openLink(giftCard);
+    if (token) {
+      await approveInLink(giftCard, token);
+    } else if (link) {
+      await openBrowserAsync(link, {
+        presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+      });
+    } else {
       if (BankPayment.linkRefused(giftCard)) {
         errorReporting.reportMessage(`Bank approval link refused for order ${giftCard.id}`);
       }
       return;
     }
-    await openBrowserAsync(link, {
-      presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
-    });
     const fetched = await ctx.giftCard(giftCard.id).catch(() => null);
     if (fetched && mounted.current) {
       setOrder((held) => OneTapBuy.merged(held, fetched));
@@ -563,10 +568,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
 
   const createBankOrder = async (cardAmount: string): Promise<GiftCard | null> => {
     try {
-      const identity = legalNameNeeded ? profile.legalNameUpdate(legalName) : null;
-      if (identity) {
-        onProfile(profile.withUser(await ctx.updateUser(identity)));
-      }
       return await ctx.orderGiftCard({
         merchantId: merchant.id,
         fiatAmount: cardAmount,
@@ -616,7 +617,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
     !oneTapBuy.busy &&
     fiatAmount !== null &&
     amountProblem === null &&
-    (byBank ? legalNameProblem === null : walletReady);
+    (byBank || walletReady);
 
   const buy = () => {
     if (!canBuy || !fiatAmount) {
@@ -744,9 +745,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
       ? money.fiat(order.cardFiatAmount, order.cardFiatCurrency)
       : bankPrice
     : walletPrice;
-  const walletOptions = onlyPaymentCurrency
-    ? offeredTokens.filter((token) => token.currency === onlyPaymentCurrency)
-    : offeredTokens;
   const topPadding = Platform.OS === 'ios' ? Spacing.two : insets.top + Spacing.two;
   const bottomPadding = insets.bottom + Spacing.three;
   const stepContent = () => {
@@ -871,54 +869,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
                 {!byBank && <SummaryRow label="Your balance" value={balanceText} />}
                 {short && <InlineError text={notEnoughMessage} />}
               </View>
-
-              {(onlyPaymentCurrency === null || bankOffered) && (
-                <View style={styles.section}>
-                  <ThemedText type="smallBold">Pay with</ThemedText>
-                  <View style={styles.options} accessibilityRole="radiogroup">
-                    {bankOffered && (
-                      <Button
-                        label={BankPayment.rail(merchant.currency)?.bankLabel ?? 'Bank account'}
-                        onPress={() => setChosen(BankPayment.option)}
-                        selected={byBank}
-                      />
-                    )}
-                    {walletOptions.map((token) => (
-                      <Button
-                        key={token.currency}
-                        label={tokenLabel(token, view?.holdings ?? null)}
-                        onPress={() => setChosen(token.currency)}
-                        selected={!byBank && currency === token.currency}
-                        disabled={
-                          refusedCurrencies.has(token.currency) || view?.holdings.spendable(token.currency) === 0n
-                        }
-                      />
-                    ))}
-                  </View>
-                  {byBank && (
-                    <ThemedText type="small" themeColor="textSecondary">
-                      You approve the payment in your banking app. Cashback is paid in pounds.
-                    </ThemedText>
-                  )}
-                </View>
-              )}
-
-              {legalNameNeeded && (
-                <View style={styles.section}>
-                  <Field
-                    label="Name on your bank account"
-                    value={legalName}
-                    onChangeText={setLegalName}
-                    placeholder="First and last name"
-                    autoCapitalize="words"
-                    autoComplete="name"
-                    textContentType="name"
-                  />
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Your bank checks this name when you approve the payment.
-                  </ThemedText>
-                </View>
-              )}
             </ScrollView>
             <View style={styles.footer}>
               {message !== '' && <Notice message={message} />}
@@ -961,62 +911,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onProfile, onClose
   );
 }
 
-function PurchaseTerms() {
-  return (
-    <View style={styles.section} accessibilityLiveRegion="polite">
-      <ThemedText type="subtitle" accessibilityRole="header">
-        Before your first gift card
-      </ThemedText>
-      {purchaseTerms.map((term) => (
-        <ThemedText key={term} type="small" themeColor="textSecondary">
-          {term}
-        </ThemedText>
-      ))}
-      <ThemedText type="small" themeColor="textSecondary">
-        Read the full{' '}
-        <ExternalLink href={loopLinks.terms} style={styles.termsLink}>
-          Terms
-        </ExternalLink>
-        .
-      </ThemedText>
-    </View>
-  );
-}
-
-function AmountChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <View style={styles.chip}>
-      <Button label={label} onPress={onPress} selected={selected} variant="secondary" />
-    </View>
-  );
-}
-
-function AmountEntry({
-  merchant,
-  value,
-  onChange,
-}: {
-  merchant: Merchant;
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const theme = useTheme();
-  const wholeUnits = merchant.denominationType === 'min-max-major';
-  return (
-    <TextInput
-      value={value}
-      onChangeText={onChange}
-      placeholder={merchant.shortAmount('0')}
-      accessibilityLabel={`Amount in ${merchant.currency}`}
-      keyboardType={wholeUnits ? 'number-pad' : 'decimal-pad'}
-      inputMode={wholeUnits ? 'numeric' : 'decimal'}
-      placeholderTextColor={theme.textSecondary}
-      selectionColor={theme.accent}
-      style={[styles.amountEntry, { color: theme.text }]}
-    />
-  );
-}
-
 function SummaryRow({ label, value, emphasis = false }: { label: string; value: string | null; emphasis?: boolean }) {
   if (value === null) {
     return null;
@@ -1054,11 +948,6 @@ function dollars(price: bigint): string {
 
 function tokenSymbol(currency: string): string {
   return network.tokens.find((token) => token.currency === currency)?.symbol ?? currency;
-}
-
-function tokenLabel(token: Token, holdings: Holdings | null): string {
-  const name = Profile.currencyLabel(token.currency);
-  return holdings ? `${name} ${money.token(holdings.spendable(token.currency), token.currency)}` : name;
 }
 
 function topUpProblem(outcome: TopUpOutcome): string {
@@ -1126,9 +1015,6 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.two,
   },
-  termsLink: {
-    textDecorationLine: 'underline',
-  },
   merchantRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1150,17 +1036,6 @@ const styles = StyleSheet.create({
     letterSpacing: -1.5,
     fontVariant: ['tabular-nums'],
   },
-  amountEntry: {
-    alignSelf: 'stretch',
-    minHeight: 64,
-    fontSize: 56,
-    lineHeight: 64,
-    letterSpacing: -1.5,
-    fontFamily: FontFamily.bold,
-    textAlign: 'center',
-    fontVariant: ['tabular-nums'],
-    padding: 0,
-  },
   pill: {
     paddingVertical: Spacing.one + 2,
     paddingHorizontal: Spacing.three,
@@ -1172,16 +1047,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.two,
   },
-  chip: {
-    minWidth: 72,
-  },
   group: {
     borderRadius: Radius.large,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
-  },
-  options: {
-    gap: Spacing.two,
   },
   summaryRow: {
     flexDirection: 'row',

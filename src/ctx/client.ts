@@ -47,6 +47,7 @@ export type DeployWalletIn = {
 };
 
 export type SmartWalletIntent =
+  | { intent: 'vault_deposit'; currency: string; amount: string }
   | { intent: 'vault_withdraw'; currency: string; shares: string }
   | { intent: 'pay'; paymentId: string }
   | { intent: 'rotate_device'; newDevicePublicKey: string };
@@ -118,10 +119,14 @@ export type GiftCardOrderIn = {
   fiatAmount: string;
   fiatCurrency: string;
   cryptoCurrency?: PaymentCurrency;
+  chooseBank?: boolean;
 };
+
+export type OrderPlatform = 'android' | 'ios';
 
 type GiftCardOrderBody = GiftCardOrderIn & {
   rewardType: 'cashback';
+  platform?: OrderPlatform;
 };
 
 export type GiftCard = {
@@ -143,6 +148,7 @@ export type GiftCard = {
   paymentCryptoTxId?: string;
   paymentUrl?: string;
   paymentUrlExpiration?: string;
+  plaidLinkToken?: string;
   number?: string;
   pin?: string;
   redeemUrl?: string;
@@ -195,10 +201,13 @@ export type OAuthIdentityJson = {
 export type UserJson = {
   id: string;
   email?: string;
+  name?: string;
   legalName?: string;
   country?: string;
   stableCurrency?: string;
   cashbackDestination?: CashbackDestination;
+  bankInstitutionId?: string;
+  bankInstitutionName?: string;
   oauthIdentities?: OAuthIdentityJson[];
 };
 
@@ -217,7 +226,8 @@ export type UserUpdate =
   | { country: string }
   | { stableCurrency: string }
   | { cashbackDestination: CashbackDestination }
-  | { legalName: string };
+  | { legalName: string }
+  | { bankInstitutionId: string; bankInstitutionName: string };
 
 export type BalanceJson = {
   currency: string;
@@ -387,7 +397,7 @@ class CtxClient {
   }
 
   async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
-    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback' };
+    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback', ...this.orderPlatform() };
     const idempotencyKey = this.orderKeys.keyFor(order);
     const card = await this.sentOrder(body, idempotencyKey);
     if (!new OrderRequest(order).matches(card)) {
@@ -396,6 +406,11 @@ class CtxClient {
     }
     this.orderKeys.settle(idempotencyKey);
     return card;
+  }
+
+  private orderPlatform(): Pick<GiftCardOrderBody, 'platform'> {
+    const os = Platform.OS;
+    return os === 'android' || os === 'ios' ? { platform: os } : {};
   }
 
   private async sentOrder(body: GiftCardOrderBody, idempotencyKey: string): Promise<GiftCard> {
@@ -431,6 +446,13 @@ class CtxClient {
     return this.checked(
       CtxResponse.giftCard,
       await this.auth.sessionRequest('GET', `/gift-cards/${encodeURIComponent(id)}`),
+    );
+  }
+
+  async saveGiftCardCode(id: string, number: string, pin: string): Promise<GiftCard> {
+    return this.checked(
+      CtxResponse.giftCard,
+      await this.auth.sessionRequest('PUT', `/gift-cards/${encodeURIComponent(id)}/number`, { number, pin }),
     );
   }
 

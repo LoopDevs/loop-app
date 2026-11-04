@@ -1,9 +1,8 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Odometer } from '@/components/odometer';
 import { FontFamily } from '@/constants/theme';
+import { useNow } from '@/hooks/use-now';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import type { PaymentCurrency } from '@/stellar/network';
@@ -33,18 +32,6 @@ type SavingsTickerProps = {
   currency: PaymentCurrency;
   rate: SavingsRate;
 };
-
-function useNow(intervalMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useFocusEffect(
-    useCallback(() => {
-      setNow(Date.now());
-      const timer = setInterval(() => setNow(Date.now()), intervalMs);
-      return () => clearInterval(timer);
-    }, [intervalMs]),
-  );
-  return now;
-}
 
 function splitPence(amount: number): { pence: bigint; subPence: string } {
   const wholePence = Math.floor(amount * 10 ** penceDecimals);
