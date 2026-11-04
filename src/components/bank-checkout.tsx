@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AmountChip, AmountEntry } from '@/components/purchase-amount';
@@ -36,6 +36,7 @@ type Props = {
 type Stage = 'amount' | 'approve' | 'expired' | 'paid' | 'other';
 
 const stageTickMs = 30_000;
+const leftNote = 'If you already approved it at your bank, the card will still arrive.';
 
 function firstAmount(merchant: Merchant): string {
   return merchant.denominationType === 'fixed' ? (merchant.denominationValues[0] ?? '') : '';
@@ -67,6 +68,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const [showingTerms, setShowingTerms] = useState(false);
   const now = useNow(stageTickMs);
   const mounted = useRef(true);
+  const resumed = useRef<string | null>(null);
 
   if (activeOrder !== syncedOrder) {
     setSyncedOrder(activeOrder);
@@ -112,6 +114,24 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
     router.push(`/wallet/${giftCard.id}`);
   };
 
+  const dropOrder = (giftCard: GiftCard) => {
+    setOrder(null);
+    void dismissedOrders.dismiss(giftCard);
+  };
+
+  const settle = async (giftCard: GiftCard, note: string) => {
+    const fetched = await ctx.giftCard(giftCard.id).catch(() => giftCard);
+    if (!mounted.current) {
+      return;
+    }
+    if (fetched.status !== 'unpaid') {
+      showCard(fetched);
+      return;
+    }
+    dropOrder(fetched);
+    toast(note);
+  };
+
   const approve = async (giftCard: GiftCard) => {
     const token = BankPayment.linkToken(giftCard);
     const link = token ? null : BankPayment.openLink(giftCard);
@@ -132,11 +152,11 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
         if (outcome.errorCode) {
           errorReporting.reportMessage(`Bank approval left with ${outcome.errorCode} for order ${giftCard.id}`);
         }
-        if (outcome.displayMessage) {
-          toast(outcome.displayMessage);
-        }
+        await settle(giftCard, outcome.displayMessage ?? leftNote);
+        return;
       }
-      return;
+      dropOrder(giftCard);
+      throw new Error(OneTapBuy.notBoughtMessage);
     }
     const url = link ?? (token ? BankPayment.openLink(giftCard) : null);
     if (url) {
@@ -178,6 +198,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       if (!mounted.current) {
         return;
       }
+      resumed.current = created.id;
       setOrder(created);
       haptics.tap();
       await approve(created);
@@ -215,17 +236,24 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       await approve(fetched);
     });
 
-  const cancelOrder = () => {
-    const cancelled = order;
-    setOrder(null);
-    setMessage('');
-    if (cancelled) {
-      void dismissedOrders.dismiss(cancelled);
-      toast('If you already approved it at your bank, the card will still arrive.');
+  const resume = useEffectEvent((giftCard: GiftCard, orderStage: Stage) => {
+    if (orderStage === 'approve') {
+      void continueApproval();
     }
-  };
+    if (orderStage === 'expired') {
+      void dismissedOrders.dismiss(giftCard);
+    }
+  });
 
-  if (order && stage !== 'amount') {
+  useEffect(() => {
+    if (!order || resumed.current === order.id) {
+      return;
+    }
+    resumed.current = order.id;
+    resume(order, stage);
+  }, [order, stage]);
+
+  if (order && (stage === 'paid' || stage === 'other')) {
     const orderAmount = merchant.shortAmount(order.cardFiatAmount);
     return (
       <View style={styles.stack}>
@@ -235,18 +263,10 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
         <ThemedText type="small" themeColor="textSecondary">
           {stage === 'paid'
             ? `Your ${orderAmount} ${merchant.name} gift card is being prepared.`
-            : stage === 'approve'
-              ? 'Approve the payment at your bank to get your card.'
-              : stage === 'expired'
-                ? 'The bank approval ran out of time. Start again to buy this card.'
-                : `Your ${orderAmount} gift card is still being paid for.`}
+            : `Your ${orderAmount} gift card is still being paid for.`}
         </ThemedText>
         {message !== '' && <Notice message={message} />}
         {stage === 'paid' && <Button label="View gift card" variant="primary" onPress={() => showCard(order)} />}
-        {stage === 'approve' && (
-          <Button label="Continue to your bank" variant="primary" onPress={continueApproval} disabled={busy} />
-        )}
-        {stage === 'expired' && <Button label="Start again" variant="primary" onPress={cancelOrder} />}
         {stage === 'other' && (
           <Button
             label="Continue your order"
@@ -254,7 +274,6 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
             onPress={() => router.push(`/shop/pay/${merchant.slug}`)}
           />
         )}
-        {stage === 'approve' && <Button label="Cancel order" variant="quiet" onPress={cancelOrder} disabled={busy} />}
       </View>
     );
   }
@@ -309,9 +328,16 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
                 />
               ))}
       </View>
+      {stage === 'expired' && <Notice message="The bank approval ran out of time. Start again to buy this card." />}
       {message !== '' && <Notice message={message} />}
       <Button
-        label={fiatAmount && amountProblem === null ? `Pay ${merchant.shortAmount(fiatAmount)} by bank` : 'Pay by bank'}
+        label={
+          busy
+            ? 'Opening your bank…'
+            : fiatAmount && amountProblem === null
+              ? `Pay ${merchant.shortAmount(fiatAmount)} by bank`
+              : 'Pay by bank'
+        }
         variant="primary"
         onPress={startPay}
         disabled={!canPay}
