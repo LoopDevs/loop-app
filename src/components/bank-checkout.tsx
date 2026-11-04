@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 
 import { AmountChip, AmountEntry } from '@/components/purchase-amount';
@@ -75,7 +75,6 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const [phase, setPhase] = useState<PayPhase | null>(null);
   const now = useNow(stageTickMs);
   const mounted = useRef(true);
-  const resumed = useRef<string | null>(null);
   const differentBank = useRef(false);
 
   if (activeOrder !== syncedOrder) {
@@ -259,7 +258,6 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
         if (!mounted.current) {
           return;
         }
-        resumed.current = created.id;
         setOrder(created);
         haptics.tap();
         await approve(created);
@@ -283,45 +281,6 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
     AsyncStorage.setItem(purchaseTermsKey(profile.id), 'yes').catch(() => setTermsAccepted(false));
     void pay();
   };
-
-  const continueApproval = () =>
-    run(async () => {
-      if (!order) {
-        return;
-      }
-      setPhase({ step: 'ordering', viaPicker: false, bank: null });
-      try {
-        const fetched = await ctx.giftCard(order.id);
-        if (!mounted.current) {
-          return;
-        }
-        if (fetched.status !== 'unpaid') {
-          showCard(fetched);
-          return;
-        }
-        setOrder(fetched);
-        await approve(fetched);
-      } finally {
-        setPhase(null);
-      }
-    });
-
-  const resume = useEffectEvent((giftCard: GiftCard, orderStage: Stage) => {
-    if (orderStage === 'approve') {
-      void continueApproval();
-    }
-    if (orderStage === 'expired') {
-      void dismissedOrders.dismiss(giftCard);
-    }
-  });
-
-  useEffect(() => {
-    if (!order || resumed.current === order.id) {
-      return;
-    }
-    resumed.current = order.id;
-    resume(order, stage);
-  }, [order, stage]);
 
   if (order && (stage === 'paid' || stage === 'other')) {
     const orderAmount = merchant.shortAmount(order.cardFiatAmount);
