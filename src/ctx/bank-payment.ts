@@ -53,6 +53,10 @@ export class BankPayment {
     return order.paymentStatus === 'paid';
   }
 
+  static awaitingApproval(order: BankOrder): boolean {
+    return BankPayment.isBank(order) && order.status === 'unpaid';
+  }
+
   static openLink(order: BankOrder): string | null {
     if (!BankPayment.awaitingApproval(order) || !order.paymentUrl) {
       return null;
@@ -107,10 +111,6 @@ export class BankPayment {
       default:
         return null;
     }
-  }
-
-  private static awaitingApproval(order: BankOrder): boolean {
-    return BankPayment.isBank(order) && order.status === 'unpaid';
   }
 
   private static isApprovalHost(link: string): boolean {

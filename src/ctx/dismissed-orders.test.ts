@@ -14,7 +14,7 @@ const order = (fields: Partial<GiftCard> = {}): GiftCard => ({
   cardFiatCurrency: 'GBP',
   paymentId: 'p1',
   paymentStatus: 'unpaid',
-  paymentMethod: 'plaid-uk-eu',
+  paymentMethod: 'crypto',
   ...fields,
 });
 
@@ -44,6 +44,15 @@ test('a dismissed order shows again once money is on it', async () => {
   assert.equal(DismissedOrders.hidden(order({ status: 'paid' }), ids), false);
   assert.equal(DismissedOrders.hidden(order({ status: 'fulfilled' }), ids), false);
   assert.equal(DismissedOrders.hidden(order({ paymentCryptoTxId: 'tx1' }), ids), false);
+});
+
+test('an unpaid bank order is never resumed, dismissed or not', () => {
+  const none = new Set<string>();
+  assert.equal(DismissedOrders.hidden(order({ paymentMethod: 'plaid-uk-eu' }), none), true);
+  assert.equal(DismissedOrders.hidden(order({ paymentMethod: 'plaid-vrp' }), none), true);
+  assert.equal(DismissedOrders.hidden(order({ paymentMethod: 'plaid-uk-eu', paymentStatus: 'paid' }), none), false);
+  assert.equal(DismissedOrders.hidden(order({ paymentMethod: 'plaid-uk-eu', status: 'paid' }), none), false);
+  assert.equal(DismissedOrders.hidden(order(), none), false);
 });
 
 test('dismissed ids persist, dedupe and keep only the newest', async () => {
