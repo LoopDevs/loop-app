@@ -5,6 +5,7 @@ import { type ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
+import { BankCheckout } from '@/components/bank-checkout';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/ui/form';
 import { PageTitle } from '@/components/page-title';
@@ -39,9 +40,8 @@ export default function MerchantScreen() {
   const router = useRouter();
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const { merchant, wallet, profile, signedIn, activeOrder, busy, message, load } = useMerchantAccount(slug, {
-    withActiveOrder: true,
-  });
+  const { merchant, wallet, walletChecked, profile, signedIn, activeOrder, busy, message, load, setProfile } =
+    useMerchantAccount(slug, { withActiveOrder: true, walletOnlyWithoutBank: true });
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
@@ -69,9 +69,9 @@ export default function MerchantScreen() {
   const cardStyle = [styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
   const rail = BankPayment.rail(merchant.currency);
-  const payCopy = rail ? `Pay from your ${rail.bankLabel} or your Loop wallet.` : 'Pay from your Loop wallet.';
+  const payCopy = rail ? `Pay from your ${rail.bankLabel}.` : 'Pay from your Loop balance.';
   const buyCard =
-    wallet && profile && !merchant.isSoldIn(profile.country) ? (
+    profile && !merchant.isSoldIn(profile.country) ? (
       <View style={cardStyle}>
         <ThemedText type="heading">Not sold in your country</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
@@ -80,7 +80,11 @@ export default function MerchantScreen() {
         </ThemedText>
         <Button label="Open Settings" variant="secondary" onPress={() => router.navigate('/profile/settings')} />
       </View>
-    ) : wallet && profile ? (
+    ) : profile && BankPayment.offered(merchant.currency, profile) ? (
+      <View style={cardStyle}>
+        <BankCheckout merchant={merchant} profile={profile} activeOrder={activeOrder} onProfile={setProfile} />
+      </View>
+    ) : profile && wallet ? (
       <View style={cardStyle}>
         <ThemedText type="heading">
           {activeOrder ? 'Your order is in progress' : `Buy a ${merchant.name} gift card`}
@@ -96,7 +100,7 @@ export default function MerchantScreen() {
           onPress={() => router.push(`/shop/pay/${slug}`)}
         />
       </View>
-    ) : signedIn === null ? (
+    ) : signedIn === null || (signedIn && !walletChecked) ? (
       retry ? null : (
         <BuySkeleton />
       )
@@ -127,7 +131,12 @@ export default function MerchantScreen() {
       <StatusBar style="dark" />
       <Stack.Screen options={{ title: merchant.name }} />
       <PageTitle title={merchant.name} />
-      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scroll}>
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(Motion.transition).easing(Motion.easeOut)}>
           <MerchantLayout
             wide={wide}

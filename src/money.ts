@@ -43,6 +43,24 @@ export const money = {
     }
   },
 
+  name(currency: string): string {
+    const fiat = isPegged(currency) ? stablePeg[currency] : currency;
+    switch (fiat) {
+      case 'GBP':
+        return 'Pounds';
+      case 'USD':
+        return 'Dollars';
+      case 'EUR':
+        return 'Euros';
+      default:
+        return fiat ? tokenSymbol(fiat) : 'Balance';
+    }
+  },
+
+  amountLabel(currency: string): string {
+    return `Amount in ${money.name(currency).toLowerCase()}`;
+  },
+
   token(amount: bigint, currency: PaymentCurrency, locale?: string): string {
     const peg = stablePeg[currency];
     if (peg) {

@@ -1,0 +1,382 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
+import { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+
+import { AmountChip, AmountEntry } from '@/components/purchase-amount';
+import { PurchaseTerms, purchaseTermsKey } from '@/components/purchase-terms';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
+import { Button, Field, Notice } from '@/components/ui/form';
+import { ThemedText } from '@/components/ui/themed-text';
+import { useToast } from '@/components/ui/toast';
+import { Radius, Spacing } from '@/constants/theme';
+import { amountErrorMessage } from '@/ctx/amount-error';
+import { normalizeAmount } from '@/ctx/amount-input';
+import { BankLink } from '@/ctx/bank-link';
+import { BankPayment } from '@/ctx/bank-payment';
+import { ctx, CtxError, type GiftCard } from '@/ctx/client';
+import { dismissedOrders } from '@/ctx/dismissed-orders';
+import type { Merchant } from '@/ctx/merchant';
+import { OneTapBuy } from '@/ctx/one-tap-buy';
+import { Profile } from '@/ctx/profile';
+import { useBusyAction } from '@/hooks/use-busy-action';
+import { useNow } from '@/hooks/use-now';
+import { useTheme } from '@/hooks/use-theme';
+import { haptics } from '@/native/haptics';
+import { errorReporting } from '@/ops/error-reporting';
+import { units } from '@/stellar/units';
+
+type Props = {
+  merchant: Merchant;
+  profile: Profile;
+  activeOrder: GiftCard | null;
+  onProfile: (profile: Profile) => void;
+};
+
+type Stage = 'amount' | 'approve' | 'expired' | 'paid' | 'other';
+
+const stageTickMs = 30_000;
+
+function firstAmount(merchant: Merchant): string {
+  return merchant.denominationType === 'fixed' ? (merchant.denominationValues[0] ?? '') : '';
+}
+
+function stageOf(order: GiftCard | null, now: number): Stage {
+  if (!order) {
+    return 'amount';
+  }
+  if (order.status !== 'unpaid') {
+    return 'paid';
+  }
+  if (!BankPayment.isBank(order)) {
+    return 'other';
+  }
+  return BankPayment.approvable(order, now) ? 'approve' : 'expired';
+}
+
+export function BankCheckout({ merchant, profile, activeOrder, onProfile }: Props) {
+  const router = useRouter();
+  const theme = useTheme();
+  const toast = useToast();
+  const { busy, message, setMessage, run } = useBusyAction();
+  const [amount, setAmount] = useState(firstAmount(merchant));
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [legalName, setLegalName] = useState('');
+  const [order, setOrder] = useState<GiftCard | null>(activeOrder);
+  const [syncedOrder, setSyncedOrder] = useState(activeOrder);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showingTerms, setShowingTerms] = useState(false);
+  const now = useNow(stageTickMs);
+  const mounted = useRef(true);
+
+  if (activeOrder !== syncedOrder) {
+    setSyncedOrder(activeOrder);
+    setOrder(activeOrder);
+  }
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let current = true;
+    AsyncStorage.getItem(purchaseTermsKey(profile.id))
+      .catch(() => null)
+      .then((accepted) => {
+        if (current) {
+          setTermsAccepted(accepted === 'yes');
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [profile.id]);
+
+  const fiatAmount = normalizeAmount(amount);
+  const amountProblem = merchant.amountProblem(amount);
+  const legalNameNeeded = !profile.hasBankIdentity();
+  const legalNameProblem = legalNameNeeded ? Profile.legalNameProblem(legalName) : null;
+  const estimate = merchant.cashbackEstimate(fiatAmount ?? '');
+  const range = merchant.rangeLabel();
+  const stage = stageOf(order, now);
+  const canPay = !busy && fiatAmount !== null && amountProblem === null && legalNameProblem === null;
+
+  const changeAmount = (next: string) => {
+    setAmount(next);
+    setAmountError(null);
+    setMessage('');
+  };
+
+  const showCard = (giftCard: GiftCard) => {
+    setOrder(null);
+    router.push(`/wallet/${giftCard.id}`);
+  };
+
+  const approve = async (giftCard: GiftCard) => {
+    const token = BankPayment.linkToken(giftCard);
+    const link = token ? null : BankPayment.openLink(giftCard);
+    if (token && process.env.EXPO_OS !== 'web') {
+      const outcome = await BankLink.present(token).catch((error: unknown) => {
+        errorReporting.reportError(error, `Bank approval could not open for order ${giftCard.id}`);
+        return null;
+      });
+      if (!mounted.current) {
+        return;
+      }
+      if (outcome?.kind === 'approved') {
+        haptics.success();
+        showCard(giftCard);
+        return;
+      }
+      if (outcome?.kind === 'left') {
+        if (outcome.errorCode) {
+          errorReporting.reportMessage(`Bank approval left with ${outcome.errorCode} for order ${giftCard.id}`);
+        }
+        if (outcome.displayMessage) {
+          toast(outcome.displayMessage);
+        }
+      }
+      return;
+    }
+    const url = link ?? (token ? BankPayment.openLink(giftCard) : null);
+    if (url) {
+      await openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
+      if (mounted.current) {
+        showCard(giftCard);
+      }
+      return;
+    }
+    if (BankPayment.linkRefused(giftCard)) {
+      errorReporting.reportMessage(`Bank approval link refused for order ${giftCard.id}`);
+    }
+    throw new Error(OneTapBuy.notBoughtMessage);
+  };
+
+  const pay = () =>
+    run(async () => {
+      if (!fiatAmount) {
+        return;
+      }
+      setAmountError(null);
+      let created: GiftCard;
+      try {
+        const identity = legalNameNeeded ? profile.legalNameUpdate(legalName) : null;
+        if (identity) {
+          onProfile(profile.withUser(await ctx.updateUser(identity)));
+        }
+        created = await ctx.orderGiftCard({
+          merchantId: merchant.id,
+          fiatAmount,
+          fiatCurrency: merchant.currency,
+        });
+      } catch (error) {
+        haptics.error();
+        const name = error instanceof CtxError ? error.errorName() : undefined;
+        const amountMessage = amountErrorMessage(name, merchant);
+        if (amountMessage) {
+          setAmountError(amountMessage);
+          return;
+        }
+        throw new Error(BankPayment.refusalMessage(name) ?? OneTapBuy.notBoughtMessage);
+      }
+      if (!mounted.current) {
+        return;
+      }
+      setOrder(created);
+      haptics.tap();
+      await approve(created);
+    });
+
+  const startPay = () => {
+    if (termsAccepted) {
+      void pay();
+      return;
+    }
+    setShowingTerms(true);
+  };
+
+  const agreeAndPay = () => {
+    setTermsAccepted(true);
+    setShowingTerms(false);
+    AsyncStorage.setItem(purchaseTermsKey(profile.id), 'yes').catch(() => setTermsAccepted(false));
+    void pay();
+  };
+
+  const continueApproval = () =>
+    run(async () => {
+      if (!order) {
+        return;
+      }
+      const fetched = await ctx.giftCard(order.id);
+      if (!mounted.current) {
+        return;
+      }
+      if (fetched.status !== 'unpaid') {
+        showCard(fetched);
+        return;
+      }
+      setOrder(fetched);
+      await approve(fetched);
+    });
+
+  const cancelOrder = () => {
+    const cancelled = order;
+    setOrder(null);
+    setMessage('');
+    if (cancelled) {
+      void dismissedOrders.dismiss(cancelled);
+      toast('If you already approved it at your bank, the card will still arrive.');
+    }
+  };
+
+  if (order && stage !== 'amount') {
+    const orderAmount = merchant.shortAmount(order.cardFiatAmount);
+    return (
+      <View style={styles.stack}>
+        <ThemedText type="heading">
+          {stage === 'paid' ? 'Your order is on its way' : `Your ${orderAmount} gift card is waiting`}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {stage === 'paid'
+            ? `Your ${orderAmount} ${merchant.name} gift card is being prepared.`
+            : stage === 'approve'
+              ? 'Approve the payment at your bank to get your card.'
+              : stage === 'expired'
+                ? 'The bank approval ran out of time. Start again to buy this card.'
+                : `Your ${orderAmount} gift card is still being paid for.`}
+        </ThemedText>
+        {message !== '' && <Notice message={message} />}
+        {stage === 'paid' && <Button label="View gift card" variant="primary" onPress={() => showCard(order)} />}
+        {stage === 'approve' && (
+          <Button label="Continue to your bank" variant="primary" onPress={continueApproval} disabled={busy} />
+        )}
+        {stage === 'expired' && <Button label="Start again" variant="primary" onPress={cancelOrder} />}
+        {stage === 'other' && (
+          <Button
+            label="Continue your order"
+            variant="primary"
+            onPress={() => router.push(`/shop/pay/${merchant.slug}`)}
+          />
+        )}
+        {stage === 'approve' && <Button label="Cancel order" variant="quiet" onPress={cancelOrder} disabled={busy} />}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.stack}>
+      <ThemedText type="heading">{`Buy a ${merchant.name} gift card`}</ThemedText>
+      <View style={styles.hero}>
+        {merchant.denominationType === 'fixed' ? (
+          <ThemedText type="title" accessibilityLiveRegion="polite" style={styles.fixedAmount}>
+            {merchant.shortAmount(amount)}
+          </ThemedText>
+        ) : (
+          <AmountEntry merchant={merchant} value={amount} onChange={changeAmount} />
+        )}
+        {range && merchant.denominationType !== 'fixed' && (
+          <ThemedText type="caption" themeColor="textSecondary">
+            {range}
+          </ThemedText>
+        )}
+        {(amountProblem ?? amountError) && (
+          <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">
+            {amountProblem ?? amountError}
+          </ThemedText>
+        )}
+        {estimate && (
+          <View style={[styles.pill, { backgroundColor: theme.accentSoft }]}>
+            <ThemedText type="smallBold" themeColor="success">
+              You earn about {estimate} cashback
+            </ThemedText>
+          </View>
+        )}
+      </View>
+      <View style={styles.chips} accessibilityRole="radiogroup">
+        {merchant.denominationType === 'fixed'
+          ? merchant.denominationValues.map((denomination) => (
+              <AmountChip
+                key={denomination}
+                label={merchant.shortAmount(denomination)}
+                selected={amount === denomination}
+                onPress={() => changeAmount(denomination)}
+              />
+            ))
+          : merchant
+              .quickAmounts()
+              .map((quick) => (
+                <AmountChip
+                  key={quick}
+                  label={merchant.shortAmount(quick)}
+                  selected={fiatAmount !== null && units.parseTruncated(fiatAmount) === units.parseTruncated(quick)}
+                  onPress={() => changeAmount(quick)}
+                />
+              ))}
+      </View>
+      {legalNameNeeded && (
+        <View style={styles.field}>
+          <Field
+            label="Name on your bank account"
+            value={legalName}
+            onChangeText={setLegalName}
+            placeholder="First and last name"
+            autoCapitalize="words"
+            autoComplete="name"
+            textContentType="name"
+          />
+          <ThemedText type="small" themeColor="textSecondary">
+            Your bank checks this name when you approve the payment.
+          </ThemedText>
+        </View>
+      )}
+      {message !== '' && <Notice message={message} />}
+      <Button
+        label={fiatAmount && amountProblem === null ? `Pay ${merchant.shortAmount(fiatAmount)} by bank` : 'Pay by bank'}
+        variant="primary"
+        onPress={startPay}
+        disabled={!canPay}
+      />
+      <ThemedText type="small" themeColor="textSecondary">
+        You approve the payment in your banking app. Cashback is paid in pounds.
+      </ThemedText>
+      <BottomSheet open={showingTerms} onClose={() => setShowingTerms(false)} title="Before you buy">
+        <View style={styles.stack}>
+          <PurchaseTerms />
+          <Button label="Agree and pay" variant="primary" onPress={agreeAndPay} disabled={!canPay} />
+          <Button label="Not now" variant="quiet" onPress={() => setShowingTerms(false)} />
+        </View>
+      </BottomSheet>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  stack: {
+    gap: Spacing.three,
+  },
+  hero: {
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  fixedAmount: {
+    fontVariant: ['tabular-nums'],
+  },
+  pill: {
+    paddingVertical: Spacing.one + 2,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.two,
+  },
+  field: {
+    gap: Spacing.two,
+  },
+});

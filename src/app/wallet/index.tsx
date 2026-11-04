@@ -172,10 +172,10 @@ export default function WalletScreen() {
     <EmptyState
       icon="lock"
       title="Sign in to see your wallet"
-      detail="Your dollars, gift cards and cashback show here."
+      detail="Your balance, gift cards and cashback show here."
       action="Sign in"
       onAction={() =>
-        openSignIn("Sign in to see your dollars, gift cards and cashback.")
+        openSignIn("Sign in to see your balance, gift cards and cashback.")
       }
     />
   ) : loading ? (
