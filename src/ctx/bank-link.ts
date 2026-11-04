@@ -1,7 +1,12 @@
-import type { LinkExit } from 'react-native-plaid-link-sdk';
+import type { LinkExit, LinkSuccess } from 'react-native-plaid-link-sdk';
+
+export type BankInstitution = {
+  id: string;
+  name: string;
+};
 
 export type BankLinkOutcome =
-  | { kind: 'approved' }
+  | { kind: 'approved'; institution: BankInstitution | null }
   | { kind: 'left'; errorCode: string | null; displayMessage: string | null };
 
 export class BankLink {
@@ -10,13 +15,21 @@ export class BankLink {
     return new Promise<BankLinkOutcome>((resolve, reject) => {
       createPlaidLinkSession({
         token,
-        onSuccess: () => resolve({ kind: 'approved' }),
+        onSuccess: (success) => resolve(BankLink.approved(success)),
         onExit: (exit) => resolve(BankLink.left(exit)),
         onEvent: () => undefined,
       })
         .then((session) => session.open())
         .catch(reject);
     });
+  }
+
+  static approved(success: LinkSuccess): BankLinkOutcome {
+    const institution = success.metadata.institution;
+    return {
+      kind: 'approved',
+      institution: institution?.id && institution.name ? { id: institution.id, name: institution.name } : null,
+    };
   }
 
   static left(exit: LinkExit): BankLinkOutcome {

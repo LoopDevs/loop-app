@@ -46,7 +46,8 @@ export class OrderRequest {
       order.merchantId === this.asked.merchantId &&
       order.fiatAmount === this.asked.fiatAmount &&
       order.fiatCurrency === this.asked.fiatCurrency &&
-      order.cryptoCurrency === this.asked.cryptoCurrency
+      order.cryptoCurrency === this.asked.cryptoCurrency &&
+      order.chooseBank === this.asked.chooseBank
     );
   }
 }

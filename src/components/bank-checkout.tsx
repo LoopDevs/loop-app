@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
-import { BankLink } from '@/ctx/bank-link';
+import { type BankInstitution, BankLink } from '@/ctx/bank-link';
 import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
@@ -69,6 +69,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const now = useNow(stageTickMs);
   const mounted = useRef(true);
   const resumed = useRef<string | null>(null);
+  const differentBank = useRef(false);
 
   if (activeOrder !== syncedOrder) {
     setSyncedOrder(activeOrder);
@@ -102,6 +103,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const range = merchant.rangeLabel();
   const stage = stageOf(order, now);
   const canPay = !busy && fiatAmount !== null && amountProblem === null;
+  const bankName = profile.bank?.name ?? null;
 
   const changeAmount = (next: string) => {
     setAmount(next);
@@ -132,6 +134,13 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
     toast(note);
   };
 
+  const rememberBank = (institution: BankInstitution | null) => {
+    const update = profile.bankUpdate(institution);
+    if (update) {
+      ctx.updateUser(update).catch(() => undefined);
+    }
+  };
+
   const approve = async (giftCard: GiftCard) => {
     const token = BankPayment.linkToken(giftCard);
     const link = token ? null : BankPayment.openLink(giftCard);
@@ -145,6 +154,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       }
       if (outcome?.kind === 'approved') {
         haptics.success();
+        rememberBank(outcome.institution);
         showCard(giftCard);
         return;
       }
@@ -184,6 +194,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
           merchantId: merchant.id,
           fiatAmount,
           fiatCurrency: merchant.currency,
+          ...(differentBank.current ? { chooseBank: true } : {}),
         });
       } catch (error) {
         haptics.error();
@@ -204,7 +215,8 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       await approve(created);
     });
 
-  const startPay = () => {
+  const startPay = (chooseBank = false) => {
+    differentBank.current = chooseBank;
     if (termsAccepted) {
       void pay();
       return;
@@ -333,15 +345,16 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       <Button
         label={
           busy
-            ? 'Opening your bank…'
+            ? `Opening ${bankName ?? 'your bank'}…`
             : fiatAmount && amountProblem === null
-              ? `Pay ${merchant.shortAmount(fiatAmount)} by bank`
+              ? `Pay ${merchant.shortAmount(fiatAmount)} ${bankName ? `with ${bankName}` : 'by bank'}`
               : 'Pay by bank'
         }
         variant="primary"
-        onPress={startPay}
+        onPress={() => startPay()}
         disabled={!canPay}
       />
+      {bankName && <Button label="Use a different bank" variant="quiet" onPress={() => startPay(true)} disabled={!canPay} />}
       <ThemedText type="small" themeColor="textSecondary">
         You approve the payment in your banking app. Cashback is paid in pounds.
       </ThemedText>

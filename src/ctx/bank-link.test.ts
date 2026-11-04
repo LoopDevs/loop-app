@@ -23,3 +23,22 @@ test('leaving Link keeps the error code and the message meant for the user', () 
 test('closing Link without an error reports nothing', () => {
   assert.deepEqual(BankLink.left({ metadata }), { kind: 'left', errorCode: null, displayMessage: null });
 });
+
+const success = { metadata: { linkSessionId: 's1', accounts: [] } };
+
+test('a successful Link remembers the bank it was approved at', () => {
+  assert.deepEqual(
+    BankLink.approved({
+      publicToken: 'public-1',
+      metadata: { ...success.metadata, institution: { id: 'ins_117650', name: 'Monzo' } },
+    } as never),
+    { kind: 'approved', institution: { id: 'ins_117650', name: 'Monzo' } },
+  );
+});
+
+test('a success without a bank remembers nothing', () => {
+  assert.deepEqual(BankLink.approved({ publicToken: 'public-1', metadata: success.metadata } as never), {
+    kind: 'approved',
+    institution: null,
+  });
+});
