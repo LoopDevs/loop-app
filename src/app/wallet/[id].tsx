@@ -34,6 +34,7 @@ import {
   giftCardStatusLabel,
   outcomeText,
   pollDelayMs,
+  settledStatuses,
   wasCharged,
 } from '@/ctx/gift-card-status';
 import { CashbackRate } from '@/ctx/merchant';
@@ -103,7 +104,7 @@ export default function GiftCardScreen() {
           return;
         }
         setGiftCard(loaded);
-        if (loaded.status === 'paid') {
+        if (!settledStatuses.includes(loaded.status)) {
           timer = setTimeout(load, pollDelayMs(polls));
           polls += 1;
         }
@@ -197,8 +198,9 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
   const payment = usePaymentSent(giftCard);
   const outcome = payment === undefined ? null : outcomeText(giftCard, payment.kind !== 'notSent');
   const sentTxId = payment?.kind === 'sent' ? payment.txId : undefined;
-  const processing = giftCard.status === 'paid';
   const byBank = BankPayment.isBank(giftCard);
+  const processing = giftCard.status === 'paid';
+  const awaitingBank = giftCard.status === 'unpaid' && byBank;
   const paid = byBank
     ? BankPayment.charged(giftCard)
       ? amountInMoney(giftCard.paymentFiatAmount, giftCard.paymentFiatCurrency)
@@ -240,9 +242,13 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
         <View style={[styles.heroInner, pageWidth]}>
           <GiftCardFace giftCard={giftCard} style={styles.heroCard} />
           <View style={styles.heroStatus}>
-            {processing && <ActivityIndicator size="small" color={theme.textSecondary} />}
+            {(processing || awaitingBank) && <ActivityIndicator size="small" color={theme.textSecondary} />}
             <Text style={[styles.heroStatusText, { color: theme.text }]} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6}>
-              {processing ? 'Processing. Your code shows here when it is ready.' : giftCardStatusLabel(giftCard.status)}
+              {processing
+                ? 'Processing. Your code shows here when it is ready.'
+                : awaitingBank
+                  ? 'Waiting for your bank to confirm the payment.'
+                  : giftCardStatusLabel(giftCard.status)}
             </Text>
           </View>
         </View>

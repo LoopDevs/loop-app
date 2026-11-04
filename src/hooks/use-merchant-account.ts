@@ -15,6 +15,7 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false } = {
   const { busy, message, load: track } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
+  const [walletChecked, setWalletChecked] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
@@ -32,26 +33,35 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false } = {
         }
         const merchantLoad = loadMerchant(slug);
         void merchantLoad.then(setMerchant, () => undefined);
-        const walletLoad = readSession().then(async ({ userId, changed }) => {
-          if (changed) {
-            setWallet(null);
-            setProfile(null);
-            setSignedIn(null);
-            setActiveOrder(null);
-          }
-          const isSignedIn = userId !== null;
-          const [loadedWallet, loadedProfile] = isSignedIn
-            ? await Promise.all([SmartWallet.load().catch(SmartWallet.unlessBlocked), ctx.me()])
-            : [null, null];
-          setWallet((current) => (loadedWallet?.sameAs(current) ? current : loadedWallet));
-          setProfile(loadedProfile);
-          setSignedIn(isSignedIn);
-          return isSignedIn;
-        });
-        const [loaded, isSignedIn] = await Promise.all([merchantLoad, walletLoad]);
-        if (withActiveOrder && isSignedIn) {
-          setActiveOrder(await dismissedOrders.activeOrder(loaded.id).catch(() => null));
+        const { userId, changed } = await readSession();
+        if (changed) {
+          setWallet(null);
+          setWalletChecked(false);
+          setProfile(null);
+          setSignedIn(null);
+          setActiveOrder(null);
         }
+        if (userId === null) {
+          setSignedIn(false);
+          await merchantLoad;
+          return;
+        }
+        const profileLoad = ctx.me().then((loaded) => {
+          setProfile(loaded);
+          setSignedIn(true);
+        });
+        const walletLoad = SmartWallet.load()
+          .catch(SmartWallet.unlessBlocked)
+          .then((loaded) => {
+            setWallet((current) => (loaded?.sameAs(current) ? current : loaded));
+            setWalletChecked(true);
+          });
+        const orderLoad = withActiveOrder
+          ? merchantLoad
+              .then((loaded) => dismissedOrders.activeOrder(loaded.id).catch(() => null))
+              .then(setActiveOrder)
+          : null;
+        await Promise.all([merchantLoad, profileLoad, walletLoad, orderLoad]);
       }),
     [track, slug, readSession, withActiveOrder],
   );
@@ -66,6 +76,7 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false } = {
   return {
     merchant,
     wallet,
+    walletChecked,
     profile,
     signedIn,
     activeOrder,

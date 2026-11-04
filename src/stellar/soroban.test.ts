@@ -48,3 +48,47 @@ test('the last transport failure is raised when every endpoint fails', async () 
   await assert.rejects(soroban.latestLedger(), /Network Error/);
   assert.deepEqual(calls, ['primary', 'fallback']);
 });
+
+test('a slow endpoint is hedged with the next one, whose answer wins and makes it preferred', async () => {
+  const calls: string[] = [];
+  const soroban = new Soroban(
+    [
+      fakeServer(() => new Promise(() => undefined), calls, 'primary'),
+      fakeServer(() => Promise.resolve({ sequence: 42 }), calls, 'fallback'),
+    ],
+    5,
+  );
+
+  assert.equal(await soroban.latestLedger(), 42);
+  assert.equal(await soroban.latestLedger(), 42);
+  assert.deepEqual(calls, ['primary', 'fallback', 'fallback']);
+});
+
+test('an endpoint that answers within the hedge delay is not hedged', async () => {
+  const calls: string[] = [];
+  const soroban = new Soroban(
+    [
+      fakeServer(() => Promise.resolve({ sequence: 42 }), calls, 'primary'),
+      fakeServer(() => Promise.resolve({ sequence: 43 }), calls, 'fallback'),
+    ],
+    5,
+  );
+
+  assert.equal(await soroban.latestLedger(), 42);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(calls, ['primary']);
+});
+
+test('a failing hedge does not discard the answer the slow endpoint still gives', async () => {
+  const calls: string[] = [];
+  const soroban = new Soroban(
+    [
+      fakeServer(() => new Promise((resolve) => setTimeout(() => resolve({ sequence: 42 }), 15)), calls, 'primary'),
+      fakeServer(() => Promise.reject(new Error('Network Error')), calls, 'fallback'),
+    ],
+    5,
+  );
+
+  assert.equal(await soroban.latestLedger(), 42);
+  assert.deepEqual(calls, ['primary', 'fallback']);
+});

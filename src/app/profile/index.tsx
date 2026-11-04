@@ -154,7 +154,7 @@ export default function ProfileScreen() {
                 <WideCard
                   icon={bankIcon}
                   label="Cash out to your bank"
-                  detail="Move dollars to a UK bank account"
+                  detail="Move your balance to a UK bank account"
                   onPress={() => router.push('/wallet/cash-out')}
                 />
                 <ListGroup>

@@ -30,7 +30,6 @@ import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
-import { strings } from '@/strings';
 import { Savings, SavingsRate } from '@/wallet/savings';
 import { WalletBlocked } from '@/wallet/smart-wallet';
 
@@ -198,7 +197,7 @@ export default function SavingsScreen() {
       </KeyboardAvoid>
       <Animated.View pointerEvents="none" style={scrim} />
       <BottomSheet open={adding} onClose={() => setAdding(false)} title="How much do you want to save?">
-        <AddToSavings onClose={() => setAdding(false)} />
+        <AddToSavings stable={view?.stable ?? Rates.usd} onClose={() => setAdding(false)} />
       </BottomSheet>
       <BottomSheet open={withdrawing} onClose={() => setWithdrawing(false)} title="Move savings to your balance">
         <WithdrawSavings balance={savingsBalance} onConfirm={confirmWithdraw} onClose={() => setWithdrawing(false)} />
@@ -297,13 +296,13 @@ function SavingsFacts() {
   );
 }
 
-function AddToSavings({ onClose }: { onClose: () => void }) {
+function AddToSavings({ stable, onClose }: { stable: string; onClose: () => void }) {
   const [input, setInput] = useState('');
   const amount = normalizeAmount(input);
   return (
     <>
       <Field
-        label={strings.field.amountInDollars}
+        label={money.amountLabel(stable)}
         value={input}
         onChangeText={setInput}
         keyboardType="decimal-pad"
@@ -311,7 +310,7 @@ function AddToSavings({ onClose }: { onClose: () => void }) {
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
-            <Button label={money.fiat(quick, 'USD')} selected={amount === quick} onPress={() => setInput(quick)} />
+            <Button label={money.ctx(quick, stable)} selected={amount === quick} onPress={() => setInput(quick)} />
           </View>
         ))}
       </View>

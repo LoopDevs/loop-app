@@ -15,14 +15,15 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { Layout, Motion, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
+import { Rates } from '@/ctx/rates';
+import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
 import { strings } from '@/strings';
 
 type Step = 'bank' | 'amount' | 'review' | 'status';
 
-const minimumDollars = 10;
-const maximumDollars = 1000;
-const currency = 'USD';
+const minimumAmount = 10;
+const maximumAmount = 1000;
 const cashOutSteps = [
   { label: 'Requested', detail: 'We have your request.' },
   { label: 'Reviewing', detail: 'We check every cash out to keep your money safe.' },
@@ -44,13 +45,15 @@ export default function CashOutScreen() {
   const [sortCode, setSortCode] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [input, setInput] = useState('');
+  const { view } = useWallet();
+  const currency = view?.stable ?? Rates.usd;
 
   const bankReady = name.trim().length > 1 && sortCode.length === 6 && accountNumber.length === 8;
   const amount = normalizeAmount(input);
   const amountNumber = amount === null ? 0 : Number(amount);
-  const amountReady = amountNumber >= minimumDollars && amountNumber <= maximumDollars;
-  const shownAmount = amount === null ? '' : money.fiat(amount, currency);
-  const range = `${money.fiat(String(minimumDollars), currency)} to ${money.fiat(String(maximumDollars), currency)}`;
+  const amountReady = amountNumber >= minimumAmount && amountNumber <= maximumAmount;
+  const shownAmount = amount === null ? '' : money.ctx(amount, currency);
+  const range = `${money.ctx(String(minimumAmount), currency)} to ${money.ctx(String(maximumAmount), currency)}`;
 
   return (
     <ThemedView style={styles.container}>
@@ -98,7 +101,7 @@ export default function CashOutScreen() {
                 {`You can cash out ${range} at a time.`}
               </ThemedText>
               <Field
-                label={strings.field.amountInDollars}
+                label={money.amountLabel(currency)}
                 value={input}
                 onChangeText={setInput}
                 keyboardType="decimal-pad"

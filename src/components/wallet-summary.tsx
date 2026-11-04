@@ -15,8 +15,6 @@ import { money } from '@/money';
 import { offeredCurrencies } from '@/stellar/network';
 import { units } from '@/stellar/units';
 
-const dollars = 'XLM.USDC';
-
 type WalletPrompt = { heading: string; body: string };
 
 function walletPrompt(state: WalletState, problem: string): WalletPrompt | null {
@@ -27,7 +25,7 @@ function walletPrompt(state: WalletState, problem: string): WalletPrompt | null 
     };
   }
   if (state === 'blocked') {
-    return { heading: 'Dollars', body: problem };
+    return { heading: 'Your balance', body: problem };
   }
   return null;
 }
@@ -65,18 +63,22 @@ export function WalletSummary() {
     );
   }
 
-  const balance = view ? money.token(view.holdings.inWallet(dollars), dollars) : null;
+  const stable = view?.stable ?? null;
+  const inStable = (amount: bigint) => (stable ? money.ctx(units.format(amount, units.decimals), stable) : null);
+  const balance = view && stable ? inStable(view.holdings.inWallet(stable)) : null;
+  const balanceName = stable ? money.name(stable) : 'Balance';
   const onTheWay = view?.stable ? view.holdings.onTheWayIn(view.stable) : null;
   const received = view?.account?.receivedCashback(offeredCurrencies);
+  const receivedText = received === undefined ? null : inStable(received);
 
   return (
     <View style={styles.stack}>
       <View
         style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
         accessible={balance !== null}
-        accessibilityLabel={balance ? `Dollars, ${balance}` : undefined}>
+        accessibilityLabel={balance ? `${balanceName}, ${balance}` : undefined}>
         <ThemedText type="small" themeColor="textSecondary">
-          Dollars
+          {balanceName}
         </ThemedText>
         {balance === null ? (
           <Skeleton width={160} height={40} />
@@ -112,7 +114,7 @@ export function WalletSummary() {
       <ListGroup title="Cashback">
         <ListRow
           label="Cashback received"
-          value={received === undefined ? '…' : money.token(received, dollars)}
+          value={receivedText ?? '…'}
           trailing="none"
         />
         {onTheWay !== null && onTheWay > 0n && view?.stable && (
