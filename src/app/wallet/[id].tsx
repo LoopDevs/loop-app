@@ -184,7 +184,7 @@ export default function GiftCardScreen() {
               ))}
           </View>
         )}
-        {shownGiftCard && <GiftCardSummary giftCard={shownGiftCard} wide={wide} />}
+        {shownGiftCard && <GiftCardSummary giftCard={shownGiftCard} wide={wide} onChange={setGiftCard} />}
         <SiteFooter />
       </Animated.ScrollView>
     </ThemedView>
@@ -205,7 +205,13 @@ function sentenceCase(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean }) {
+type GiftCardSummaryProps = {
+  giftCard: GiftCard;
+  wide: boolean;
+  onChange: (giftCard: GiftCard) => void;
+};
+
+function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
   const theme = useTheme();
   const { gutter } = usePageLayout();
   const reduceMotion = useReducedMotion();
@@ -280,13 +286,13 @@ function GiftCardSummary({ giftCard, wide }: { giftCard: GiftCard; wide: boolean
               </>
             }>
             {outcome ? <Notice message={outcome} /> : null}
-            <GiftCardDetails giftCard={giftCard} />
+            <GiftCardDetails giftCard={giftCard} onChange={onChange} />
           </SplitLayout>
         </PageWidth>
       ) : (
         <View style={[styles.body, styles.section]}>
           {outcome ? <Notice message={outcome} /> : null}
-          <GiftCardDetails giftCard={giftCard} />
+          <GiftCardDetails giftCard={giftCard} onChange={onChange} />
           {summary}
           <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
         </View>

@@ -448,6 +448,13 @@ class CtxClient {
     );
   }
 
+  async saveGiftCardCode(id: string, number: string, pin: string): Promise<GiftCard> {
+    return this.checked(
+      CtxResponse.giftCard,
+      await this.auth.sessionRequest('PUT', `/gift-cards/${encodeURIComponent(id)}/number`, { number, pin }),
+    );
+  }
+
   watchOrder(orderId: string, wake: OrderWake): Promise<() => void> {
     return this.openSocket(
       'giftcard',
