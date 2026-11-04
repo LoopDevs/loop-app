@@ -24,13 +24,14 @@ import { FontFamily, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
 import { normalizeAmount } from '@/ctx/amount-input';
 import { Rates } from '@/ctx/rates';
 import type { HoldingsView } from '@/hooks/use-holdings';
-import { useBusyAction } from '@/hooks/use-busy-action';
+import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
+import type { PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
-import { Savings, SavingsRate } from '@/wallet/savings';
+import { Savings, SavingsRate, type DepositInput } from '@/wallet/savings';
 import { WalletBlocked } from '@/wallet/smart-wallet';
 
 const quickAmounts = ['25', '50', '100'];
@@ -57,8 +58,18 @@ export default function SavingsScreen() {
     }
   };
   const savings = view?.holdings.withdrawableSavings() ?? [];
+  const stable = view?.stable ?? Rates.usd;
+  const depositCurrency = Savings.depositCurrencyFor(stable);
+  const depositable = view?.holdings.inWallet(depositCurrency) ?? 0n;
   const [firstSaving] = view?.holdings.savingsHoldings() ?? [];
   const savingsBalance = firstSaving ? money.token(firstSaving.amount, firstSaving.currency) : null;
+
+  const reloadIfBlocked = (error: unknown): never => {
+    if (error instanceof WalletBlocked) {
+      reload();
+    }
+    throw error;
+  };
 
   const withdraw = () =>
     run(async () => {
@@ -67,12 +78,7 @@ export default function SavingsScreen() {
       }
       try {
         for (const { currency, shares } of savings) {
-          const result = await wallet.withdraw(currency, shares).catch((error: unknown) => {
-            if (error instanceof WalletBlocked) {
-              reload();
-            }
-            throw error;
-          });
+          const result = await wallet.withdraw(currency, shares).catch(reloadIfBlocked);
           if (result.error) {
             setMessage(result.error);
             return;
@@ -82,6 +88,30 @@ export default function SavingsScreen() {
       } finally {
         await refresh();
       }
+    });
+
+  const deposit = (amount: bigint, input: DepositInput) =>
+    run(async () => {
+      if (!wallet) {
+        return;
+      }
+      const currency = depositCurrency;
+      const outcome = await Savings.sendDeposit(
+        () => wallet.deposit(currency, amount).catch(reloadIfBlocked),
+        wallet.vaultCall(),
+        input,
+      );
+      const refreshError = await refresh().then(
+        () => '',
+        (error: unknown) => errorMessage(error),
+      );
+      const text = Savings.depositMessage(outcome, currency, amount);
+      if (outcome === 'success' && !refreshError) {
+        toast(text);
+        setAdding(false);
+        return;
+      }
+      setMessage(refreshError ? `${text}\n${refreshError}` : text);
     });
 
   const confirmWithdraw = () => {
@@ -197,7 +227,15 @@ export default function SavingsScreen() {
       </KeyboardAvoid>
       <Animated.View pointerEvents="none" style={scrim} />
       <BottomSheet open={adding} onClose={() => setAdding(false)} title="How much do you want to save?">
-        <AddToSavings stable={view?.stable ?? Rates.usd} onClose={() => setAdding(false)} />
+        <AddToSavings
+          stable={stable}
+          currency={depositCurrency}
+          depositable={depositable}
+          busy={busy}
+          ready={state === 'ready'}
+          onDeposit={deposit}
+          onClose={() => setAdding(false)}
+        />
       </BottomSheet>
       <BottomSheet open={withdrawing} onClose={() => setWithdrawing(false)} title="Move savings to your balance">
         <WithdrawSavings balance={savingsBalance} onConfirm={confirmWithdraw} onClose={() => setWithdrawing(false)} />
@@ -296,28 +334,80 @@ function SavingsFacts() {
   );
 }
 
-function AddToSavings({ stable, onClose }: { stable: string; onClose: () => void }) {
+type AddToSavingsProps = {
+  stable: string;
+  currency: PaymentCurrency;
+  depositable: bigint;
+  busy: boolean;
+  ready: boolean;
+  onDeposit: (amount: bigint, input: DepositInput) => void;
+  onClose: () => void;
+};
+
+function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
   const [input, setInput] = useState('');
+  const [max, setMax] = useState<bigint | null>(null);
   const amount = normalizeAmount(input);
+  const depositAmount = Savings.depositAmount(input, depositable, max);
+  const edit = (text: string) => {
+    setMax(null);
+    setInput(text);
+  };
+  const deposit = () => {
+    if (depositAmount === null) {
+      return;
+    }
+    const sentInput = input;
+    const sentMax = max;
+    onDeposit(depositAmount, {
+      clear: () => edit(''),
+      restore: () => {
+        setMax(sentMax);
+        setInput(sentInput);
+      },
+    });
+  };
   return (
     <>
       <Field
         label={money.amountLabel(stable)}
         value={input}
-        onChangeText={setInput}
+        onChangeText={edit}
         keyboardType="decimal-pad"
       />
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
-            <Button label={money.ctx(quick, stable)} selected={amount === quick} onPress={() => setInput(quick)} />
+            <Button
+              label={money.ctx(quick, stable)}
+              selected={max === null && amount === quick}
+              onPress={() => edit(quick)}
+            />
           </View>
         ))}
+        <View style={styles.chip}>
+          <Button
+            label="Max"
+            selected={max !== null}
+            onPress={() => {
+              setMax(depositable);
+              setInput(Savings.maxInput(depositable));
+            }}
+            disabled={!Savings.canMax(depositable)}
+          />
+        </View>
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        Adding money to savings yourself is coming soon. Your cashback already goes into savings.
+        {ready
+          ? `You have ${money.token(depositable, currency)} in your balance to add.`
+          : 'Finish setting up Loop on Home to start saving.'}
       </ThemedText>
-      <Button label="Coming soon" variant="primary" onPress={onClose} disabled />
+      <Button
+        label={busy ? 'Adding…' : 'Add to savings'}
+        variant="primary"
+        onPress={deposit}
+        disabled={busy || !ready || depositAmount === null}
+      />
       <Button label="Close" variant="quiet" onPress={onClose} />
     </>
   );

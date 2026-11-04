@@ -9,6 +9,11 @@ test('a wrong sign-in code shows plain copy, not the response body', () => {
   assert.equal(error.errorName(), 'ErrInvalidCode');
 });
 
+test('savings switched off at CTX reads as savings unavailable', () => {
+  const error = new CtxError(400, '{"error":"ErrSavingsUnavailable","message":"savings are not available"}');
+  assert.equal(error.message, "Savings isn't available right now.");
+});
+
 test('an unknown client error shows generic copy and keeps the body for callers', () => {
   const body = '{"error":"ErrSomethingNew","email":"a@b.c"}';
   const error = new CtxError(422, body);
