@@ -36,6 +36,7 @@ import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
+import { haptics } from '@/native/haptics';
 import type { PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { Savings, SavingsRate, type DepositInput } from '@/wallet/savings';
@@ -91,6 +92,7 @@ export default function SavingsScreen() {
             return;
           }
         }
+        haptics.success();
         toast('Savings moved to your balance');
       } finally {
         await refresh();
@@ -114,6 +116,7 @@ export default function SavingsScreen() {
       );
       const text = Savings.depositMessage(outcome, currency, amount);
       if (outcome === 'success' && !refreshError) {
+        haptics.success();
         toast(text);
         setAdding(false);
         return;
