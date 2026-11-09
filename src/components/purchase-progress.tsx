@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeInDown,
@@ -80,6 +80,13 @@ export function PurchaseProgress({
   const failed = paymentFailed || outcome !== null;
   const cancellable = order !== null && !working && !submitted && DismissedOrders.cancellable(order);
   const step = progressStep(order, payment);
+  const lastStep = useRef(step);
+  useEffect(() => {
+    if (step > lastStep.current && !failed) {
+      haptics.tap();
+    }
+    lastStep.current = step;
+  }, [failed, step]);
   const rail = BankPayment.rail(merchant.currency);
   const stages: Stage[] = [
     bank
