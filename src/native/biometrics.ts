@@ -20,7 +20,7 @@ export const biometrics = {
 
   async authenticate(promptMessage: string): Promise<AuthenticationResult> {
     try {
-      const result = await LocalAuthentication.authenticateAsync({ promptMessage });
+      const result = await LocalAuthentication.authenticateAsync({ promptMessage, requireConfirmation: false });
       return result.success ? { success: true } : { success: false, error: result.error };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'unknown' };
