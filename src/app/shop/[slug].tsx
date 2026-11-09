@@ -2,8 +2,15 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { type ReactNode, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  interpolate,
+  LinearTransition,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import { BankCheckout } from '@/components/bank-checkout';
 import { ExternalLink } from '@/components/external-link';
@@ -23,6 +30,7 @@ import { FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Sp
 import { BankPayment } from '@/ctx/bank-payment';
 import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
+import { useBump } from '@/hooks/use-bump';
 import { useFavourites } from '@/hooks/use-favourites';
 import { useMerchantAccount } from '@/hooks/use-merchant-account';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -34,6 +42,14 @@ const wideCoverWidth = 300;
 const badgeOverhang = coverClearance('hero') - Spacing.three;
 const clampCharacters = 320;
 const clampLines = 5;
+const headerTitleReveal = 24;
+const headerTitleRise = 6;
+const headerTitleSize = Platform.select({ ios: 17, android: 20, default: 18 });
+
+function useSectionLayout() {
+  const reduceMotion = useReducedMotion();
+  return reduceMotion ? undefined : LinearTransition.duration(Motion.state);
+}
 
 export default function MerchantScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -47,7 +63,18 @@ export default function MerchantScreen() {
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
-  const { onScroll } = useScrimScroll();
+  const { onScroll, offset } = useScrimScroll();
+  const sectionLayout = useSectionLayout();
+  const titleFrom = useSharedValue(0);
+  const headerTitle = useAnimatedStyle(() => {
+    const from = titleFrom.value;
+    const shown = from > 0 ? interpolate(offset.value, [from - headerTitleReveal, from], [0, 1], 'clamp') : 0;
+    return {
+      opacity: shown,
+      transform: [{ translateY: reduceMotion ? 0 : (1 - shown) * headerTitleRise }],
+    };
+  });
+  const heroTop = styles.scroll.paddingTop + (wide ? styles.widePage.paddingTop : 0);
 
   const retry = message !== '' && <Notice message={message} actionLabel="Try again" onAction={load} disabled={busy} />;
 
@@ -131,7 +158,20 @@ export default function MerchantScreen() {
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
-      <Stack.Screen options={{ title: merchant.name }} />
+      <Stack.Screen
+        options={{
+          title: merchant.name,
+          headerTitle: () => (
+            <Animated.Text
+              style={[styles.headerTitle, { color: theme.text }, headerTitle]}
+              numberOfLines={1}
+              aria-hidden
+              maxFontSizeMultiplier={1.2}>
+              {merchant.name}
+            </Animated.Text>
+          ),
+        }}
+      />
       <PageTitle title={merchant.name} />
       <Animated.ScrollView
         onScroll={onScroll}
@@ -152,6 +192,7 @@ export default function MerchantScreen() {
                     ? toggleFavourite(merchant.id)
                     : openSignIn(`Sign in to save ${merchant.name} to your favourites.`)
                 }
+                onTitleBottom={(bottom) => titleFrom.set(heroTop + bottom)}
               />
             }
             buy={
@@ -163,8 +204,10 @@ export default function MerchantScreen() {
             details={<MerchantDetails key={merchant.id} merchant={merchant} signedOut={signedIn === false} />}
           />
         </Animated.View>
-        <WhyShopWithLoop />
-        <SiteFooter />
+        <Animated.View layout={sectionLayout}>
+          <WhyShopWithLoop />
+          <SiteFooter />
+        </Animated.View>
       </Animated.ScrollView>
     </ThemedView>
   );
@@ -204,9 +247,10 @@ type HeroProps = {
   wide: boolean;
   favourite: boolean;
   onFavourite: () => void;
+  onTitleBottom: (bottom: number) => void;
 };
 
-function MerchantHero({ merchant, wide, favourite, onFavourite }: HeroProps) {
+function MerchantHero({ merchant, wide, favourite, onFavourite, onTitleBottom }: HeroProps) {
   const theme = useTheme();
   const intro = merchant.info?.intro;
   return (
@@ -214,7 +258,9 @@ function MerchantHero({ merchant, wide, favourite, onFavourite }: HeroProps) {
       <View style={wide ? styles.heroCoverWide : styles.heroCover}>
         <MerchantCover merchant={merchant} size="hero" />
       </View>
-      <View style={[styles.heroText, wide && styles.heroTextWide]}>
+      <View
+        style={[styles.heroText, wide && styles.heroTextWide]}
+        onLayout={(event) => onTitleBottom(event.nativeEvent.layout.y + styles.name.lineHeight)}>
         <View style={styles.titleRow}>
           <View style={styles.titleBlock}>
             <Text style={[styles.name, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
@@ -272,6 +318,7 @@ function MerchantDetails({ merchant, signedOut }: { merchant: Merchant; signedOu
     },
   ];
   const shownFacts = facts.filter((fact) => fact.value);
+  const sectionLayout = useSectionLayout();
 
   return (
     <View style={styles.details}>
@@ -287,7 +334,7 @@ function MerchantDetails({ merchant, signedOut }: { merchant: Merchant; signedOu
         <DetailSection title={`About ${merchant.name}`}>
           {info?.description && <ExpandableText text={info.description} />}
           {websiteUrl && (
-            <View style={styles.website}>
+            <Animated.View layout={sectionLayout} style={styles.website}>
               <SymbolView
                 name={{
                   ios: 'arrow.up.right',
@@ -302,7 +349,7 @@ function MerchantDetails({ merchant, signedOut }: { merchant: Merchant; signedOu
                   {merchant.websiteLabel()}
                 </ThemedText>
               </ExternalLink>
-            </View>
+            </Animated.View>
           )}
         </DetailSection>
       )}
@@ -332,15 +379,16 @@ function MerchantDetails({ merchant, signedOut }: { merchant: Merchant; signedOu
 
 function DetailSection({ title, children }: { title?: string; children: ReactNode }) {
   const theme = useTheme();
+  const sectionLayout = useSectionLayout();
   return (
-    <View style={[styles.section, { borderTopColor: theme.border }]}>
+    <Animated.View layout={sectionLayout} style={[styles.section, { borderTopColor: theme.border }]}>
       {title && (
         <ThemedText type="heading" accessibilityRole="header">
           {title}
         </ThemedText>
       )}
       {children}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -363,9 +411,10 @@ function FactRow({ fact }: { fact: Fact }) {
 
 function ExpandableText({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
+  const sectionLayout = useSectionLayout();
   const long = text.length > clampCharacters;
   return (
-    <View style={styles.expandable}>
+    <Animated.View layout={sectionLayout} style={styles.expandable}>
       <ThemedText type="small" themeColor="textSecondary" numberOfLines={long && !expanded ? clampLines : undefined}>
         {text}
       </ThemedText>
@@ -380,16 +429,18 @@ function ExpandableText({ text }: { text: string }) {
           </ThemedText>
         </Pressable>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
 function FavouriteButton({ favourite, onPress }: { favourite: boolean; onPress: () => void }) {
   const theme = useTheme();
+  const heart = useBump();
   return (
     <PressScale
       onPress={() => {
         haptics.tap();
+        heart.bump();
         onPress();
       }}
       scale={0.92}
@@ -403,19 +454,21 @@ function FavouriteButton({ favourite, onPress }: { favourite: boolean; onPress: 
           borderColor: theme.borderStrong,
         },
       ]}>
-      <SymbolView
-        name={
-          favourite
-            ? { ios: 'heart.fill', android: 'favorite', web: 'favorite' }
-            : {
-                ios: 'heart',
-                android: 'favorite_border',
-                web: 'favorite_border',
-              }
-        }
-        size={22}
-        tintColor={favourite ? theme.accent : theme.text}
-      />
+      <Animated.View style={heart.style}>
+        <SymbolView
+          name={
+            favourite
+              ? { ios: 'heart.fill', android: 'favorite', web: 'favorite' }
+              : {
+                  ios: 'heart',
+                  android: 'favorite_border',
+                  web: 'favorite_border',
+                }
+          }
+          size={22}
+          tintColor={favourite ? theme.accent : theme.text}
+        />
+      </Animated.View>
     </PressScale>
   );
 }
@@ -576,6 +629,11 @@ const styles = StyleSheet.create({
   expandable: {
     alignItems: 'flex-start',
     gap: Spacing.two,
+    overflow: 'hidden',
+  },
+  headerTitle: {
+    fontFamily: FontFamily.semibold,
+    fontSize: headerTitleSize,
   },
   more: {
     minHeight: 44,
