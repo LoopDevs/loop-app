@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { Button, Notice } from '@/components/ui/form';
 import { GiftCardDetails } from '@/components/gift-card-details';
@@ -255,11 +255,16 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
     </View>
   );
 
+  const sectionEntering = (order: number) =>
+    reduceMotion
+      ? undefined
+      : FadeInDown.duration(Motion.state).delay(order * Motion.stagger).easing(Motion.easeOut);
+
   return (
     <Animated.View
       entering={reduceMotion ? undefined : FadeIn.duration(Motion.state).easing(Motion.easeOut)}
       style={styles.summarySections}>
-      <View style={styles.hero}>
+      <Animated.View entering={sectionEntering(0)} style={styles.hero}>
         <View style={[styles.heroInner, pageWidth]}>
           <GiftCardFace giftCard={giftCard} style={styles.heroCard} />
           <View style={styles.heroStatus}>
@@ -273,28 +278,34 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
             </Text>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
       {wide ? (
-        <PageWidth>
-          <SplitLayout
-            asideWidth={360}
-            aside={
-              <>
-                {summary}
-                <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
-              </>
-            }>
-            {outcome ? <Notice message={outcome} /> : null}
-            <GiftCardDetails giftCard={giftCard} onChange={onChange} />
-          </SplitLayout>
-        </PageWidth>
+        <Animated.View entering={sectionEntering(1)}>
+          <PageWidth>
+            <SplitLayout
+              asideWidth={360}
+              aside={
+                <>
+                  {summary}
+                  <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
+                </>
+              }>
+              {outcome ? <Notice message={outcome} /> : null}
+              <GiftCardDetails giftCard={giftCard} onChange={onChange} />
+            </SplitLayout>
+          </PageWidth>
+        </Animated.View>
       ) : (
         <View style={[styles.body, styles.section]}>
-          {outcome ? <Notice message={outcome} /> : null}
-          <GiftCardDetails giftCard={giftCard} onChange={onChange} />
-          {summary}
-          <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
+          <Animated.View entering={sectionEntering(1)} style={styles.section}>
+            {outcome ? <Notice message={outcome} /> : null}
+            <GiftCardDetails giftCard={giftCard} onChange={onChange} />
+          </Animated.View>
+          <Animated.View entering={sectionEntering(2)}>{summary}</Animated.View>
+          <Animated.View entering={sectionEntering(3)}>
+            <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
+          </Animated.View>
         </View>
       )}
     </Animated.View>

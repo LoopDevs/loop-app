@@ -50,6 +50,7 @@ import { useAppRefresh } from "@/hooks/use-app-refresh";
 import { paymentCheck } from "@/hooks/use-sent-payment";
 import { usePageLayout } from "@/hooks/use-page-layout";
 import { useSessionOwner } from "@/hooks/use-session-owner";
+import { haptics } from "@/native/haptics";
 import { useTheme } from "@/hooks/use-theme";
 import { dates, money } from "@/money";
 
@@ -166,8 +167,10 @@ export default function WalletScreen() {
   const { openSignIn } = useSignIn();
 
   const canLoadMore = page > 0 && page < pages;
-  const openOrder = (giftCard: GiftCard) =>
+  const openOrder = (giftCard: GiftCard) => {
+    haptics.tap();
     router.push(`/wallet/${giftCard.id}`);
+  };
 
   const emptyState = failure ? null : !signedIn ? (
     <EmptyState
