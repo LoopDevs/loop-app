@@ -10,7 +10,14 @@ import {
   View,
   type TextInputKeyPressEvent,
 } from 'react-native';
-import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  useAnimatedStyle,
+  useReducedMotion,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/ui/form';
@@ -27,6 +34,7 @@ import { CategoryTally, MerchantPaging } from '@/ctx/merchant-paging';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { haptics } from '@/native/haptics';
 import { Savings } from '@/wallet/savings';
 
 const catalogTopSize = 10;
@@ -434,6 +442,7 @@ function SearchBar({
   placeholder = 'Search gift cards',
 }: SearchBarProps) {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
   const [focused, setFocused] = useState(false);
   const focus = (next: boolean) => {
     setFocused(next);
@@ -466,15 +475,29 @@ function SearchBar({
         returnKeyType="search"
         autoCapitalize="none"
         autoCorrect={false}
-        clearButtonMode="while-editing"
         onFocus={() => focus(true)}
         onBlur={() => focus(false)}
         style={[styles.searchInput, large && styles.searchInputLarge, { color: theme.text }]}
       />
       {value !== '' && (
-        <Pressable onPress={() => onChangeText('')} accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={8}>
-          <SymbolView name={{ ios: 'xmark.circle.fill', android: 'cancel', web: 'cancel' }} size={18} tintColor={theme.textSecondary} />
-        </Pressable>
+        <Animated.View
+          entering={reduceMotion ? undefined : FadeIn.duration(Motion.feedback)}
+          exiting={reduceMotion ? undefined : FadeOut.duration(Motion.feedback)}>
+          <Pressable
+            onPress={() => {
+              haptics.tap();
+              onChangeText('');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            hitSlop={8}>
+            <SymbolView
+              name={{ ios: 'xmark.circle.fill', android: 'cancel', web: 'cancel' }}
+              size={18}
+              tintColor={theme.textSecondary}
+            />
+          </Pressable>
+        </Animated.View>
       )}
     </View>
   );
@@ -692,18 +715,28 @@ export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef
 
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const timing = { duration: reduceMotion ? 0 : Motion.state };
+  const fill = useAnimatedStyle(() => ({
+    backgroundColor: withTiming(selected ? theme.accent : theme.backgroundElement, timing),
+    borderColor: withTiming(selected ? theme.accent : theme.border, timing),
+  }));
+  const labelColor = useAnimatedStyle(() => ({
+    color: withTiming(selected ? theme.onAccent : theme.text, timing),
+  }));
   return (
     <PressScale
-      onPress={onPress}
+      onPress={() => {
+        if (!selected) {
+          haptics.tap();
+        }
+        onPress();
+      }}
       accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      style={[
-        styles.chip,
-        selected
-          ? { backgroundColor: theme.accent, borderColor: theme.accent }
-          : { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-      ]}>
-      <Text style={[styles.chipText, { color: selected ? theme.onAccent : theme.text }]}>{label}</Text>
+      accessibilityState={{ selected }}>
+      <Animated.View style={[styles.chip, fill]}>
+        <Animated.Text style={[styles.chipText, labelColor]}>{label}</Animated.Text>
+      </Animated.View>
     </PressScale>
   );
 }

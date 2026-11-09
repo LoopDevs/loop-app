@@ -4,11 +4,18 @@ import { Button } from '@/components/ui/form';
 import { FontFamily } from '@/constants/theme';
 import type { Merchant } from '@/ctx/merchant';
 import { useTheme } from '@/hooks/use-theme';
+import { haptics } from '@/native/haptics';
 
 export function AmountChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const select = () => {
+    if (!selected) {
+      haptics.tap();
+    }
+    onPress();
+  };
   return (
     <View style={styles.chip}>
-      <Button label={label} onPress={onPress} selected={selected} variant="secondary" />
+      <Button label={label} onPress={select} selected={selected} variant="secondary" />
     </View>
   );
 }

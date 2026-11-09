@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import Animated, {
   FadeInDown,
+  LinearTransition,
   useReducedMotion,
 } from "react-native-reanimated";
 
@@ -305,6 +306,7 @@ export default function WalletScreen() {
                     )
                     .easing(Motion.easeOut)
             }
+            layout={reduceMotion ? undefined : LinearTransition.duration(Motion.state)}
             style={styles.body}
           >
             <OrderRow

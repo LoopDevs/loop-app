@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { GiftCardReveal, giftCardRevealMs } from '@/components/gift-card-reveal';
+import { Odometer } from '@/components/odometer';
 import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
@@ -24,6 +25,12 @@ import type { PaymentState } from '@/ctx/payment-state';
 import { Rates } from '@/ctx/rates';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
+
+const cashbackType = {
+  fontFamily: FontFamily.semibold,
+  fontSize: 14,
+  lineHeight: 20,
+};
 
 type Stage = {
   title: string;
@@ -231,9 +238,10 @@ export function PurchaseDelivered({ order, onView, onDone }: DeliveredProps) {
         {cashback && (
           <Animated.View
             entering={enterAfter(detailsDelayMs)}
-            style={[styles.pill, { backgroundColor: theme.backgroundSelected }]}>
+            style={[styles.pill, styles.pillRow, { backgroundColor: theme.backgroundSelected }]}>
+            <Odometer value={cashback} style={{ ...cashbackType, color: theme.success }} />
             <ThemedText type="smallBold" themeColor="success">
-              {cashback} cashback on its way to your savings
+              cashback on its way to your savings
             </ThemedText>
           </Animated.View>
         )}
@@ -372,6 +380,13 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one + 2,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.pill,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    columnGap: Spacing.one,
   },
   footer: {
     paddingHorizontal: Spacing.four,
