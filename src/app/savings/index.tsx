@@ -1,9 +1,16 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button, Field, Notice } from '@/components/ui/form';
@@ -29,6 +36,7 @@ import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
+import { haptics } from '@/native/haptics';
 import type { PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { Savings, SavingsRate, type DepositInput } from '@/wallet/savings';
@@ -84,6 +92,7 @@ export default function SavingsScreen() {
             return;
           }
         }
+        haptics.success();
         toast('Savings moved to your balance');
       } finally {
         await refresh();
@@ -107,6 +116,7 @@ export default function SavingsScreen() {
       );
       const text = Savings.depositMessage(outcome, currency, amount);
       if (outcome === 'success' && !refreshError) {
+        haptics.success();
         toast(text);
         setAdding(false);
         return;
@@ -161,6 +171,7 @@ export default function SavingsScreen() {
               </View>
               {state === 'ready' && (
                 <View style={[styles.ratePill, { backgroundColor: theme.accent }]}>
+                  <LiveDot color={theme.onAccent} />
                   <Text style={[styles.ratePillText, { color: theme.onAccent }]} maxFontSizeMultiplier={1.3}>
                     {Savings.rateHeadline(view?.stable)}
                   </Text>
@@ -435,6 +446,29 @@ function WithdrawSavings({
   );
 }
 
+const livePulseMs = 1400;
+
+function LiveDot({ color }: { color: string }) {
+  const reduceMotion = useReducedMotion();
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) {
+      return;
+    }
+    pulse.set(withRepeat(withTiming(1, { duration: livePulseMs, easing: Easing.inOut(Easing.quad) }), -1, true));
+  }, [pulse, reduceMotion]);
+  const halo = useAnimatedStyle(() => ({
+    opacity: 0.5 * (1 - pulse.value),
+    transform: [{ scale: 1 + pulse.value * 1.4 }],
+  }));
+  return (
+    <View style={styles.liveDotWrap}>
+      <Animated.View style={[styles.liveDot, styles.liveHalo, { backgroundColor: color }, halo]} />
+      <View style={[styles.liveDot, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -466,9 +500,26 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   ratePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one + Spacing.half,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
     borderRadius: Radius.pill,
+  },
+  liveDotWrap: {
+    width: 8,
+    height: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  liveHalo: {
+    position: 'absolute',
   },
   ratePillText: {
     fontFamily: FontFamily.semibold,

@@ -22,6 +22,16 @@ type OdometerProps = {
   tempo?: 'settle' | 'live';
 };
 
+function decimalIndexOf(value: string): number {
+  return value.search(/[.,]\d{1,2}\D*$/);
+}
+
+export function odometerSettleMs(value: string): number {
+  const digitCount = value.replace(/\D/g, '').length;
+  const penceRoll = decimalIndexOf(value) >= 0 ? penceDelay : 0;
+  return rollDuration + Math.max(digitCount - 1, 0) * Motion.stagger + penceRoll;
+}
+
 export function Odometer({ value, style, accessibilityLabel, tempo = 'settle' }: OdometerProps) {
   const [availableWidth, setAvailableWidth] = useState(0);
   const [naturalWidth, setNaturalWidth] = useState(0);
@@ -33,7 +43,7 @@ export function Odometer({ value, style, accessibilityLabel, tempo = 'settle' }:
     letterSpacing: style.letterSpacing === undefined ? undefined : style.letterSpacing * scale,
   };
   const keys = columnKeys(value);
-  const decimalIndex = value.search(/[.,]\d{1,2}\D*$/);
+  const decimalIndex = decimalIndexOf(value);
   let digitOrder = 0;
   return (
     <View

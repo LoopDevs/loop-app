@@ -13,6 +13,7 @@ import Animated, {
 import { ThemedText } from '@/components/ui/themed-text';
 import { Motion, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { haptics } from '@/native/haptics';
 
 export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -37,7 +38,10 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
         accessibilityRole="button"
         accessibilityState={{ expanded: isOpen }}
         style={({ pressed }) => [styles.heading, pressed && { backgroundColor: theme.backgroundSelected }]}
-        onPress={() => setIsOpen((value) => !value)}>
+        onPress={() => {
+          haptics.tap();
+          setIsOpen((value) => !value);
+        }}>
         <ThemedText type="smallBold" style={styles.title}>
           {title}
         </ThemedText>
