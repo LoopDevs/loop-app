@@ -12,6 +12,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
 const stripCardWidth = 248;
+const stripCardGap = Spacing.three;
 const coverAspect = 16 / 10;
 const badgeSizes = { card: 52, hero: 76 } as const;
 const badgeOverhang = 0.25;
@@ -212,7 +213,9 @@ export function MerchantCardStrip({ title, merchants, onOpen, onSeeAll, favourit
         horizontal
         showsHorizontalScrollIndicator={false}
         style={{ marginHorizontal: -gutter }}
-        contentContainerStyle={[styles.stripRow, { paddingHorizontal: gutter }]}>
+        contentContainerStyle={[styles.stripRow, { paddingHorizontal: gutter }]}
+        snapToInterval={stripCardWidth + stripCardGap}
+        decelerationRate="fast">
         {merchants.map((merchant) => (
           <View key={merchant.id} style={styles.stripCard}>
             <MerchantCard merchant={merchant} onPress={() => onOpen(merchant)} favourite={favouriteOf?.(merchant)} />
@@ -457,7 +460,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stripRow: {
-    gap: Spacing.three,
+    gap: stripCardGap,
     paddingTop: Spacing.one,
     paddingBottom: Spacing.two,
   },
