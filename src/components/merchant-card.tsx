@@ -2,11 +2,13 @@ import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { PressScale } from '@/components/ui/press-scale';
 import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { Merchant } from '@/ctx/merchant';
+import { useBump } from '@/hooks/use-bump';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
@@ -139,6 +141,7 @@ function CashbackPill({ merchant }: { merchant: Merchant }) {
 
 function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourite: Favourite }) {
   const theme = useTheme();
+  const heart = useBump();
   const icon: SymbolViewProps['name'] = favourite.saved
     ? { ios: 'heart.fill', android: 'favorite', web: 'favorite' }
     : { ios: 'heart', android: 'favorite_border', web: 'favorite_border' };
@@ -148,6 +151,7 @@ function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourit
       scale={0.88}
       onPress={() => {
         haptics.tap();
+        heart.bump();
         favourite.onToggle();
       }}
       accessibilityRole="button"
@@ -155,9 +159,9 @@ function FavouriteButton({ merchant, favourite }: { merchant: Merchant; favourit
         favourite.saved ? `Remove ${merchant.name} from favourites` : `Add ${merchant.name} to favourites`
       }
       accessibilityState={{ selected: favourite.saved }}>
-      <View style={[styles.favouriteDisc, { backgroundColor: theme.scrim }]}>
+      <Animated.View style={[styles.favouriteDisc, { backgroundColor: theme.scrim }, heart.style]}>
         <SymbolView name={icon} size={20} tintColor={favourite.saved ? theme.accent : theme.onInverse} />
-      </View>
+      </Animated.View>
     </PressScale>
   );
 }

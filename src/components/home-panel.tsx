@@ -73,7 +73,7 @@ export function useScrimScroll<T extends Scrollable = ScrollViewInstance>(onNear
     webBlur,
     fade,
   ];
-  return { scrollRef, onScroll, scrim };
+  return { scrollRef, onScroll, offset, scrim };
 }
 
 const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(16px)' } as object) : null;

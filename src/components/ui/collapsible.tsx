@@ -1,9 +1,10 @@
 import { SymbolView } from 'expo-symbols';
 import { PropsWithChildren, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
+  LinearTransition,
   useAnimatedStyle,
   useReducedMotion,
   withTiming,
@@ -29,7 +30,9 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
   }));
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+    <Animated.View
+      layout={reduceMotion ? undefined : LinearTransition.duration(Motion.state)}
+      style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: isOpen }}
@@ -55,7 +58,7 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
           {children}
         </Animated.View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
