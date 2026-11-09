@@ -1,17 +1,20 @@
 import { SymbolView } from 'expo-symbols';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
   withTiming,
   ZoomIn,
 } from 'react-native-reanimated';
 
 import { GiftCardReveal, giftCardRevealMs } from '@/components/gift-card-reveal';
-import { Odometer } from '@/components/odometer';
+import { Odometer, odometerSettleMs } from '@/components/odometer';
 import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
@@ -25,6 +28,7 @@ import type { PaymentState } from '@/ctx/payment-state';
 import { Rates } from '@/ctx/rates';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
+import { haptics } from '@/native/haptics';
 
 const cashbackType = {
   fontFamily: FontFamily.semibold,
@@ -215,10 +219,17 @@ type DeliveredProps = {
 };
 
 export function PurchaseDelivered({ order, onView, onDone }: DeliveredProps) {
-  const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const cashback = CashbackRate.shownFor(order);
   const detailsDelayMs = giftCardRevealMs + 100;
+  const [revealed, setRevealed] = useState(reduceMotion);
+  useEffect(() => {
+    if (revealed) {
+      return;
+    }
+    const timer = setTimeout(() => setRevealed(true), detailsDelayMs);
+    return () => clearTimeout(timer);
+  }, [detailsDelayMs, revealed]);
   const enterAfter = (delayMs: number) =>
     reduceMotion ? undefined : FadeInDown.delay(delayMs).duration(Motion.state).easing(Motion.easeOut);
   return (
@@ -235,22 +246,44 @@ export function PurchaseDelivered({ order, onView, onDone }: DeliveredProps) {
         <View style={styles.card}>
           <GiftCardReveal giftCard={order} />
         </View>
-        {cashback && (
-          <Animated.View
-            entering={enterAfter(detailsDelayMs)}
-            style={[styles.pill, styles.pillRow, { backgroundColor: theme.backgroundSelected }]}>
-            <Odometer value={cashback} style={{ ...cashbackType, color: theme.success }} />
-            <ThemedText type="smallBold" themeColor="success">
-              cashback on its way to your savings
-            </ThemedText>
-          </Animated.View>
-        )}
+        {cashback && revealed && <CashbackPill cashback={cashback} />}
       </View>
       <Animated.View entering={enterAfter(detailsDelayMs + 150)} style={styles.footer}>
         <Button label="View gift card" variant="primary" onPress={onView} />
         <Button label="Done" variant="quiet" onPress={onDone} />
       </Animated.View>
     </View>
+  );
+}
+
+function CashbackPill({ cashback }: { cashback: string }) {
+  const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    if (reduceMotion) {
+      return;
+    }
+    const settledAfterMs = odometerSettleMs(cashback);
+    scale.set(
+      withDelay(
+        settledAfterMs,
+        withSequence(withTiming(1.06, { duration: Motion.feedback }), withSpring(1, { damping: 22 })),
+      ),
+    );
+    const timer = setTimeout(() => haptics.tap(), settledAfterMs);
+    return () => clearTimeout(timer);
+  }, [cashback, reduceMotion, scale]);
+  const settle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View
+      entering={reduceMotion ? undefined : FadeInDown.duration(Motion.state).easing(Motion.easeOut)}
+      style={[styles.pill, styles.pillRow, { backgroundColor: theme.backgroundSelected }, settle]}>
+      <Odometer value={cashback} style={{ ...cashbackType, color: theme.success }} />
+      <ThemedText type="smallBold" themeColor="success">
+        cashback on its way to your savings
+      </ThemedText>
+    </Animated.View>
   );
 }
 
