@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { externalUrl, useOpenExternal } from '@/components/external-link';
 import { RedeemBrowser } from '@/components/redeem-browser';
@@ -11,7 +12,7 @@ import { PressScale } from '@/components/ui/press-scale';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
 import { Collapsible } from '@/components/ui/collapsible';
-import { Elevation, FontFamily, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Elevation, FontFamily, Fonts, Motion, Radius, Spacing } from '@/constants/theme';
 import type { GiftCard } from '@/ctx/client';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
@@ -117,6 +118,7 @@ export function GiftCardDetails({ giftCard, onChange }: GiftCardDetailsProps) {
 function CopyableSecret({ label, value }: { label: string; value: string }) {
   const toast = useToast();
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -148,16 +150,21 @@ function CopyableSecret({ label, value }: { label: string; value: string }) {
         onPress={copy}
         accessibilityRole="button"
         accessibilityLabel={`Copy ${label}`}
-        style={[styles.copy, { backgroundColor: theme.backgroundSubtle }]}>
-        <SymbolView
-          name={
-            copied
-              ? { ios: 'checkmark', android: 'check', web: 'check' }
-              : { ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' }
-          }
-          size={20}
-          tintColor={theme.text}
-        />
+        style={[styles.copy, { backgroundColor: copied ? theme.success : theme.backgroundSubtle }]}>
+        <Animated.View
+          key={copied ? 'copied' : 'copy'}
+          entering={reduceMotion ? undefined : FadeIn.duration(Motion.feedback)}
+          exiting={reduceMotion ? undefined : FadeOut.duration(Motion.feedback)}>
+          <SymbolView
+            name={
+              copied
+                ? { ios: 'checkmark', android: 'check', web: 'check' }
+                : { ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' }
+            }
+            size={20}
+            tintColor={copied ? theme.onAccent : theme.text}
+          />
+        </Animated.View>
       </PressScale>
     </View>
   );
