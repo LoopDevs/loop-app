@@ -1,12 +1,15 @@
 import { useFocusEffect } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import Animated, { FadeOut, useAnimatedStyle, useReducedMotion, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { Wordmark } from '@/components/wordmark';
-import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { useBump } from '@/hooks/use-bump';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useTheme } from '@/hooks/use-theme';
 import { biometrics } from '@/native/biometrics';
@@ -16,6 +19,10 @@ import { appLockStore } from '@/session/app-lock-store';
 
 const notConfirmedMessage = AppLock.notConfirmedMessage;
 const lockLabel = 'Lock Loop with Face ID, fingerprint or passcode';
+const unlockHoldMs = 520;
+const padlockIconSize = 44;
+const closedLock = { ios: 'lock.fill', android: 'lock', web: 'lock' } as const;
+const openLock = { ios: 'lock.open.fill', android: 'lock_open', web: 'lock_open' } as const;
 
 function useAnnouncement(message: string) {
   useEffect(() => {
@@ -86,6 +93,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const [lock, setLock] = useState(AppLock.loading);
   const [inForeground, setInForeground] = useState(AppState.currentState !== 'background');
   const [message, setMessage] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
   const authenticating = useRef(false);
   const autoPrompted = useRef(false);
 
@@ -142,6 +150,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     }
     if (AppLock.unlocksWith(result)) {
       setMessage('');
+      setUnlocking(true);
       setLock((previous) => previous.unlocked());
       return;
     }
@@ -156,7 +165,10 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     [authenticate, applyUnlockResult],
   );
 
-  const covered = lock.covers();
+  const finishUnlock = useCallback(() => setUnlocking(false), []);
+
+  const covered = lock.covers() || unlocking;
+  const phase: LockPhase = lock.status === 'locked' ? 'locked' : unlocking ? 'unlocking' : 'covered';
   const closesBrowser = lock.closesBrowser();
   useEffect(() => {
     if (closesBrowser) {
@@ -208,53 +220,110 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
         {children}
       </View>
       {covered && (
-        <LockView showUnlock={lock.status === 'locked'} message={message} onUnlock={unlock} />
+        <LockView phase={phase} message={message} onUnlock={unlock} onUnlockShown={finishUnlock} />
       )}
     </AppLockContext.Provider>
   );
 }
 
+type LockPhase = 'covered' | 'locked' | 'unlocking';
+
 type LockViewProps = {
-  showUnlock: boolean;
+  phase: LockPhase;
   message: string;
   onUnlock: () => void;
+  onUnlockShown: () => void;
 };
 
-function LockView({ showUnlock, message, onUnlock }: LockViewProps) {
+function LockView({ phase, message, onUnlock, onUnlockShown }: LockViewProps) {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const unlocking = phase === 'unlocking';
   useAnnouncement(message);
+  const prompt = useAnimatedStyle(() => ({
+    opacity: withTiming(unlocking ? 0 : 1, { duration: reduceMotion ? 0 : Motion.exit }),
+  }));
+
+  useEffect(() => {
+    if (!unlocking) {
+      return;
+    }
+    haptics.success();
+    AccessibilityInfo.announceForAccessibility('Unlocked');
+    const timer = setTimeout(onUnlockShown, unlockHoldMs);
+    return () => clearTimeout(timer);
+  }, [unlocking, onUnlockShown]);
+
   return (
-    <View style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.background }]}>
+    <Animated.View
+      pointerEvents={unlocking ? 'none' : 'auto'}
+      exiting={reduceMotion ? undefined : FadeOut.duration(unlocking ? Motion.transition : Motion.exit)}
+      style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content} accessibilityLiveRegion="polite">
           <Wordmark height={32} />
-          {showUnlock && (
+          {phase !== 'covered' && (
             <>
-              <Text style={[styles.lockTitle, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.6}>
-                Loop is locked
-              </Text>
-              <Pressable
-                onPress={onUnlock}
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.unlock,
-                  { backgroundColor: theme.accent },
-                  pressed && styles.unlockPressed,
-                ]}>
-                <Text style={[styles.unlockLabel, { color: theme.onAccent }]} maxFontSizeMultiplier={1.6}>
-                  Unlock
+              <Padlock open={unlocking} />
+              <Animated.View style={[styles.prompt, prompt]}>
+                <Text style={[styles.lockTitle, { color: theme.text }]} accessibilityRole="header" maxFontSizeMultiplier={1.6}>
+                  Loop is locked
                 </Text>
-              </Pressable>
-              {message !== '' && (
-                <Text style={[styles.lockMessage, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
-                  {message}
-                </Text>
-              )}
+                <Pressable
+                  onPress={onUnlock}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.unlock,
+                    { backgroundColor: theme.accent },
+                    pressed && styles.unlockPressed,
+                  ]}>
+                  <Text style={[styles.unlockLabel, { color: theme.onAccent }]} maxFontSizeMultiplier={1.6}>
+                    Unlock
+                  </Text>
+                </Pressable>
+                {message !== '' && (
+                  <Text style={[styles.lockMessage, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
+                    {message}
+                  </Text>
+                )}
+              </Animated.View>
             </>
           )}
         </View>
       </SafeAreaView>
-    </View>
+    </Animated.View>
+  );
+}
+
+function Padlock({ open }: { open: boolean }) {
+  const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const { style: pop, bump } = useBump();
+  const closed = useAnimatedStyle(() => ({
+    opacity: withTiming(open ? 0 : 1, { duration: reduceMotion ? 0 : Motion.feedback }),
+  }));
+  const opened = useAnimatedStyle(() => ({
+    opacity: withTiming(open ? 1 : 0, { duration: reduceMotion ? 0 : Motion.feedback }),
+  }));
+
+  useEffect(() => {
+    if (open) {
+      bump();
+    }
+  }, [open, bump]);
+
+  return (
+    <Animated.View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.padlock, { backgroundColor: theme.accentSoft }, pop]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.padlockIcon, closed]}>
+        <SymbolView name={closedLock} size={padlockIconSize} weight="semibold" tintColor={theme.accent} />
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.padlockIcon, opened]}>
+        <SymbolView name={openLock} size={padlockIconSize} weight="semibold" tintColor={theme.accent} />
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -274,6 +343,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
+    gap: Spacing.four,
+  },
+  padlock: {
+    width: 96,
+    height: 96,
+    borderRadius: Radius.pill,
+    alignSelf: 'flex-start',
+  },
+  padlockIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prompt: {
     gap: Spacing.four,
   },
   lockTitle: {

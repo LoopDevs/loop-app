@@ -33,6 +33,7 @@ const codepoints: Record<string, number> = {
   info: 0xe88e,
   key: 0xe73c,
   lock: 0xe897,
+  lock_open: 0xe898,
   logout: 0xe9ba,
   movie: 0xe02c,
   open_in_new: 0xe89e,
