@@ -34,6 +34,7 @@ function useAnnouncement(message: string) {
 
 type AppLockControls = {
   isOn: boolean;
+  covered: boolean;
   cover: (primary: boolean) => ReactNode;
   topHost: string | null;
   addHost: (id: string) => () => void;
@@ -43,6 +44,7 @@ type AppLockControls = {
 
 const AppLockContext = createContext<AppLockControls>({
   isOn: false,
+  covered: false,
   cover: () => null,
   topHost: null,
   addHost: () => () => undefined,
@@ -50,11 +52,21 @@ const AppLockContext = createContext<AppLockControls>({
   turnOff: async () => {},
 });
 
-export function AppLockCover() {
-  const { cover, topHost, addHost } = useContext(AppLockContext);
+export function AppLockScope({ children }: { children: ReactNode }) {
+  const { covered, cover, topHost, addHost } = useContext(AppLockContext);
   const id = useId();
   useEffect(() => addHost(id), [addHost, id]);
-  return topHost === id ? cover(true) : null;
+  return (
+    <>
+      <View
+        style={styles.fill}
+        accessibilityElementsHidden={covered}
+        importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
+        {children}
+      </View>
+      {topHost === id ? cover(true) : null}
+    </>
+  );
 }
 
 export function AppLockToggle() {
@@ -236,7 +248,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   }, [authenticate]);
 
   return (
-    <AppLockContext.Provider value={{ isOn: lock.isOn(), cover, topHost, addHost, turnOn, turnOff }}>
+    <AppLockContext.Provider value={{ isOn: lock.isOn(), covered, cover, topHost, addHost, turnOn, turnOff }}>
       <View
         style={styles.fill}
         accessibilityElementsHidden={covered}

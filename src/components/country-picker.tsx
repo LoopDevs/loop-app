@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppLockCover } from "@/components/app-lock";
+import { AppLockScope } from "@/components/app-lock";
 import { Button, Field } from "@/components/ui/form";
 import { ThemedText } from "@/components/ui/themed-text";
 import { Elevation, FontFamily, Radius, Spacing } from "@/constants/theme";
@@ -152,6 +152,7 @@ function CountryList({ options, selected, onPick, onClose }: CountryListProps) {
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
+      <AppLockScope>
       <View
         style={[
           styles.backdrop,
@@ -213,7 +214,7 @@ function CountryList({ options, selected, onPick, onClose }: CountryListProps) {
           />
         </View>
       </View>
-      <AppLockCover />
+      </AppLockScope>
     </Modal>
   );
 }

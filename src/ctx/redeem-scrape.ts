@@ -21,7 +21,7 @@ export function parseCardDetails(lines: readonly string[]): CardDetails | null {
     if (!kind) {
       return;
     }
-    const candidates = inline ? [inline] : valuesAfter(lines, index);
+    const candidates = inline ? [inline] : candidatesFor(lines, index);
     const read = kind === 'pin' ? pinValue : numberValue;
     const value = candidates.map((candidate) => read(candidate.trim())).find(Boolean) ?? '';
     if (kind === 'number') {
@@ -53,15 +53,42 @@ function labelKind(label: string): 'pin' | 'number' | null {
   return numberLabel.test(label) ? 'number' : null;
 }
 
+function candidatesFor(lines: readonly string[], index: number): string[] {
+  const before = cardLabelRun(lines, index, -1);
+  const after = cardLabelRun(lines, index, 1);
+  if (before + after === 0) {
+    return valuesAfter(lines, index);
+  }
+  const width = before + 1 + after;
+  const values = lines.slice(index + after + 1, index + after + 1 + width);
+  if (values.length === width && !values.some(isLabelLine)) {
+    return [values[before]];
+  }
+  return after === 0 ? valuesAfter(lines, index) : [];
+}
+
+function cardLabelRun(lines: readonly string[], index: number, step: 1 | -1): number {
+  let count = 0;
+  for (let at = index + step; at >= 0 && at < lines.length && isCardLabel(lines[at]); at += step) {
+    count += 1;
+  }
+  return count;
+}
+
+function isCardLabel(line: string): boolean {
+  const { label, inline } = splitInline(line.trim());
+  return inline === null && label.length <= maxLabelLength && labelKind(label) !== null;
+}
+
+function isLabelLine(line: string): boolean {
+  const { label } = splitInline(line.trim());
+  return label.length <= maxLabelLength && (labelKind(label) !== null || otherLabel.test(label));
+}
+
 function valuesAfter(lines: readonly string[], index: number): string[] {
   const values: string[] = [];
   for (const line of lines.slice(index + 1, index + 1 + lookahead)) {
-    const { label } = splitInline(line.trim());
-    const isLabel = label.length <= maxLabelLength;
-    if (isLabel && labelKind(label) !== null) {
-      continue;
-    }
-    if (isLabel && otherLabel.test(label)) {
+    if (isLabelLine(line)) {
       break;
     }
     values.push(line);
@@ -95,7 +122,7 @@ function pinValue(line: string): string {
 
 function hasWords(line: string): boolean {
   const parts = line.split(/\s+/);
-  return parts.length > 1 && parts.some((part) => /^[A-Za-z]*[a-z][A-Za-z]*$/.test(part) && part.length >= 2);
+  return parts.length > 1 && parts.some((part) => /^[A-Z]?[a-z]{2,}$/.test(part) && (part.length > 4 || /^[A-Z]/.test(part)));
 }
 
 function digitCount(value: string): number {

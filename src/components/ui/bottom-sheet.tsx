@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, SlideInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppLockCover } from '@/components/app-lock';
+import { AppLockScope } from '@/components/app-lock';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, Layout, Motion, Radius, Spacing } from '@/constants/theme';
@@ -30,6 +30,7 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
 
   return (
     <Modal transparent visible={open} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <AppLockScope>
       <KeyboardAvoid>
         <View style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}>
           <Pressable
@@ -59,7 +60,7 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
           </Animated.View>
         </View>
       </KeyboardAvoid>
-      <AppLockCover />
+      </AppLockScope>
     </Modal>
   );
 }

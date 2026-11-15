@@ -14,7 +14,7 @@ import Animated, { FadeIn, FadeInDown, SlideInDown, useReducedMotion } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
-import { AppLockCover } from '@/components/app-lock';
+import { AppLockScope } from '@/components/app-lock';
 import { CountryPicker } from '@/components/country-picker';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/ui/form';
@@ -69,15 +69,31 @@ export function SignInProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const settle = () =>
+    let settled = false;
+    let stopped = false;
+    let failures = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const settle = (): Promise<void> =>
       ctx.isSignedIn().then(
-        (current) => setSignedIn((previous) => SignInGate.next(previous, current)),
-        () => undefined,
+        (current) => {
+          settled = true;
+          setSignedIn((previous) => SignInGate.next(previous, current));
+        },
+        () => {
+          if (settled || stopped) {
+            return;
+          }
+          clearTimeout(retry);
+          retry = setTimeout(() => void settle(), SignInGate.retryDelayMs(failures));
+          failures += 1;
+        },
       );
     void settle();
     const stopRefresh = appRefresh.subscribe(() => void settle());
     const stopListening = ctx.onSessionEnd(() => setSignedIn(false));
     return () => {
+      stopped = true;
+      clearTimeout(retry);
       stopRefresh();
       stopListening();
     };
@@ -148,6 +164,7 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
     : (wide ? FadeInDown : SlideInDown).duration(Motion.transition).easing(Motion.easeOut);
   return (
     <Modal transparent visible animationType="none" onRequestClose={close} statusBarTranslucent>
+      <AppLockScope>
       <KeyboardAvoid style={[styles.layer, wide ? styles.layerWide : styles.layerNarrow]}>
         <Animated.View entering={FadeIn.duration(Motion.state)} style={StyleSheet.absoluteFill}>
           <Pressable
@@ -183,7 +200,7 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
           </ScrollView>
         </Animated.View>
       </KeyboardAvoid>
-      <AppLockCover />
+      </AppLockScope>
     </Modal>
   );
 }

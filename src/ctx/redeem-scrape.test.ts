@@ -121,6 +121,11 @@ test('a line of words with digits is never read as the card number', () => {
   assert.equal(parseCardDetails(['Gift card number', 'Order number 12345678901']), null);
   assert.equal(parseCardDetails(['Gift card code', 'Call 1-800-555-0199']), null);
   assert.deepEqual(parseCardDetails(['Gift card code', 'ABCD 1234 EFGH 5678']), { number: 'ABCD1234EFGH5678', pin: '' });
+  assert.deepEqual(parseCardDetails(['Gift card code', '8f3a dbce 41c2 9e07']), { number: '8f3adbce41c29e07', pin: '' });
+});
+
+test('a header row with a missing value saves nothing rather than shifting the pin into the number', () => {
+  assert.equal(parseCardDetails(['Card number', 'PIN', '1234567890']), null);
 });
 
 test('page messages are read defensively', () => {

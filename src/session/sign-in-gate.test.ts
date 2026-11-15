@@ -16,3 +16,7 @@ test('a refresh closes the gate when the session is gone', () => {
 test('a refresh never opens the gate while sign-up is still running', () => {
   assert.equal(SignInGate.next(false, true), false);
 });
+
+test('an unsettled gate retries sooner first and never waits longer than half a minute', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 10].map(SignInGate.retryDelayMs), [2_000, 4_000, 8_000, 16_000, 30_000, 30_000]);
+});
