@@ -28,11 +28,13 @@ test('deposits go into a currency that has a vault', () => {
 });
 
 test('deposits go into the vault pegged to the shown currency', () => {
-  assert.equal(Savings.depositCurrencyFor('USD'), 'XLM.USDC');
-  assert.equal(Savings.depositCurrencyFor('GBP'), Savings.depositCurrency);
+  assert.equal(Savings.depositCurrencyFor('XLM.USDC'), 'XLM.USDC');
+  assert.equal(Savings.depositCurrencyFor('USD'), Savings.depositCurrency);
+  assert.equal(Savings.depositCurrencyFor('XLM'), Savings.depositCurrency);
+  assert.equal(Savings.depositCurrencyFor('XLM.EURC'), Savings.depositCurrency);
   network.vaults['XLM.GBPLOOP'] = 'CGBPLOOPVAULT';
   try {
-    assert.equal(Savings.depositCurrencyFor('GBP'), 'XLM.GBPLOOP');
+    assert.equal(Savings.depositCurrencyFor('XLM.GBPLOOP'), 'XLM.GBPLOOP');
   } finally {
     delete network.vaults['XLM.GBPLOOP'];
   }
@@ -47,6 +49,15 @@ test('the deposit intent carries the exact seven-decimal amount', () => {
     amount: '12.3456789',
   });
   assert.equal(Savings.depositIntent('XLM.USDC', units.parse('1')).amount, '1.0000000');
+});
+
+test('withdraw shares go to CTX as a 7-decimal amount that parses back to the same base units', () => {
+  assert.deepEqual(Savings.withdrawIntent('XLM.USDC', 123456789n), {
+    intent: 'vault_withdraw',
+    currency: 'XLM.USDC',
+    shares: '12.3456789',
+  });
+  assert.equal(units.parse(Savings.withdrawIntent('XLM.USDC', 1n).shares), 1n);
 });
 
 test('a deposit amount must be above zero and within the wallet balance', () => {
