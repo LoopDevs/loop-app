@@ -40,6 +40,7 @@ import { haptics } from '@/native/haptics';
 import type { PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { Savings, SavingsRate, type DepositInput } from '@/wallet/savings';
+import { SavingsTopUp, type WithdrawAllOutcome } from '@/wallet/savings-top-up';
 import { WalletBlocked } from '@/wallet/smart-wallet';
 
 const quickAmounts = ['25', '50', '100'];
@@ -85,15 +86,26 @@ export default function SavingsScreen() {
         return;
       }
       try {
+        let unfinished: WithdrawAllOutcome | null = null;
         for (const { currency, shares } of savings) {
-          const result = await wallet.withdraw(currency, shares).catch(reloadIfBlocked);
-          if (result.error) {
-            setMessage(result.error);
+          const outcome = await SavingsTopUp.withdrawAll(
+            () => wallet.withdraw(currency, shares).catch(reloadIfBlocked),
+            wallet.vaultCall(),
+          );
+          if (outcome === 'failed') {
+            setMessage(SavingsTopUp.withdrawAllMessage(outcome));
             return;
           }
+          if (outcome !== 'success') {
+            unfinished = outcome;
+          }
+        }
+        if (unfinished) {
+          setMessage(SavingsTopUp.withdrawAllMessage(unfinished));
+          return;
         }
         haptics.success();
-        toast('Savings moved to your balance');
+        toast(SavingsTopUp.withdrawAllMessage('success'));
       } finally {
         await refresh();
       }
