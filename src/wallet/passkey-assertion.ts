@@ -63,7 +63,7 @@ export class PasskeyAssertion {
       throw new Error('The confirmation was for something else');
     }
     const message = concatBytes(this.authenticatorData, sha256(this.clientDataJson));
-    if (!p256.verify(this.signature, message, publicKey)) {
+    if (!p256.verify(this.signature, message, publicKey, { prehash: true })) {
       throw new Error("That wasn't the sign-in you set Loop up with. Try again and pick the one for Loop.");
     }
   }
