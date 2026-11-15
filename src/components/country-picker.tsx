@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppLockCover } from "@/components/app-lock";
 import { Button, Field } from "@/components/ui/form";
 import { ThemedText } from "@/components/ui/themed-text";
 import { Elevation, FontFamily, Radius, Spacing } from "@/constants/theme";
@@ -151,18 +152,23 @@ function CountryList({ options, selected, onPick, onClose }: CountryListProps) {
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
-      <Pressable
+      <View
         style={[
           styles.backdrop,
-          { backgroundColor: theme.scrim },
           wide ? styles.backdropWide : styles.backdropNarrow,
         ]}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close country list"
       >
         <Pressable
+          style={[StyleSheet.absoluteFill, { backgroundColor: theme.scrim }]}
+          onPress={onClose}
           accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          aria-hidden
+          tabIndex={-1}
+        />
+        <View
+          accessibilityViewIsModal
+          onAccessibilityEscape={onClose}
           style={[
             styles.sheet,
             wide
@@ -205,8 +211,9 @@ function CountryList({ options, selected, onPick, onClose }: CountryListProps) {
               </ThemedText>
             }
           />
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
+      <AppLockCover />
     </Modal>
   );
 }

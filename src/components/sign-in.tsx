@@ -9,11 +9,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, SlideInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddDevice } from '@/components/add-device';
+import { AppLockCover } from '@/components/app-lock';
 import { CountryPicker } from '@/components/country-picker';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Field } from '@/components/ui/form';
@@ -26,6 +27,7 @@ import { Wordmark } from '@/components/wordmark';
 import { loopLinks } from '@/constants/loop-links';
 import { Elevation, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { ctx } from '@/ctx/client';
+import { appRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useProfile } from '@/hooks/use-profile';
@@ -34,6 +36,7 @@ import { strings } from '@/strings';
 import { haptics } from '@/native/haptics';
 import { socialSignIn } from '@/native/social-sign-in';
 import { type CountryChoice, Profile } from '@/ctx/profile';
+import { SignInGate } from '@/session/sign-in-gate';
 import type { SocialProvider } from '@/session/social-sign-in';
 import { passkey } from '@/wallet/passkey';
 import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
@@ -66,18 +69,19 @@ export function SignInProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    ctx.isSignedIn().then(setSignedIn, () => undefined);
-    const foreground = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        void check();
-      }
-    });
+    const settle = () =>
+      ctx.isSignedIn().then(
+        (current) => setSignedIn((previous) => SignInGate.next(previous, current)),
+        () => undefined,
+      );
+    void settle();
+    const stopRefresh = appRefresh.subscribe(() => void settle());
     const stopListening = ctx.onSessionEnd(() => setSignedIn(false));
     return () => {
-      foreground.remove();
+      stopRefresh();
       stopListening();
     };
-  }, [check]);
+  }, []);
 
   const openSignIn = useCallback((why?: string) => setReason(why ?? ''), []);
 
@@ -179,6 +183,7 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
           </ScrollView>
         </Animated.View>
       </KeyboardAvoid>
+      <AppLockCover />
     </Modal>
   );
 }

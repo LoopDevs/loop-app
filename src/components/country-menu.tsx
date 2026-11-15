@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppLockCover } from '@/components/app-lock';
 import { PressScale } from '@/components/ui/press-scale';
 import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
@@ -86,6 +87,7 @@ export function CountryMenu() {
             </ScrollView>
           </Animated.View>
         </View>
+        <AppLockCover />
       </Modal>
     </>
   );

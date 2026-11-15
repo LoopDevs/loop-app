@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppLockCover } from '@/components/app-lock';
 import { GiftCardPurchase } from '@/components/gift-card-purchase';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { PageTitle } from '@/components/page-title';
@@ -92,6 +93,7 @@ export default function PayScreen() {
       <Stack.Screen options={{ title }} />
       <PageTitle title={`Buy ${title} gift card`} />
       <KeyboardAvoid style={styles.screen}>{content()}</KeyboardAvoid>
+      <AppLockCover />
     </ThemedView>
   );
 }

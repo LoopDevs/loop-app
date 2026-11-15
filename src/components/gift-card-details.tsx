@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
-import { useAppLockCovered } from '@/components/app-lock';
 import { externalUrl, useOpenExternal } from '@/components/external-link';
 import { RedeemBrowser } from '@/components/redeem-browser';
 import { Button, Notice } from '@/components/ui/form';
@@ -46,7 +45,6 @@ export function GiftCardDetails({ giftCard, onChange }: GiftCardDetailsProps) {
   const theme = useTheme();
   const toast = useToast();
   const [browsing, setBrowsing] = useState(false);
-  const lockCovered = useAppLockCovered();
   const openExternal = useOpenExternal();
   const redeemUrl = giftCard.redeemUrl && externalUrl.isWeb(giftCard.redeemUrl) ? giftCard.redeemUrl : null;
   const hasCode = Boolean(
@@ -91,7 +89,7 @@ export function GiftCardDetails({ giftCard, onChange }: GiftCardDetailsProps) {
           onPress={() => (process.env.EXPO_OS === 'web' ? openExternal(redeemUrl) : setBrowsing(true))}
         />
       )}
-      {browsing && redeemUrl && !lockCovered && (
+      {browsing && redeemUrl && (
         <RedeemBrowser
           giftCard={giftCard}
           url={redeemUrl}

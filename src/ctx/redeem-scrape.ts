@@ -57,7 +57,11 @@ function valuesAfter(lines: readonly string[], index: number): string[] {
   const values: string[] = [];
   for (const line of lines.slice(index + 1, index + 1 + lookahead)) {
     const { label } = splitInline(line.trim());
-    if (label.length <= maxLabelLength && (labelKind(label) !== null || otherLabel.test(label))) {
+    const isLabel = label.length <= maxLabelLength;
+    if (isLabel && labelKind(label) !== null) {
+      continue;
+    }
+    if (isLabel && otherLabel.test(label)) {
       break;
     }
     values.push(line);
@@ -76,7 +80,7 @@ function splitInline(line: string): { label: string; inline: string | null } {
 
 function numberValue(line: string): string {
   const compact = line.replace(/[\s-]/g, '');
-  if (!/^[A-Z0-9]{10,30}$/i.test(compact) || digitCount(compact) < 8) {
+  if (!/^[A-Z0-9]{10,30}$/i.test(compact) || digitCount(compact) < 8 || hasWords(line)) {
     return '';
   }
   return compact;
@@ -87,6 +91,11 @@ function pinValue(line: string): string {
     return '';
   }
   return line;
+}
+
+function hasWords(line: string): boolean {
+  const parts = line.split(/\s+/);
+  return parts.length > 1 && parts.some((part) => /^[A-Za-z]*[a-z][A-Za-z]*$/.test(part) && part.length >= 2);
 }
 
 function digitCount(value: string): number {
