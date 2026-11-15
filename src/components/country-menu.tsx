@@ -56,13 +56,19 @@ export function CountryMenu() {
         </PressScale>
       </View>
       <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          style={[styles.backdrop, { backgroundColor: theme.scrim }, wide ? styles.backdropWide : styles.backdropNarrow]}
-          onPress={() => setOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close country list">
+        <View style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}>
+          <Pressable
+            style={[StyleSheet.absoluteFill, { backgroundColor: theme.scrim }]}
+            onPress={() => setOpen(false)}
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            aria-hidden
+            tabIndex={-1}
+          />
           <Animated.View
             entering={reduceMotion ? undefined : FadeInDown.duration(Motion.state).easing(Motion.easeOut)}
+            accessibilityViewIsModal
+            onAccessibilityEscape={() => setOpen(false)}
             style={[
               styles.menu,
               { backgroundColor: theme.backgroundElement, borderColor: theme.border },
@@ -70,18 +76,16 @@ export function CountryMenu() {
                 ? { position: 'absolute', top: anchor.top, right: anchor.right, width: 320 }
                 : { paddingBottom: insets.bottom + Spacing.two },
             ]}>
-            <Pressable accessible={false}>
-              <ThemedText type="smallBold" style={styles.menuTitle}>
-                Shop gift cards in
-              </ThemedText>
-              <ScrollView style={styles.list}>
-                {Market.countries.map((code) => (
-                  <CountryRow key={code} code={code} selected={code === country} onPress={() => pick(code)} />
-                ))}
-              </ScrollView>
-            </Pressable>
+            <ThemedText type="smallBold" style={styles.menuTitle}>
+              Shop gift cards in
+            </ThemedText>
+            <ScrollView style={styles.list}>
+              {Market.countries.map((code) => (
+                <CountryRow key={code} code={code} selected={code === country} onPress={() => pick(code)} />
+              ))}
+            </ScrollView>
           </Animated.View>
-        </Pressable>
+        </View>
       </Modal>
     </>
   );

@@ -13,11 +13,10 @@ type BottomSheetProps = {
   open: boolean;
   onClose: () => void;
   title: string;
-  closeLabel?: string;
   children: ReactNode;
 };
 
-export function BottomSheet({ open, onClose, title, closeLabel = 'Close', children }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, children }: BottomSheetProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { wide } = usePageLayout();
@@ -31,27 +30,33 @@ export function BottomSheet({ open, onClose, title, closeLabel = 'Close', childr
   return (
     <Modal transparent visible={open} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <KeyboardAvoid>
-        <Pressable
-          style={[styles.backdrop, { backgroundColor: theme.scrim }, wide ? styles.backdropWide : styles.backdropNarrow]}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel={closeLabel}>
+        <View style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}>
+          <Pressable
+            style={[StyleSheet.absoluteFill, { backgroundColor: theme.scrim }]}
+            onPress={onClose}
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            aria-hidden
+            tabIndex={-1}
+          />
           <Animated.View
             entering={entering}
+            accessibilityViewIsModal
+            onAccessibilityEscape={onClose}
             style={[
               styles.panel,
               { backgroundColor: theme.background },
               wide ? styles.panelWide : [styles.panelNarrow, { paddingBottom: insets.bottom + Spacing.three }],
             ]}>
-            <Pressable accessible={false} style={styles.content}>
+            <View style={styles.content}>
               {!wide && <View style={[styles.grabber, { backgroundColor: theme.backgroundSelected }]} />}
               <ThemedText type="subtitle" accessibilityRole="header">
                 {title}
               </ThemedText>
               {children}
-            </Pressable>
+            </View>
           </Animated.View>
-        </Pressable>
+        </View>
       </KeyboardAvoid>
     </Modal>
   );
