@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, SlideInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -56,17 +56,28 @@ export function SignInProvider({ children }: { children: ReactNode }) {
   const listeners = useRef(new Set<SignInListener>());
 
   const check = useCallback(async () => {
-    const current = await ctx.isSignedIn().catch(() => false);
-    setSignedIn(current);
-    return current;
+    try {
+      const current = await ctx.isSignedIn();
+      setSignedIn(current);
+      return current;
+    } catch {
+      return false;
+    }
   }, []);
 
   useEffect(() => {
-    ctx
-      .isSignedIn()
-      .catch(() => false)
-      .then(setSignedIn);
-  }, []);
+    ctx.isSignedIn().then(setSignedIn, () => undefined);
+    const foreground = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void check();
+      }
+    });
+    const stopListening = ctx.onSessionEnd(() => setSignedIn(false));
+    return () => {
+      foreground.remove();
+      stopListening();
+    };
+  }, [check]);
 
   const openSignIn = useCallback((why?: string) => setReason(why ?? ''), []);
 
