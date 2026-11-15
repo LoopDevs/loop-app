@@ -80,6 +80,19 @@ const unauthorized = () => new CtxError(401, '{"error":"ErrTokenInvalid"}');
 
 const ownerOf = (accessToken: string) => accessToken.charAt(0);
 
+test('listeners hear which owner the ended session belonged to', async () => {
+  const ctx = new FakeCtx(async () => ({ ok: true }));
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
+  const ended: (string | null)[] = [];
+  auth.onSessionEnd((endedOwner) => {
+    ended.push(endedOwner);
+  });
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  await auth.clearSession();
+  await auth.clearSession();
+  assert.deepEqual(ended, ['a', null]);
+});
+
 test('a call made during sign-in waits for and uses the new tokens', async () => {
   const ctx = new FakeCtx(async () => ({ ok: true }));
   const store = new MemoryStore('r-old');

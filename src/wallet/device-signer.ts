@@ -54,4 +54,6 @@ export const deviceSigner = {
       new DeviceKey(secureStorage, userId).sign(digest),
     );
   },
+
+  async forgetOnSessionEnd(_endedUserId: string | null): Promise<void> {},
 };

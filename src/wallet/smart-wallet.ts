@@ -15,6 +15,7 @@ import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
 import type { TokenStorage } from '@/session/install-scoped-token';
 import { secureTokenStorage } from '@/session/secure-token-storage';
+import { errorReporting } from '@/ops/error-reporting';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
 import { holdCriticalReload } from '@/updates/update-checker';
 import { i128, soroban } from '@/stellar/soroban';
@@ -87,6 +88,13 @@ export class SmartWallet {
 
   static forgetConfirmations(): void {
     SmartWallet.confirmed.clear();
+  }
+
+  static async endSession(endedUserId: string | null): Promise<void> {
+    SmartWallet.forgetConfirmations();
+    await deviceSigner.forgetOnSessionEnd(endedUserId).catch((error: unknown) => {
+      errorReporting.reportError(error, 'Forgetting the device key at session end failed');
+    });
   }
 
   static async load(): Promise<SmartWallet | null> {
@@ -417,4 +425,4 @@ export class SmartWallet {
   }
 }
 
-ctx.onSessionEnd(SmartWallet.forgetConfirmations);
+ctx.onSessionEnd((endedUserId) => void SmartWallet.endSession(endedUserId));
