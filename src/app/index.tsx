@@ -75,7 +75,6 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const walletLoadStarted = useRef(false);
   const walletLoadFailed = useRef(false);
-  const profileLoaded = useRef(false);
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
@@ -124,8 +123,9 @@ export default function HomeScreen() {
 
   const loadProfileCountry = useCallback(async () => {
     const profile = await ctx.me().catch(() => null);
-    profileLoaded.current = profile !== null;
-    setProfileCountry(profile && !profile.needsSetup() ? profile.country : undefined);
+    if (profile !== null) {
+      setProfileCountry(profile.needsSetup() ? undefined : profile.country);
+    }
   }, []);
 
   const readSession = useCallback(async () => {
@@ -137,7 +137,6 @@ export default function HomeScreen() {
         walletLoadStarted.current = false;
         setWallet(null);
         setBlockedWallet(null);
-        profileLoaded.current = false;
         setProfileCountry(undefined);
       }
       if (signedIn) {
@@ -146,7 +145,7 @@ export default function HomeScreen() {
           loadProfileCountry();
           await loadWallet();
           setLoadError('');
-        } else if (!profileLoaded.current) {
+        } else {
           loadProfileCountry();
         }
         return;

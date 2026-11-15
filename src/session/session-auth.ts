@@ -13,7 +13,14 @@ export type SendOptions = {
   timeoutMs?: number;
 };
 
-export type SessionEndListener = (endedOwner: string | null) => void;
+export type SessionEndReason = 'signed-out' | 'expired' | 'refused';
+
+export type SessionEnd = {
+  owner: string | null;
+  reason: SessionEndReason;
+};
+
+export type SessionEndListener = (end: SessionEnd) => void;
 
 export type Send = <T>(method: string, path: string, body?: unknown, options?: SendOptions) => Promise<T>;
 
@@ -92,18 +99,22 @@ export class SessionAuth {
   }
 
   async startSession(tokens: TokenPair): Promise<void> {
+    const previousOwner = this.owner;
+    if (previousOwner !== null && previousOwner !== this.ownerOrNull(tokens.accessToken)) {
+      this.notifySessionEnd({ owner: previousOwner, reason: 'signed-out' });
+    }
     const generation = this.beginSession();
     await this.session.refreshOnce(generation, async () =>
       (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null,
     );
   }
 
-  async clearSession(): Promise<void> {
+  async clearSession(reason: SessionEndReason): Promise<void> {
     const endedOwner = this.owner;
     this.beginSession();
     this.storedRefreshToken = null;
     await this.store.clear();
-    this.notifySessionEnd(endedOwner);
+    this.notifySessionEnd({ owner: endedOwner, reason });
   }
 
   onSessionEnd(listener: SessionEndListener): () => void {
@@ -122,9 +133,8 @@ export class SessionAuth {
   private refuse(refreshToken: string): void {
     this.refusedRefreshToken = refreshToken;
     this.session.begin();
-    this.notifySessionEnd(this.owner);
+    this.notifySessionEnd({ owner: this.owner, reason: 'refused' });
   }
-
   private ownerOrNull(accessToken: string): string | null {
     try {
       return this.ownerOf(accessToken) || null;
@@ -133,9 +143,9 @@ export class SessionAuth {
     }
   }
 
-  private notifySessionEnd(endedOwner: string | null): void {
+  private notifySessionEnd(end: SessionEnd): void {
     for (const listener of this.sessionEndListeners) {
-      listener(endedOwner);
+      listener(end);
     }
   }
 
@@ -196,7 +206,7 @@ export class SessionAuth {
         return null;
       }
       if (error instanceof CtxError && error.status === 401) {
-        await this.clearSession();
+        await this.clearSession('expired');
         return null;
       }
       throw error;

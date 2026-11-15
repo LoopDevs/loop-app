@@ -582,7 +582,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
         setAmountError(amountMessage);
         return null;
       }
-      setMessage(BankPayment.refusalMessage(name) ?? OneTapBuy.notBoughtMessage);
+      setMessage(BankPayment.orderFailedMessage(error));
       return null;
     }
   };

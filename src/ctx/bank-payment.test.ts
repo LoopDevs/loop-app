@@ -3,6 +3,8 @@ import { test } from 'node:test';
 
 import { BankPayment } from './bank-payment.ts';
 import type { GiftCard } from './client.ts';
+import { CtxError } from './ctx-error.ts';
+import { OneTapBuy } from './one-tap-buy.ts';
 
 const now = Date.parse('2026-10-27T12:00:00Z');
 const later = '2026-10-27T12:30:00Z';
@@ -180,6 +182,16 @@ test('refusals that the user can act on get a plain message', () => {
   assert.match(BankPayment.refusalMessage('ErrBankLinkRequired') ?? '', /isn't linked/);
   assert.equal(BankPayment.refusalMessage('ErrServerError'), null);
   assert.equal(BankPayment.refusalMessage(undefined), null);
+});
+
+test('a failed bank order says not charged only when CTX refused it before charging', () => {
+  assert.equal(
+    BankPayment.orderFailedMessage(new CtxError(400, '{"error":"ErrBankLinkRequired"}')),
+    BankPayment.refusalMessage('ErrBankLinkRequired'),
+  );
+  assert.equal(BankPayment.orderFailedMessage(new CtxError(409, '{"error":"ErrOther"}')), OneTapBuy.notBoughtMessage);
+  assert.equal(BankPayment.orderFailedMessage(new CtxError(502, '{"error":"ErrServerError"}')), BankPayment.unconfirmedMessage);
+  assert.equal(BankPayment.orderFailedMessage(new TypeError('Network request failed')), BankPayment.unconfirmedMessage);
 });
 
 test('only the identity refusal asks for the legal name', () => {

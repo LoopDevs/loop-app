@@ -310,6 +310,7 @@ class CtxClient {
 
   signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
     return holdCriticalReload(async () => {
+      await this.isSignedIn().catch(() => false);
       await this.auth.startSession(
         await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
       );
@@ -329,7 +330,7 @@ class CtxClient {
 
   async signOut(): Promise<void> {
     await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
-    await this.auth.clearSession();
+    await this.auth.clearSession('signed-out');
   }
 
   onSessionEnd(listener: SessionEndListener): () => void {

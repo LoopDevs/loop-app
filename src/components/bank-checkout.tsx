@@ -286,7 +286,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
             setNameRequired(true);
             return;
           }
-          throw new Error(BankPayment.refusalMessage(errorName) ?? OneTapBuy.notBoughtMessage);
+          throw new Error(BankPayment.orderFailedMessage(error));
         }
         if (!mounted.current) {
           approvalWindow?.close();

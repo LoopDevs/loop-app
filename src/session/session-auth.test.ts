@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { CtxError } from '../ctx/ctx-error.ts';
-import { SessionAuth, type RefreshTokenStore, type Send, type SendOptions } from './session-auth.ts';
+import {
+  SessionAuth,
+  type RefreshTokenStore,
+  type Send,
+  type SendOptions,
+  type SessionEnd,
+} from './session-auth.ts';
 
 type Call = {
   path: string;
@@ -80,17 +86,63 @@ const unauthorized = () => new CtxError(401, '{"error":"ErrTokenInvalid"}');
 
 const ownerOf = (accessToken: string) => accessToken.charAt(0);
 
-test('listeners hear which owner the ended session belonged to', async () => {
+test('listeners hear which owner the ended session belonged to and why it ended', async () => {
   const ctx = new FakeCtx(async () => ({ ok: true }));
   const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
-  const ended: (string | null)[] = [];
-  auth.onSessionEnd((endedOwner) => {
-    ended.push(endedOwner);
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
   });
   await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
-  await auth.clearSession();
-  await auth.clearSession();
-  assert.deepEqual(ended, ['a', null]);
+  await auth.clearSession('signed-out');
+  await auth.clearSession('signed-out');
+  assert.deepEqual(ended, [
+    { owner: 'a', reason: 'signed-out' },
+    { owner: null, reason: 'signed-out' },
+  ]);
+});
+
+test("signing in as someone else over a live session ends the previous owner's session first", async () => {
+  const ctx = new FakeCtx(async () => ({ ok: true }));
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
+  const ended: SessionEnd[] = [];
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+  await auth.startSession({ accessToken: 'a2', refreshToken: 'a-r2' });
+  assert.deepEqual(ended, []);
+  await auth.startSession({ accessToken: 'b1', refreshToken: 'b-r1' });
+  assert.deepEqual(ended, [{ owner: 'a', reason: 'signed-out' }]);
+  assert.equal(await auth.accessToken(), 'b1');
+});
+
+test('a stored session, once read, is ended for its owner when someone else signs in', async () => {
+  const ctx = new FakeCtx(async ({ path }) => {
+    assert.equal(path, '/refresh-token');
+    return { accessToken: 'a1', refreshToken: 'a-r2' };
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore('a-r1'), ownerOf);
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+  await auth.accessToken();
+  await auth.startSession({ accessToken: 'b1', refreshToken: 'b-r1' });
+  assert.deepEqual(ended, [{ owner: 'a', reason: 'signed-out' }]);
+});
+
+test('a refresh token CTX rejects ends the session as expired', async () => {
+  const ctx = new FakeCtx(async () => {
+    throw unauthorized();
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore('r1'), ownerOf);
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+  assert.equal(await auth.accessToken(), null);
+  assert.deepEqual(ended, [{ owner: null, reason: 'expired' }]);
 });
 
 test('a call made during sign-in waits for and uses the new tokens', async () => {
@@ -237,10 +289,10 @@ test('listeners hear the session end on sign-out and on a rejected refresh token
 
   await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
   assert.equal(ended, 1);
-  await auth.clearSession();
+  await auth.clearSession('signed-out');
   assert.equal(ended, 2);
   stop();
-  await auth.clearSession();
+  await auth.clearSession('signed-out');
   assert.equal(ended, 2);
 });
 
@@ -368,7 +420,7 @@ test('signing out during a refresh keeps the session ended', async () => {
 
   const request = auth.sessionRequest('GET', '/me');
   await new Promise((resolve) => setImmediate(resolve));
-  await auth.clearSession();
+  await auth.clearSession('signed-out');
   rotation.open();
 
   await assert.rejects(request, /Sign in first/);

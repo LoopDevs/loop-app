@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useOnSignIn } from '@/components/sign-in';
 import { useToast } from '@/components/ui/toast';
 import { ctx } from '@/ctx/client';
 import { FavouriteIds } from '@/session/favourite-ids';
@@ -42,6 +43,7 @@ export function useFavourites() {
   }, [replace]);
 
   useFocusEffect(load);
+  useOnSignIn(load);
 
   useEffect(
     () =>
@@ -55,6 +57,7 @@ export function useFavourites() {
 
   const toggle = useCallback(
     async (merchantId: string) => {
+      const wanted = !latest.current.has(merchantId);
       await loading.current;
       const userId = await ctx.userId().catch(() => null);
       if (userId === null) {
@@ -69,10 +72,13 @@ export function useFavourites() {
         loadedFor.current = userId;
         replace(FavouriteIds.parse(stored));
       }
+      toast(wanted ? 'Added to favourites' : 'Removed from favourites');
+      if (latest.current.has(merchantId) === wanted) {
+        return;
+      }
       writes.current += 1;
       const next = latest.current.toggled(merchantId);
       replace(next);
-      toast(next.has(merchantId) ? 'Added to favourites' : 'Removed from favourites');
       try {
         await AsyncStorage.setItem(key, next.serialize());
       } catch {
