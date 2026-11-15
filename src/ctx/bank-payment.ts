@@ -96,6 +96,10 @@ export class BankPayment {
     return { order, payment: { kind: 'ready' }, follow: order.status === 'paid', sent: null };
   }
 
+  static needsLegalName(errorName: string | undefined): boolean {
+    return errorName === 'ErrBankPaymentIdentityRequired';
+  }
+
   static refusalMessage(errorName: string | undefined): string | null {
     switch (errorName) {
       case 'ErrBankPaymentIdentityRequired':

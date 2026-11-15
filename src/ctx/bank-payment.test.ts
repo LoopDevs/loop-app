@@ -181,3 +181,9 @@ test('refusals that the user can act on get a plain message', () => {
   assert.equal(BankPayment.refusalMessage('ErrServerError'), null);
   assert.equal(BankPayment.refusalMessage(undefined), null);
 });
+
+test('only the identity refusal asks for the legal name', () => {
+  assert.equal(BankPayment.needsLegalName('ErrBankPaymentIdentityRequired'), true);
+  assert.equal(BankPayment.needsLegalName('ErrBankLinkRequired'), false);
+  assert.equal(BankPayment.needsLegalName(undefined), false);
+});
