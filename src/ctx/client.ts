@@ -18,7 +18,7 @@ import { Profile } from '@/ctx/profile';
 import { blockingServiceState, type BlockingServiceState } from '@/ctx/service-state';
 import { loopEnvironment } from '@/environment';
 import { errorReporting } from '@/ops/error-reporting';
-import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
+import { SessionAuth, type SendOptions, type SessionEndListener, type TokenPair } from '@/session/session-auth';
 import {
   oauthLoginBody,
   type SocialCredential,
@@ -332,7 +332,7 @@ class CtxClient {
     await this.auth.clearSession();
   }
 
-  onSessionEnd(listener: () => void): () => void {
+  onSessionEnd(listener: SessionEndListener): () => void {
     return this.auth.onSessionEnd(listener);
   }
 

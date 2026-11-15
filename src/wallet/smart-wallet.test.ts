@@ -336,6 +336,22 @@ test('in a browser a pinned wallet loads once the sign-in confirms it, until the
   await assert.rejects(SmartWallet.load(), UnconfirmedIdentity);
 });
 
+test('a session end forgets the device key of the user whose session ended', async () => {
+  const forgotten: (string | null)[] = [];
+  replace(deviceSigner, 'forgetOnSessionEnd', async (endedUserId: string | null) => {
+    forgotten.push(endedUserId);
+  });
+  await SmartWallet.endSession(userId);
+  assert.deepEqual(forgotten, [userId]);
+});
+
+test('a device key that cannot be forgotten at session end does not stop the session ending', async () => {
+  replace(deviceSigner, 'forgetOnSessionEnd', async () => {
+    throw new Error('storage blocked');
+  });
+  await SmartWallet.endSession(userId);
+});
+
 test('in a browser a confirmation counts for the account that gave it', async () => {
   const holder = await inBrowserWithPinnedPasskey();
   await pinWallet('user-2', holder.publicKey);

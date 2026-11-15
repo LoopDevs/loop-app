@@ -13,6 +13,8 @@ export type SendOptions = {
   timeoutMs?: number;
 };
 
+export type SessionEndListener = (endedOwner: string | null) => void;
+
 export type Send = <T>(method: string, path: string, body?: unknown, options?: SendOptions) => Promise<T>;
 
 export type RefreshTokenStore = {
@@ -26,7 +28,7 @@ export class SessionAuth {
   private readonly session = new SessionTokens();
   private readonly send: Send;
   private readonly store: RefreshTokenStore;
-  private readonly sessionEndListeners = new Set<() => void>();
+  private readonly sessionEndListeners = new Set<SessionEndListener>();
   private readonly ownerOf: (accessToken: string) => string;
   private storedRefreshToken: string | null = null;
   private refusedRefreshToken: string | null = null;
@@ -97,13 +99,14 @@ export class SessionAuth {
   }
 
   async clearSession(): Promise<void> {
+    const endedOwner = this.owner;
     this.beginSession();
     this.storedRefreshToken = null;
     await this.store.clear();
-    this.notifySessionEnd();
+    this.notifySessionEnd(endedOwner);
   }
 
-  onSessionEnd(listener: () => void): () => void {
+  onSessionEnd(listener: SessionEndListener): () => void {
     this.sessionEndListeners.add(listener);
     return () => {
       this.sessionEndListeners.delete(listener);
@@ -119,7 +122,7 @@ export class SessionAuth {
   private refuse(refreshToken: string): void {
     this.refusedRefreshToken = refreshToken;
     this.session.begin();
-    this.notifySessionEnd();
+    this.notifySessionEnd(this.owner);
   }
 
   private ownerOrNull(accessToken: string): string | null {
@@ -130,9 +133,9 @@ export class SessionAuth {
     }
   }
 
-  private notifySessionEnd(): void {
+  private notifySessionEnd(endedOwner: string | null): void {
     for (const listener of this.sessionEndListeners) {
-      listener();
+      listener(endedOwner);
     }
   }
 
