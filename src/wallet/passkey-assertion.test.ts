@@ -24,7 +24,7 @@ function assertion(challenge: Uint8Array, highS: boolean, type = 'webauthn.get')
     JSON.stringify({ type, challenge: base64.encodeUrl(challenge), origin: 'https://loopfinance.io' }),
   );
   const message = concatBytes(authenticatorData, sha256(clientDataJson));
-  const signed = p256.sign(message, secret, { lowS: true });
+  const signed = p256.sign(message, secret, { lowS: true, prehash: true });
   const signature = highS ? new p256.Signature(signed.r, order - signed.s) : signed;
   return PasskeyAssertion.fromResponse({
     authenticatorData: base64.encodeUrl(authenticatorData),
@@ -68,6 +68,29 @@ test('short DER integers are left-padded to 32 bytes', () => {
 test('a signature over the challenge by the wallet passkey is accepted, high-S or not', () => {
   assert.doesNotThrow(() => assertion(digest, false).requireSigned(digest, publicKey));
   assert.doesNotThrow(() => assertion(digest, true).requireSigned(digest, publicKey));
+});
+
+test('an ES256 assertion signed the way authenticators sign it is accepted', async () => {
+  const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
+  const authenticatorPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey));
+  const authenticatorData = randomBytes(37);
+  const clientDataJson = new TextEncoder().encode(
+    JSON.stringify({ type: 'webauthn.get', challenge: PasskeyAssertion.challengeOf(digest) }),
+  );
+  const raw = new Uint8Array(
+    await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      keys.privateKey,
+      new Uint8Array(concatBytes(authenticatorData, sha256(clientDataJson))),
+    ),
+  );
+  const signature = p256.Signature.fromBytes(raw, 'compact').toBytes('der');
+  const signed = PasskeyAssertion.fromResponse({
+    authenticatorData: base64.encodeUrl(authenticatorData),
+    clientDataJSON: base64.encodeUrl(clientDataJson),
+    signature: base64.encodeUrl(signature),
+  });
+  assert.doesNotThrow(() => signed.requireSigned(digest, authenticatorPublicKey));
 });
 
 test('a signature over another challenge is refused', () => {

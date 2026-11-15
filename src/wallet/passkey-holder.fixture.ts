@@ -22,7 +22,10 @@ export function passkeyHolder(credentialId: Uint8Array = randomBytes(16)): Passk
     const clientDataJson = new TextEncoder().encode(
       JSON.stringify({ type: 'webauthn.get', challenge: PasskeyAssertion.challengeOf(challenge) }),
     );
-    const signature = p256.sign(concatBytes(authenticatorData, sha256(clientDataJson)), secret, { lowS: true });
+    const signature = p256.sign(concatBytes(authenticatorData, sha256(clientDataJson)), secret, {
+      lowS: true,
+      prehash: true,
+    });
     return {
       id: base64.encodeUrl(credentialId),
       response: {
