@@ -187,7 +187,17 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
     }
   };
 
-  const approve = async (giftCard: GiftCard) => {
+  const approveOnWeb = (giftCard: GiftCard, url: string, approvalWindow: Window | null) => {
+    if (approvalWindow && !approvalWindow.closed) {
+      approvalWindow.opener = null;
+      approvalWindow.location.href = url;
+      showCard(giftCard);
+      return;
+    }
+    window.location.assign(url);
+  };
+
+  const approve = async (giftCard: GiftCard, approvalWindow: Window | null) => {
     setPhase((current) => ({ step: 'opening', viaPicker: current?.viaPicker ?? false, bank: current?.bank ?? null }));
     const token = BankPayment.linkToken(giftCard);
     const link = token ? null : BankPayment.openLink(giftCard);
@@ -216,6 +226,11 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       throw new Error(OneTapBuy.notBoughtMessage);
     }
     const url = link ?? (token ? BankPayment.openLink(giftCard) : null);
+    if (url && process.env.EXPO_OS === 'web') {
+      approveOnWeb(giftCard, url, approvalWindow);
+      return;
+    }
+    approvalWindow?.close();
     if (url) {
       await openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
       if (mounted.current) {
@@ -225,8 +240,10 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
     }
     if (BankPayment.linkRefused(giftCard)) {
       errorReporting.reportMessage(`Bank approval link refused for order ${giftCard.id}`);
+      dropOrder(giftCard);
+      throw new Error(OneTapBuy.notBoughtMessage);
     }
-    throw new Error(OneTapBuy.notBoughtMessage);
+    showCard(giftCard);
   };
 
   const pay = () =>
@@ -234,6 +251,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       if (!fiatAmount) {
         return;
       }
+      const approvalWindow = process.env.EXPO_OS === 'web' ? window.open('', '_blank') : null;
       setAmountError(null);
       setPhase({ step: 'ordering', viaPicker: differentBank.current, bank: null });
       try {
@@ -246,6 +264,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
             ...(differentBank.current ? { chooseBank: true } : {}),
           });
         } catch (error) {
+          approvalWindow?.close();
           haptics.error();
           const name = error instanceof CtxError ? error.errorName() : undefined;
           const amountMessage = amountErrorMessage(name, merchant);
@@ -256,11 +275,12 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
           throw new Error(BankPayment.refusalMessage(name) ?? OneTapBuy.notBoughtMessage);
         }
         if (!mounted.current) {
+          approvalWindow?.close();
           return;
         }
         setOrder(created);
         haptics.tap();
-        await approve(created);
+        await approve(created, approvalWindow);
       } finally {
         setPhase(null);
       }
