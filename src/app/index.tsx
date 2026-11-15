@@ -44,6 +44,7 @@ import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { Savings } from '@/wallet/savings';
 import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
@@ -73,12 +74,14 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const walletLoadStarted = useRef(false);
   const walletLoadFailed = useRef(false);
+  const profileLoaded = useRef(false);
   const homeFocused = useRef(false);
   const { wide } = usePageLayout();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { country: marketCountry, resolved: marketResolved } = useMarket();
   const { check } = useSignIn();
+  const readOwner = useSessionOwner();
   const signedOut = screen === 'signed-out';
   const signedOutCountry = marketResolved ? marketCountry : undefined;
   const catalogCountry = !sessionRead ? undefined : signedOut ? signedOutCountry : profileCountry;
@@ -117,19 +120,30 @@ export default function HomeScreen() {
 
   const loadProfileCountry = useCallback(async () => {
     const profile = await ctx.me().catch(() => null);
+    profileLoaded.current = profile !== null;
     setProfileCountry(profile && !profile.needsSetup() ? profile.country : undefined);
   }, []);
 
   const readSession = useCallback(async () => {
     try {
-      const signedIn = await ctx.isSignedIn();
+      const { userId, changed } = await readOwner();
+      const signedIn = userId !== null;
       setSessionRead(true);
+      if (changed) {
+        walletLoadStarted.current = false;
+        setWallet(null);
+        setBlockedWallet(null);
+        profileLoaded.current = false;
+        setProfileCountry(undefined);
+      }
       if (signedIn) {
-        if (preWalletScreens.includes(screen) && !walletLoadStarted.current) {
+        if ((changed || preWalletScreens.includes(screen)) && !walletLoadStarted.current) {
           setScreen('loading');
           loadProfileCountry();
           await loadWallet();
           setLoadError('');
+        } else if (!profileLoaded.current) {
+          loadProfileCountry();
         }
         return;
       }
@@ -143,7 +157,7 @@ export default function HomeScreen() {
       walletLoadStarted.current = false;
       setLoadError(errorMessage(error));
     }
-  }, [screen, loadWallet, loadProfileCountry, check]);
+  }, [screen, loadWallet, loadProfileCountry, check, readOwner]);
 
   useFocusEffect(
     useCallback(() => {

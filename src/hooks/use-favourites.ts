@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/ui/toast';
 import { ctx } from '@/ctx/client';
@@ -10,7 +10,7 @@ export function useFavourites() {
   const toast = useToast();
   const [favourites, setFavourites] = useState(new FavouriteIds([]));
   const latest = useRef(favourites);
-  const loaded = useRef(false);
+  const loadedFor = useRef<string | null>(null);
   const loading = useRef<Promise<void> | null>(null);
   const writes = useRef(0);
 
@@ -24,18 +24,16 @@ export function useFavourites() {
     const writesAtStart = writes.current;
     loading.current = ctx
       .userId()
-      .then((userId) => AsyncStorage.getItem(FavouriteIds.storageKey(userId)))
-      .then((stored) => {
-        if (current) {
-          loaded.current = true;
-          if (writes.current === writesAtStart) {
-            replace(FavouriteIds.parse(stored));
-          }
+      .then(async (userId) => {
+        const stored = await AsyncStorage.getItem(FavouriteIds.storageKey(userId));
+        if (current && writes.current === writesAtStart) {
+          loadedFor.current = userId;
+          replace(FavouriteIds.parse(stored));
         }
       })
       .catch(() => {
         if (current) {
-          loaded.current = false;
+          loadedFor.current = null;
         }
       });
     return () => {
@@ -45,20 +43,38 @@ export function useFavourites() {
 
   useFocusEffect(load);
 
+  useEffect(
+    () =>
+      ctx.onSessionEnd(() => {
+        loadedFor.current = null;
+        writes.current += 1;
+        replace(new FavouriteIds([]));
+      }),
+    [replace],
+  );
+
   const toggle = useCallback(
     async (merchantId: string) => {
-      if (!loaded.current) {
-        await loading.current;
-      }
-      if (!loaded.current) {
+      await loading.current;
+      const userId = await ctx.userId().catch(() => null);
+      if (userId === null) {
         return;
+      }
+      const key = FavouriteIds.storageKey(userId);
+      if (loadedFor.current !== userId) {
+        const stored = await AsyncStorage.getItem(key).catch(() => undefined);
+        if (stored === undefined) {
+          return;
+        }
+        loadedFor.current = userId;
+        replace(FavouriteIds.parse(stored));
       }
       writes.current += 1;
       const next = latest.current.toggled(merchantId);
       replace(next);
       toast(next.has(merchantId) ? 'Added to favourites' : 'Removed from favourites');
       try {
-        await AsyncStorage.setItem(FavouriteIds.storageKey(await ctx.userId()), next.serialize());
+        await AsyncStorage.setItem(key, next.serialize());
       } catch {
         replace(latest.current.toggled(merchantId));
       }
