@@ -1,7 +1,73 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parseCardDetails, readPageLines } from './redeem-scrape.ts';
+import { pageLinesScript, parseCardDetails, readPageLines } from './redeem-scrape.ts';
+
+type FakeNode = Record<string, unknown>;
+
+function text(content: string): FakeNode {
+  return { nodeType: 3, textContent: content, parentElement: { tagName: 'P', closest: () => null } };
+}
+
+function field(
+  value: string,
+  locked: { readOnly?: boolean; disabled?: boolean } = {},
+  autocomplete: string | null = null,
+): FakeNode {
+  return {
+    nodeType: 1,
+    tagName: 'INPUT',
+    getAttribute: (name: string) => (name === 'autocomplete' ? autocomplete : 'text'),
+    value,
+    readOnly: false,
+    disabled: false,
+    ...locked,
+  };
+}
+
+function pageLines(nodes: FakeNode[]): string[] {
+  const sent: string[] = [];
+  const document = {
+    body: {},
+    documentElement: {},
+    createTreeWalker: () => {
+      let index = 0;
+      return { nextNode: () => nodes[index++] ?? null };
+    },
+  };
+  const window = { ReactNativeWebView: { postMessage: (message: string) => sent.push(message) } };
+  const run = new Function('window', 'document', 'NodeFilter', 'MutationObserver', 'setTimeout', 'clearTimeout', pageLinesScript);
+  run(
+    window,
+    document,
+    { SHOW_ELEMENT: 1, SHOW_TEXT: 4 },
+    class {
+      observe() {}
+    },
+    (callback: () => void) => callback(),
+    () => undefined,
+  );
+  return readPageLines(sent[0] ?? '');
+}
+
+test('the page script reads shown text and locked fields but never what the user types', () => {
+  const lines = pageLines([
+    text('Card number'),
+    field('4111 1111 1111 1111'),
+    text('Gift card code'),
+    field('ABCD1234EFGH5678', { readOnly: true }),
+    text('Pin'),
+    field('4321', { disabled: true }),
+  ]);
+  assert.deepEqual(lines, ['Card number', 'Gift card code', 'ABCD1234EFGH5678', 'Pin', '4321']);
+  assert.deepEqual(parseCardDetails(lines), { number: 'ABCD1234EFGH5678', pin: '4321' });
+});
+
+test('the page script skips a payment card field even once the checkout locks it', () => {
+  const lines = pageLines([text('Card number'), field('4111111111111111', { disabled: true }, 'cc-number')]);
+  assert.deepEqual(lines, ['Card number']);
+  assert.equal(parseCardDetails(lines), null);
+});
 
 test('reads a labelled code and pin from a hosted reveal page', () => {
   const lines = ['Tesco', '10.00 GBP', 'Gift card code', '1234567890123456', 'Pin', '4321', 'Issued 4 Nov 2026'];

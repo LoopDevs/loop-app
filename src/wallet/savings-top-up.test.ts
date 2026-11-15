@@ -467,3 +467,41 @@ function holdingsWith(vaultValue: string): Holdings {
     Rates.fromPrices({}),
   );
 }
+
+function withdrawAllChain(statuses: Status[]): VaultCall {
+  let clock = start;
+  return new VaultCall({
+    transaction: async () => ({ status: statuses.shift() ?? 'NOT_FOUND', latestLedger: firstLedger }),
+    latestLedger: async () => firstLedger,
+    sleep: async (ms) => {
+      clock += ms;
+    },
+    now: () => clock,
+  });
+}
+
+test('moving all savings counts as done only once the move lands on chain', async () => {
+  const sent = async () => ({ hash: 'HASH', status: 'PENDING', expiryLedger: firstLedger + 10 });
+  assert.equal(await SavingsTopUp.withdrawAll(sent, withdrawAllChain(['NOT_FOUND', 'SUCCESS'])), 'success');
+  assert.equal(await SavingsTopUp.withdrawAll(sent, withdrawAllChain(['FAILED'])), 'failed');
+  assert.equal(await SavingsTopUp.withdrawAll(sent, withdrawAllChain([])), 'pending');
+});
+
+test('moving all savings fails when the sponsor rejects it and is unconfirmed when it never answers', async () => {
+  const refused = async () => ({ hash: '', status: 'failed', error: 'refused', expiryLedger: firstLedger });
+  assert.equal(await SavingsTopUp.withdrawAll(refused, withdrawAllChain(['SUCCESS'])), 'failed');
+  const unanswered = async () => {
+    throw new UnansweredWithdrawal(firstLedger, new TypeError('Network request failed'));
+  };
+  assert.equal(await SavingsTopUp.withdrawAll(unanswered, withdrawAllChain(['SUCCESS'])), 'unconfirmed');
+  const blocked = async () => {
+    throw new CtxError(400, 'bad request');
+  };
+  await assert.rejects(SavingsTopUp.withdrawAll(blocked, withdrawAllChain([])), CtxError);
+});
+
+test('each outcome of moving all savings has its own message', () => {
+  const messages = (['success', 'failed', 'pending', 'unconfirmed'] as const).map(SavingsTopUp.withdrawAllMessage);
+  assert.equal(new Set(messages).size, 4);
+  assert.equal(messages[0], 'Savings moved to your balance');
+});

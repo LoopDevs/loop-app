@@ -12,6 +12,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
 const saveFailedMessage = "Couldn't save the card details. Copy them from the page instead.";
+const maxSaveAttempts = 3;
 
 type RedeemBrowserProps = {
   giftCard: GiftCard;
@@ -25,11 +26,12 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const saving = useRef(false);
+  const failedSaves = useRef(0);
   const [progress, setProgress] = useState(0);
   const awaitingCode = !giftCard.number && !giftCard.pin;
 
   const onMessage = async (event: WebViewMessageEvent) => {
-    if (!awaitingCode || saving.current) {
+    if (!awaitingCode || saving.current || failedSaves.current >= maxSaveAttempts) {
       return;
     }
     const details = parseCardDetails(readPageLines(event.nativeEvent.data));
@@ -42,7 +44,11 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
       haptics.success();
       onSaved(saved);
     } catch {
-      toast(saveFailedMessage);
+      failedSaves.current += 1;
+      saving.current = false;
+      if (failedSaves.current === 1) {
+        toast(saveFailedMessage);
+      }
     }
   };
 
