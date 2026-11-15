@@ -6,6 +6,7 @@ export type CardDetails = {
 const maxLabelLength = 40;
 const lookahead = 3;
 const pinLabel = /\b(pin|security code)\b/i;
+const otherLabel = /\b(number|no\.?|#|code|ref(erence)?|date|expir\w*|phone|balance|amount)\s*:?$/i;
 const numberLabel = /\b(card|gift ?card|e-?gift|e-?voucher|voucher|gift|claim|redeem|redemption)\s*(number|no\.?|#|code)\b|^(code|number)\b/i;
 
 export function parseCardDetails(lines: readonly string[]): CardDetails | null {
@@ -16,11 +17,11 @@ export function parseCardDetails(lines: readonly string[]): CardDetails | null {
     if (!label || label.length > maxLabelLength) {
       return;
     }
-    const kind = pinLabel.test(label) ? 'pin' : numberLabel.test(label) ? 'number' : null;
+    const kind = labelKind(label);
     if (!kind) {
       return;
     }
-    const candidates = inline ? [inline] : lines.slice(index + 1, index + 1 + lookahead);
+    const candidates = inline ? [inline] : valuesAfter(lines, index);
     const read = kind === 'pin' ? pinValue : numberValue;
     const value = candidates.map((candidate) => read(candidate.trim())).find(Boolean) ?? '';
     if (kind === 'number') {
@@ -43,6 +44,25 @@ export function readPageLines(data: string): string[] {
   } catch {
     return [];
   }
+}
+
+function labelKind(label: string): 'pin' | 'number' | null {
+  if (pinLabel.test(label)) {
+    return 'pin';
+  }
+  return numberLabel.test(label) ? 'number' : null;
+}
+
+function valuesAfter(lines: readonly string[], index: number): string[] {
+  const values: string[] = [];
+  for (const line of lines.slice(index + 1, index + 1 + lookahead)) {
+    const { label } = splitInline(line.trim());
+    if (label.length <= maxLabelLength && (labelKind(label) !== null || otherLabel.test(label))) {
+      break;
+    }
+    values.push(line);
+  }
+  return values;
 }
 
 function splitInline(line: string): { label: string; inline: string | null } {
