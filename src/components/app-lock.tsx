@@ -34,15 +34,21 @@ function useAnnouncement(message: string) {
 
 type AppLockControls = {
   isOn: boolean;
+  covered: boolean;
   turnOn: () => Promise<void>;
   turnOff: () => Promise<void>;
 };
 
 const AppLockContext = createContext<AppLockControls>({
   isOn: false,
+  covered: false,
   turnOn: async () => {},
   turnOff: async () => {},
 });
+
+export function useAppLockCovered(): boolean {
+  return useContext(AppLockContext).covered;
+}
 
 export function AppLockToggle() {
   const { isOn, turnOn, turnOff } = useContext(AppLockContext);
@@ -212,7 +218,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   }, [authenticate]);
 
   return (
-    <AppLockContext.Provider value={{ isOn: lock.isOn(), turnOn, turnOff }}>
+    <AppLockContext.Provider value={{ isOn: lock.isOn(), covered, turnOn, turnOff }}>
       <View
         style={styles.fill}
         accessibilityElementsHidden={covered}
