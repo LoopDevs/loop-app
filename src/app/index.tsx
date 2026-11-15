@@ -36,6 +36,7 @@ import {
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
@@ -95,7 +96,10 @@ export default function HomeScreen() {
   const openActiveOrder = useCallback(async () => {
     const activeOrder = await dismissedOrders.activeOrder().catch(() => null);
     if (activeOrder && homeFocused.current) {
-      router.push(`/shop/pay/${activeOrder.merchantId}`, { withAnchor: true });
+      router.push(
+        BankPayment.isBank(activeOrder) ? `/wallet/${activeOrder.id}` : `/shop/pay/${activeOrder.merchantId}`,
+        { withAnchor: true },
+      );
     }
   }, [router]);
 
