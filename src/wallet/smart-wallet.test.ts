@@ -683,7 +683,7 @@ test('a withdrawal asks CTX for the vault withdraw of exactly those shares and s
     return { transaction: 'xdr-2', digest: 'cd', contextRuleIds: [1], expiryLedger: 1_040 };
   });
   const sent = await wallet.withdraw('XLM.USDC', 250n);
-  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.USDC', shares: '250' });
+  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.USDC', shares: '0.0000250' });
   assert.deepEqual(required, [250n]);
   assert.deepEqual(sent, { hash: 'tx-1', status: 'PENDING', expiryLedger: 1_040 });
   assert.equal(fakes.sponsored.length, 1);
@@ -708,7 +708,7 @@ test('a withdrawal in another savings currency targets that vault and is valued 
     return { transaction: 'xdr-2', digest: 'cd', contextRuleIds: [1], expiryLedger: 1_040 };
   });
   await wallet.withdraw('XLM.GBPLOOP', 40n);
-  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.GBPLOOP', shares: '40' });
+  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.GBPLOOP', shares: '0.0000040' });
   assert.deepEqual(required, [{ vault: gbpVault, shares: 40n }]);
   assert.equal(fakes.sponsored.length, 1);
 });

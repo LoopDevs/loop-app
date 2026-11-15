@@ -106,6 +106,18 @@ export class SavingsTopUp {
     }
   }
 
+  static withdrawStoppedMessage(moved: string[], moving: string[]): string {
+    const parts: string[] = [];
+    if (moved.length) {
+      parts.push(`Moved ${moved.join(' and ')} to your balance.`);
+    }
+    if (moving.length) {
+      parts.push(`${moving.join(' and ')} may still be moving, so check your balance before trying again.`);
+    }
+    parts.push("The rest couldn't move and is still in savings.");
+    return parts.join(' ');
+  }
+
   static refusedWithdrawal(error: unknown): SentVaultCall {
     if (error instanceof CtxError && error.status === 400) {
       return { hash: '', status: 'failed', error: error.message, expiryLedger: 0 };
