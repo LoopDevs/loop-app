@@ -61,3 +61,21 @@ test('other Link events are not progress', () => {
   assert.equal(BankLink.progress(event('OPEN', 'CONSENT')), null);
   assert.equal(BankLink.progress(event('TRANSITION_VIEW', 'CONSENT')), null);
 });
+
+test('the bank return link is the path iOS hands to the app, with or without the site and query', () => {
+  assert.equal(BankLink.isReturn(BankLink.returnPath), true);
+  assert.equal(BankLink.isReturn('https://loopfinance.io/plaid/oauth?oauth_state_id=abc'), true);
+  assert.equal(BankLink.isReturn('/plaid/oauth?oauth_state_id=abc'), true);
+  assert.equal(BankLink.isReturn('/plaid/oauthx'), false);
+  assert.equal(BankLink.isReturn('https://evil.example/plaid/oauth'), false);
+  assert.equal(BankLink.isReturn('/shop/plaid/oauth'), false);
+});
+
+test('the iOS app links claim the bank return path', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const site = JSON.parse(await readFile('public/.well-known/apple-app-site-association', 'utf8')) as {
+    applinks: { details: { components: { '/': string }[] }[] };
+  };
+  const paths = site.applinks.details.flatMap((detail) => detail.components.map((component) => component['/']));
+  assert.ok(paths.includes(BankLink.returnPath));
+});
