@@ -505,3 +505,14 @@ test('each outcome of moving all savings has its own message', () => {
   assert.equal(new Set(messages).size, 4);
   assert.equal(messages[0], 'Savings moved to your balance');
 });
+
+test('a withdraw that stops part way names what moved and says the rest is still in savings', () => {
+  assert.equal(
+    SavingsTopUp.withdrawStoppedMessage(['10.00 USDC'], []),
+    "Moved 10.00 USDC to your balance. The rest couldn't move and is still in savings.",
+  );
+  assert.equal(
+    SavingsTopUp.withdrawStoppedMessage([], ['10.00 USDC']),
+    "10.00 USDC may still be moving, so check your balance before trying again. The rest couldn't move and is still in savings.",
+  );
+});

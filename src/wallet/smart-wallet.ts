@@ -336,11 +336,7 @@ export class SmartWallet {
   }
 
   private async buildSignedWithdrawal(currency: PaymentCurrency, shares: bigint): Promise<SignedWithdrawal> {
-    const intent: SmartWalletIntent = {
-      intent: 'vault_withdraw',
-      currency,
-      shares: shares.toString(),
-    };
+    const intent = Savings.withdrawIntent(currency, shares);
     const built = await ctx.buildTransaction(this.id, intent);
     const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId]);
     await this.requireWithdraw(call, currency, shares);

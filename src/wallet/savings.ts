@@ -1,7 +1,7 @@
 import type { SmartWalletIntent } from '../ctx/client.ts';
 import { normalizeAmount } from '../ctx/amount-input.ts';
 import { money } from '../money.ts';
-import { network, stablePeg, type PaymentCurrency } from '../stellar/network.ts';
+import { network, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
 import { VaultCall, type SentVaultCall, type VaultCallOutcome } from './vault-call.ts';
 
@@ -103,7 +103,7 @@ export class Savings {
   }
 
   static depositCurrencyFor(stable: string): PaymentCurrency {
-    return Savings.currencies.find((currency) => stablePeg[currency] === stable) ?? Savings.depositCurrency;
+    return Savings.takes(stable) ? stable : Savings.depositCurrency;
   }
 
   static depositIntent(
@@ -111,6 +111,13 @@ export class Savings {
     amount: bigint,
   ): Extract<SmartWalletIntent, { intent: 'vault_deposit' }> {
     return { intent: 'vault_deposit', currency, amount: units.format(amount, units.decimals) };
+  }
+
+  static withdrawIntent(
+    currency: PaymentCurrency,
+    shares: bigint,
+  ): Extract<SmartWalletIntent, { intent: 'vault_withdraw' }> {
+    return { intent: 'vault_withdraw', currency, shares: units.format(shares, units.decimals) };
   }
 
   static maxInput(inWallet: bigint): string {
