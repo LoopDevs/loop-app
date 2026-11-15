@@ -94,8 +94,11 @@ export const pageLinesScript = `
           continue;
         }
         text = node.textContent;
-      } else if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {
-        if (skippedInputs[(node.getAttribute('type') || 'text').toLowerCase()]) {
+      } else if ((node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') && (node.readOnly || node.disabled)) {
+        if (
+          skippedInputs[(node.getAttribute('type') || 'text').toLowerCase()] ||
+          /^cc-/i.test(node.getAttribute('autocomplete') || '')
+        ) {
           continue;
         }
         text = node.value || '';

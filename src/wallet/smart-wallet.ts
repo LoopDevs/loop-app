@@ -351,7 +351,7 @@ export class SmartWallet {
   }
 
   private async sign(call: SponsoredCall): Promise<{ signature: string; devicePublicKey: string }> {
-    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(this.address)) {
+    if (Platform.OS === 'web' && !SmartWallet.confirmed.has(this.confirmedKey())) {
       throw new UnconfirmedIdentity(this);
     }
     const devicePublicKey = await deviceSigner.publicKey(this.userId);

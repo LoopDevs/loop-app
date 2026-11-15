@@ -353,6 +353,17 @@ test('in a browser adding a linked, pinned device asks the sign-in to confirm th
   assert.equal((await SmartWallet.load())?.address, address);
 });
 
+test('in a browser the device key signs only once the sign-in has confirmed the wallet', async () => {
+  await inBrowserWithPinnedPasskey();
+  const wallet = await unconfirmedWallet();
+  const fakes = fakePayment();
+  await assert.rejects(wallet.pay(giftCard), UnconfirmedIdentity);
+  await wallet.confirmIdentity();
+  const payment = await wallet.pay(giftCard);
+  await payment.sponsor();
+  assert.equal(fakes.sponsored.length, 1);
+});
+
 test('a wallet is the same only with the same id, address and account', async () => {
   const wallet = (await SmartWallet.load()) as SmartWallet;
   assert.equal(wallet.sameAs(null), false);

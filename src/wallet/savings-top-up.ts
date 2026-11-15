@@ -5,7 +5,7 @@ import { money } from '../money.ts';
 import type { PaymentCurrency } from '../stellar/network.ts';
 import { Holdings } from './holdings.ts';
 import type { Balances } from './smart-wallet.ts';
-import { VaultCall, type PendingVaultCall, type SentVaultCall } from './vault-call.ts';
+import { VaultCall, type PendingVaultCall, type SentVaultCall, type VaultCallOutcome } from './vault-call.ts';
 
 export type SignedWithdrawal = {
   expiryLedger: number;
@@ -19,6 +19,8 @@ export type TopUpChain = {
   vaultCall: VaultCall;
   now(): number;
 };
+
+export type WithdrawAllOutcome = VaultCallOutcome | 'unconfirmed';
 
 export type TopUpOutcome =
   | { kind: 'covered'; withdrawal?: PendingVaultCall }
@@ -73,6 +75,35 @@ export class SavingsTopUp {
       .sponsor()
       .catch((error: unknown) => UnansweredWithdrawal.rethrow(error, signed.expiryLedger));
     return { ...result, expiryLedger: signed.expiryLedger };
+  }
+
+  static async withdrawAll(
+    send: () => Promise<SentVaultCall>,
+    vaultCall: VaultCall,
+  ): Promise<WithdrawAllOutcome> {
+    let sent: SentVaultCall;
+    try {
+      sent = await send();
+    } catch (error) {
+      if (error instanceof UnansweredWithdrawal) {
+        return 'unconfirmed';
+      }
+      throw error;
+    }
+    return vaultCall.settle(sent);
+  }
+
+  static withdrawAllMessage(outcome: WithdrawAllOutcome): string {
+    switch (outcome) {
+      case 'success':
+        return 'Savings moved to your balance';
+      case 'failed':
+        return "Couldn't move your savings. They're still in savings.";
+      case 'pending':
+        return 'Still moving your savings. Check back in a minute.';
+      case 'unconfirmed':
+        return 'Your savings may still be moving. Give it a minute and check your balance before trying again.';
+    }
   }
 
   static refusedWithdrawal(error: unknown): SentVaultCall {
