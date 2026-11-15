@@ -101,6 +101,11 @@ test('skips labels without a nearby value and prose that mentions a code', () =>
   assert.equal(parseCardDetails(lines), null);
 });
 
+test('a value is never read from past the next label', () => {
+  const lines = ['Gift card number', 'Order number', '12345678901234'];
+  assert.equal(parseCardDetails(lines), null);
+});
+
 test('a pin never duplicates the number and a page without a code returns nothing', () => {
   assert.deepEqual(parseCardDetails(['Code', '1234567890', 'PIN', '1234567890']), { number: '1234567890', pin: '' });
   assert.equal(parseCardDetails(['Great news. Your gift card is on its way.', "I'm not a robot", 'Get your Gift Card']), null);
