@@ -77,9 +77,17 @@ export class Account {
   }
 
   receivedCashback(currencies: ReadonlySet<string>): bigint {
-    return this.payouts
-      .filter((payout) => payout.status === 'complete' && currencies.has(payout.currency))
-      .reduce((sum, payout) => sum + units.parse(payout.netAmount()), 0n);
+    return this.receivedCashbackByCurrency(currencies).reduce((sum, { amount }) => sum + amount, 0n);
+  }
+
+  receivedCashbackByCurrency(currencies: ReadonlySet<string>): { currency: string; amount: bigint }[] {
+    const sums = new Map<string, bigint>();
+    for (const payout of this.payouts) {
+      if (payout.status === 'complete' && currencies.has(payout.currency)) {
+        sums.set(payout.currency, (sums.get(payout.currency) ?? 0n) + units.parse(payout.netAmount()));
+      }
+    }
+    return [...sums].map(([currency, amount]) => ({ currency, amount }));
   }
 
   private balanceItem(balance: BalanceJson, routing: CashbackRouting): OnTheWayItem {

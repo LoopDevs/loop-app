@@ -65,11 +65,13 @@ export function WalletSummary() {
 
   const stable = view?.stable ?? null;
   const inStable = (amount: bigint) => (stable ? money.ctx(units.format(amount, units.decimals), stable) : null);
-  const balance = view && stable ? inStable(view.holdings.inWallet(stable)) : null;
+  const inWallet = view && stable ? view.holdings.inWalletIn(stable) : null;
+  const balance = inWallet === null ? null : inStable(inWallet);
   const balanceName = stable ? money.name(stable) : 'Balance';
   const onTheWay = view?.stable ? view.holdings.onTheWayIn(view.stable) : null;
-  const received = view?.account?.receivedCashback(offeredCurrencies);
-  const receivedText = received === undefined ? null : inStable(received);
+  const received =
+    view?.account && stable ? view.holdings.sumIn(view.account.receivedCashbackByCurrency(offeredCurrencies), stable) : null;
+  const receivedText = received === null ? null : inStable(received);
 
   return (
     <View style={styles.stack}>
