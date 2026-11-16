@@ -44,6 +44,7 @@ import {
   giftCardStatusLabel,
   isHiddenFromHistory,
   outcomeText,
+  processingNote,
   unpaidStatuses,
 } from "@/ctx/gift-card-status";
 import { useAppRefresh } from "@/hooks/use-app-refresh";
@@ -407,7 +408,7 @@ function OrderTableRow({
 }) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
-  const outcome = outcomeText(giftCard, sent);
+  const outcome = outcomeText(giftCard, sent) ?? processingNote(giftCard, sent);
   const amount = money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency);
   const status = giftCardStatusLabel(giftCard.status);
   const tone = statusTone(giftCard.status);
@@ -497,7 +498,7 @@ function OrderRow({
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const outcome = outcomeText(giftCard, sent);
+  const outcome = outcomeText(giftCard, sent) ?? processingNote(giftCard, sent);
   const amount = money.ctx(giftCard.cardFiatAmount, giftCard.cardFiatCurrency);
   const status = giftCardStatusLabel(giftCard.status);
   return (

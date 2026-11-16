@@ -22,7 +22,7 @@ import { BankPayment } from '@/ctx/bank-payment';
 import { BuyPrice } from '@/ctx/buy-price';
 import type { GiftCard } from '@/ctx/client';
 import { DismissedOrders } from '@/ctx/dismissed-orders';
-import { giftCardStatusLabel, outcomeText } from '@/ctx/gift-card-status';
+import { giftCardStatusLabel, outcomeText, processingNote } from '@/ctx/gift-card-status';
 import { CashbackRate, type Merchant } from '@/ctx/merchant';
 import type { PaymentState } from '@/ctx/payment-state';
 import { Rates } from '@/ctx/rates';
@@ -71,6 +71,7 @@ export function PurchaseProgress({
   const bank = order ? BankPayment.isBank(order) : payment.kind === 'bank';
   const cashback = order ? CashbackRate.shownFor(order) : merchant.cashbackEstimate(cardAmount);
   const outcome = order ? outcomeText(order, payment.kind === 'confirming') : null;
+  const note = order ? processingNote(order, payment.kind === 'confirming') : null;
   const submitted = order?.status === 'paid' || payment.kind === 'confirming';
   const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
   const bankApproval = order && payment.kind === 'bank' && payment.linkOpen ? BankPayment.approvalReady(order) : false;
@@ -161,6 +162,7 @@ export function PurchaseProgress({
       </View>
       <View style={styles.footer}>
         {outcome && <Notice message={outcome} />}
+        {note && <Notice message={note} tone="neutral" />}
         {paymentFailed && <Notice message="You weren't charged. Try again or pick another way to pay." />}
         {bankExpired && (
           <Notice

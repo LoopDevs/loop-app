@@ -76,13 +76,42 @@ export class Market {
     return region?.toUpperCase();
   }
 
+  private static readonly englishNames: Readonly<Record<string, string>> = {
+    US: "United States",
+    GB: "United Kingdom",
+    CA: "Canada",
+    AT: "Austria",
+    BE: "Belgium",
+    CY: "Cyprus",
+    DE: "Germany",
+    EE: "Estonia",
+    ES: "Spain",
+    FI: "Finland",
+    FR: "France",
+    GR: "Greece",
+    HR: "Croatia",
+    IE: "Ireland",
+    IT: "Italy",
+    LT: "Lithuania",
+    LU: "Luxembourg",
+    LV: "Latvia",
+    MT: "Malta",
+    NL: "Netherlands",
+    PT: "Portugal",
+    SI: "Slovenia",
+    SK: "Slovakia",
+  };
+
   static countryName(country: string, locale?: string): string {
+    const code = country.toUpperCase();
     try {
-      return (
-        new Intl.DisplayNames(locale, { type: "region" }).of(country) ?? country
-      );
+      const localised = new Intl.DisplayNames(locale, { type: "region" }).of(code);
+      if (localised && localised !== code) {
+        return localised;
+      }
     } catch {
-      return country;
+      return Market.englishNames[code] ?? country;
     }
+    return Market.englishNames[code] ?? country;
   }
 }
