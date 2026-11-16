@@ -271,7 +271,6 @@ export default function SavingsScreen() {
       <Animated.View pointerEvents="none" style={scrim} />
       <BottomSheet open={adding} onClose={() => setAdding(false)} title="How much do you want to save?">
         <AddToSavings
-          stable={stable}
           currency={depositCurrency}
           depositable={depositable}
           busy={busy}
@@ -378,7 +377,6 @@ function SavingsFacts() {
 }
 
 type AddToSavingsProps = {
-  stable: string;
   currency: PaymentCurrency;
   depositable: bigint;
   busy: boolean;
@@ -387,7 +385,7 @@ type AddToSavingsProps = {
   onClose: () => void;
 };
 
-function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
+function AddToSavings({ currency, depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
   const [input, setInput] = useState('');
   const [max, setMax] = useState<bigint | null>(null);
   const amount = normalizeAmount(input);
@@ -413,7 +411,7 @@ function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, o
   return (
     <>
       <Field
-        label={money.amountLabel(stable)}
+        label={money.amountLabel(currency)}
         value={input}
         onChangeText={edit}
         keyboardType="decimal-pad"
@@ -422,7 +420,7 @@ function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, o
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
             <Button
-              label={money.ctx(quick, stable)}
+              label={money.ctx(quick, currency)}
               selected={max === null && amount === quick}
               onPress={() => edit(quick)}
             />

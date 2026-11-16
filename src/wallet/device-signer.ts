@@ -55,5 +55,7 @@ export const deviceSigner = {
     );
   },
 
-  async forgetOnSessionEnd(_endedUserId: string | null): Promise<void> {},
+  async forget(_userId: string): Promise<void> {},
+
+  async forgetAllExcept(_userId: string | null): Promise<void> {},
 };

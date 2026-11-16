@@ -22,13 +22,19 @@ export const deviceSigner = {
     return reportingSigningFailure('device key', errorReporting.reportError, () => signDigest(userId, digest));
   },
 
-  async forgetOnSessionEnd(endedUserId: string | null): Promise<void> {
-    if (endedUserId === null) {
-      await transact('readwrite', (store) => store.clear());
-      return;
-    }
-    const keyName = DeviceKey.storageName(endedUserId);
+  async forget(userId: string): Promise<void> {
+    const keyName = DeviceKey.storageName(userId);
     await transact('readwrite', (store) => store.delete(keyName));
+  },
+
+  async forgetAllExcept(userId: string | null): Promise<void> {
+    const kept = userId === null ? null : DeviceKey.storageName(userId);
+    const keyNames = await transact('readonly', (store) => store.getAllKeys());
+    for (const keyName of keyNames) {
+      if (keyName !== kept) {
+        await transact('readwrite', (store) => store.delete(keyName));
+      }
+    }
   },
 };
 

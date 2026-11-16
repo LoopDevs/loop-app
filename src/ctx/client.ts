@@ -329,7 +329,7 @@ class CtxClient {
 
   async signOut(): Promise<void> {
     await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
-    await this.auth.clearSession();
+    await this.auth.clearSession('signed-out');
   }
 
   onSessionEnd(listener: SessionEndListener): () => void {

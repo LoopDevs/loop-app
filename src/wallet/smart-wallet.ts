@@ -14,6 +14,7 @@ import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
 import type { TokenStorage } from '@/session/install-scoped-token';
+import type { SessionEnd } from '@/session/session-auth';
 import { secureTokenStorage } from '@/session/secure-token-storage';
 import { errorReporting } from '@/ops/error-reporting';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
@@ -90,11 +91,21 @@ export class SmartWallet {
     SmartWallet.confirmed.clear();
   }
 
-  static async endSession(endedUserId: string | null): Promise<void> {
+  static async endSession(end: SessionEnd): Promise<void> {
     SmartWallet.forgetConfirmations();
-    await deviceSigner.forgetOnSessionEnd(endedUserId).catch((error: unknown) => {
+    await SmartWallet.forgetDeviceKeys(end).catch((error: unknown) => {
       errorReporting.reportError(error, 'Forgetting the device key at session end failed');
     });
+  }
+
+  private static forgetDeviceKeys(end: SessionEnd): Promise<void> {
+    if (end.reason === 'expired') {
+      return Promise.resolve();
+    }
+    if (end.nextOwner !== null) {
+      return deviceSigner.forgetAllExcept(end.nextOwner);
+    }
+    return end.owner === null ? deviceSigner.forgetAllExcept(null) : deviceSigner.forget(end.owner);
   }
 
   static async load(): Promise<SmartWallet | null> {
@@ -425,4 +436,4 @@ export class SmartWallet {
   }
 }
 
-ctx.onSessionEnd((endedUserId) => void SmartWallet.endSession(endedUserId));
+ctx.onSessionEnd((end) => void SmartWallet.endSession(end));
