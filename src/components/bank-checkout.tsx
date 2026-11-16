@@ -32,6 +32,7 @@ type Props = {
   merchant: Merchant;
   profile: Profile;
   activeOrder: GiftCard | null;
+  onAmountFocus?: () => void;
 };
 
 type Stage = 'amount' | 'approve' | 'expired' | 'paid' | 'other';
@@ -43,7 +44,6 @@ type PayPhase = {
 };
 
 const stageTickMs = 30_000;
-const leftNote = 'If you already approved it at your bank, the card will still arrive.';
 
 function firstAmount(merchant: Merchant): string {
   return merchant.denominationType === 'fixed' ? (merchant.denominationValues[0] ?? '') : '';
@@ -62,7 +62,7 @@ function stageOf(order: GiftCard | null, now: number): Stage {
   return BankPayment.approvable(order, now) ? 'approve' : 'expired';
 }
 
-export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: Props) {
+export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, onAmountFocus }: Props) {
   const router = useRouter();
   const theme = useTheme();
   const toast = useToast();
@@ -77,6 +77,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
   const now = useNow(stageTickMs);
   const mounted = useRef(true);
   const differentBank = useRef(false);
+  const reachedBank = useRef(false);
   const [profile, setProfile] = useState(loadedProfile);
   const [syncedProfile, setSyncedProfile] = useState(loadedProfile);
   const [nameRequired, setNameRequired] = useState(false);
@@ -134,7 +135,10 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
     }
   };
 
-  const advance = (progress: BankLinkProgress) =>
+  const advance = (progress: BankLinkProgress) => {
+    if (progress.step === 'atBank') {
+      reachedBank.current = true;
+    }
     setPhase((current) => {
       if (!current) {
         return current;
@@ -147,6 +151,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
       }
       return current;
     });
+  };
 
   useEffect(() => {
     if (phase?.step !== 'atBank') {
@@ -169,6 +174,9 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
 
   const showCard = (giftCard: GiftCard) => {
     setOrder(null);
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
     router.push(`/wallet/${giftCard.id}`);
   };
 
@@ -177,7 +185,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
     void dismissedOrders.dismiss(giftCard);
   };
 
-  const settle = async (giftCard: GiftCard, note: string) => {
+  const settle = async (giftCard: GiftCard, note: string | null) => {
     const fetched = await ctx.giftCard(giftCard.id).catch(() => giftCard);
     if (!mounted.current) {
       return;
@@ -187,7 +195,9 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
       return;
     }
     dropOrder(fetched);
-    toast(note);
+    if (note) {
+      toast(note);
+    }
   };
 
   const rememberBank = (institution: BankInstitution | null) => {
@@ -229,7 +239,10 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
         if (outcome.errorCode) {
           errorReporting.reportMessage(`Bank approval left with ${outcome.errorCode} for order ${giftCard.id}`);
         }
-        await settle(giftCard, outcome.displayMessage ?? leftNote);
+        await settle(
+          giftCard,
+          outcome.displayMessage ?? (reachedBank.current ? BankPayment.approvalUnconfirmedMessage : null),
+        );
         return;
       }
       dropOrder(giftCard);
@@ -263,6 +276,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
       }
       const approvalWindow = process.env.EXPO_OS === 'web' ? window.open('', '_blank') : null;
       setAmountError(null);
+      reachedBank.current = false;
       setPhase({ step: 'ordering', viaPicker: differentBank.current, bank: null });
       try {
         let created: GiftCard;
@@ -388,7 +402,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
             {merchant.shortAmount(amount)}
           </ThemedText>
         ) : (
-          <AmountEntry merchant={merchant} value={amount} onChange={changeAmount} />
+          <AmountEntry merchant={merchant} value={amount} onChange={changeAmount} onFocus={onAmountFocus} />
         )}
         {range && merchant.denominationType !== 'fixed' && (
           <ThemedText type="caption" themeColor="textSecondary">
@@ -403,7 +417,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: 
         {estimate && (
           <View style={[styles.pill, { backgroundColor: theme.accentSoft }]}>
             <ThemedText type="smallBold" themeColor="success">
-              You earn about {estimate} cashback
+              {estimate} cashback
             </ThemedText>
           </View>
         )}
@@ -479,6 +493,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   pill: {
+    alignSelf: 'center',
+    alignItems: 'center',
     paddingVertical: Spacing.one + 2,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.pill,

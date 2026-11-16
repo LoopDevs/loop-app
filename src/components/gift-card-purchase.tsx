@@ -684,7 +684,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     }
     startOver();
     if (cancelled && BankPayment.isBank(cancelled)) {
-      toast('If you already approved it at your bank, the card will still arrive.');
+      toast(BankPayment.approvalUnconfirmedMessage);
     }
   };
 
@@ -833,7 +833,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
                 {estimate && (
                   <View style={[styles.pill, { backgroundColor: theme.accentSoft }]}>
                     <ThemedText type="smallBold" themeColor="success">
-                      You earn about {estimate} cashback
+                      {estimate} cashback
                     </ThemedText>
                   </View>
                 )}
@@ -1037,6 +1037,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   pill: {
+    alignSelf: 'center',
+    alignItems: 'center',
     paddingVertical: Spacing.one + 2,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.pill,

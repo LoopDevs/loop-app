@@ -133,7 +133,7 @@ function CashbackPill({ merchant }: { merchant: Merchant }) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants">
       <Text maxFontSizeMultiplier={1.3} style={[styles.pillText, { color: theme.accent }]}>
-        {merchant.rateLabel()}
+        {merchant.rateFigure()}
       </Text>
     </View>
   );
