@@ -404,10 +404,35 @@ test("after a refused refresh, a later refresh with another tab's rotated token 
   await assert.rejects(auth.sessionRequest('GET', '/me'));
 
   assert.equal(await auth.hasSession(), false);
-  assert.deepEqual(
-    ended.map((end) => end.reason),
-    ['refused', 'refused'],
-  );
+  assert.deepEqual(ended, [
+    { owner: 'a', reason: 'refused', nextOwner: null },
+    { owner: 'a', reason: 'replaced', nextOwner: 'b' },
+  ]);
+});
+
+test("a refresh with another tab's token for another user ends this session as replaced by that user", async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'b2', refreshToken: 'b-r2' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore(null);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+  store.refreshToken = 'b-r1';
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'));
+
+  assert.equal(await auth.hasSession(), false);
+  assert.deepEqual(ended, [{ owner: 'a', reason: 'replaced', nextOwner: 'b' }]);
 });
 
 test("once the owner's own session is adopted after a refusal, that owner signing in again ends nothing", async () => {

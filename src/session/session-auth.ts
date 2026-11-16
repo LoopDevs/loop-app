@@ -106,7 +106,7 @@ export class SessionAuth {
     }
     const generation = this.beginSession();
     await this.session.refreshOnce(generation, async () =>
-      (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null,
+      (await this.storeTokens(generation, tokens, true)) ? tokens.accessToken : null,
     );
   }
 
@@ -131,10 +131,14 @@ export class SessionAuth {
     return this.session.begin();
   }
 
-  private refuse(refreshToken: string): void {
+  private refuse(refreshToken: string, otherTabOwner: string | null): void {
     this.refusedRefreshToken = refreshToken;
     this.session.begin();
-    this.notifySessionEnd({ owner: this.owner, reason: 'refused', nextOwner: null });
+    this.notifySessionEnd({
+      owner: this.owner,
+      reason: otherTabOwner === null ? 'refused' : 'replaced',
+      nextOwner: otherTabOwner,
+    });
   }
 
   private ownerOrNull(accessToken: string): string | null {
@@ -200,9 +204,10 @@ export class SessionAuth {
     if (!refreshToken || refreshToken === this.refusedRefreshToken || !this.session.isCurrent(generation)) {
       return null;
     }
+    const ownToken = refreshToken === this.storedRefreshToken;
     try {
       const tokens = await this.sendRefreshToken(refreshToken);
-      return (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null;
+      return (await this.storeTokens(generation, tokens, ownToken)) ? tokens.accessToken : null;
     } catch (error) {
       if (!this.session.isCurrent(generation)) {
         return null;
@@ -228,7 +233,7 @@ export class SessionAuth {
     }
   }
 
-  private async storeTokens(generation: number, tokens: TokenPair): Promise<boolean> {
+  private async storeTokens(generation: number, tokens: TokenPair, ownToken: boolean): Promise<boolean> {
     if (!this.session.isCurrent(generation)) {
       return false;
     }
@@ -239,7 +244,7 @@ export class SessionAuth {
     }
     const owner = this.ownerOrNull(tokens.accessToken);
     if (owner === null || (this.owner !== null && owner !== this.owner)) {
-      this.refuse(tokens.refreshToken);
+      this.refuse(tokens.refreshToken, owner !== null && !ownToken ? owner : null);
       return false;
     }
     this.refusedRefreshToken = null;
