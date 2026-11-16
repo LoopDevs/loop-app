@@ -71,8 +71,11 @@ class MemoryStore implements RefreshTokenStore {
     this.owner = session.owner;
   }
 
+  pendingClear: Promise<void> = Promise.resolve();
+
   async clear(): Promise<void> {
     this.refreshToken = null;
+    await this.pendingClear;
   }
 
   exclusive<T>(task: () => Promise<T>): Promise<T> {
@@ -478,6 +481,45 @@ test("a refresh of this user's token that CTX answers with another user is refus
   assert.equal(await reloaded.hasSession(), false);
   assert.equal(await reloaded.accessToken(), null);
   assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
+});
+
+test('a sign-in that lands while a refused token is being cleared stays signed in', async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'b2', refreshToken: 'b-r2' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore(null);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  const clearing = new Gate();
+  store.pendingClear = clearing.opened;
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+
+  const refused = assert.rejects(auth.sessionRequest('GET', '/me'));
+  for (let turn = 0; turn < 50 && ended.length === 0; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.deepEqual(
+    ended.map((end) => end.reason),
+    ['refused'],
+  );
+  const signingIn = auth.startSession({ accessToken: 'a3', refreshToken: 'a-r3' });
+  clearing.open();
+  await Promise.all([refused, signingIn]);
+
+  assert.equal(await auth.accessToken(), 'a3');
+  assert.deepEqual(
+    ended.map((end) => end.reason),
+    ['refused', 'replaced'],
+  );
 });
 
 test('a sign-in stores its refresh token with the user it belongs to', async () => {

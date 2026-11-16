@@ -235,9 +235,10 @@ export class SessionAuth {
     }
     const owner = this.ownerOrNull(tokens.accessToken);
     if (owner === null || (storedOwner !== null && owner !== storedOwner)) {
-      await this.store.clear();
+      const cleared = this.store.clear();
       this.storedRefreshToken = null;
       this.stopUsing(tokens.refreshToken, { reason: 'refused', nextOwner: null });
+      await cleared;
       return false;
     }
     await this.store.writeSession({ refreshToken: tokens.refreshToken, owner });
