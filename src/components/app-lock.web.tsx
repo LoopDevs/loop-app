@@ -1,3 +1,7 @@
+export function AppLockScope({ children }: { children: React.ReactNode }) {
+  return children;
+}
+
 export function AppLockToggle() {
   return null;
 }
