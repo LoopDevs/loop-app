@@ -411,11 +411,11 @@ test("after a refused refresh, a later refresh with another tab's rotated token 
 });
 
 test("once the owner's own session is adopted after a refusal, that owner signing in again ends nothing", async () => {
+  let refreshes = 0;
   const ctx = new FakeCtx(async ({ path, token }) => {
     if (path === '/refresh-token') {
-      return token === undefined && ctx.refreshes() === 1
-        ? { accessToken: 'b2', refreshToken: 'b-r2' }
-        : { accessToken: 'a4', refreshToken: 'a-r4' };
+      refreshes += 1;
+      return refreshes === 1 ? { accessToken: 'b2', refreshToken: 'b-r2' } : { accessToken: 'a4', refreshToken: 'a-r4' };
     }
     if (token === 'a1') {
       throw unauthorized();
