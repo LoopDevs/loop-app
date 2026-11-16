@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { Radius, Spacing } from '@/constants/theme';
 import { amountErrorMessage } from '@/ctx/amount-error';
 import { normalizeAmount } from '@/ctx/amount-input';
-import { type BankInstitution, BankLink, type BankLinkProgress } from '@/ctx/bank-link';
+import { type BankInstitution, BankLink, type BankLinkProgress, type BankLinkStep } from '@/ctx/bank-link';
 import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
@@ -38,7 +38,7 @@ type Props = {
 type Stage = 'amount' | 'approve' | 'expired' | 'paid' | 'other';
 
 type PayPhase = {
-  step: 'ordering' | 'opening' | 'atBank' | 'checking';
+  step: 'ordering' | BankLinkStep;
   viaPicker: boolean;
   bank: string | null;
 };
@@ -125,11 +125,13 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
   const busyLabel = (opening: string) => {
     switch (phase?.step) {
       case 'opening':
-        return opening;
+        return phase.bank && phase.viaPicker ? `Opening ${phase.bank}…` : opening;
+      case 'choosing':
+        return 'Choose your bank…';
       case 'atBank':
         return `Approve in ${phase.bank ?? bankName ?? 'your banking app'}…`;
-      case 'checking':
-        return 'Checking with your bank…';
+      case 'confirming':
+        return 'Confirming payment…';
       default:
         return 'Setting up…';
     }
@@ -139,31 +141,36 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
     if (progress.step === 'atBank') {
       reachedBank.current = true;
     }
+    if (progress.step === 'problem') {
+      errorReporting.reportMessage(`Bank approval reported ${progress.code}`);
+    }
     setPhase((current) => {
-      if (!current) {
+      if (!current || current.step === 'ordering') {
         return current;
       }
-      if (progress.step === 'atBank' && current.step === 'opening') {
-        return { ...current, step: 'atBank', bank: progress.bankName ?? current.bank };
-      }
-      if (progress.step === 'backFromBank' && current.step === 'atBank') {
-        return { ...current, step: 'checking' };
-      }
-      return current;
+      const bank = 'bankName' in progress ? (progress.bankName ?? current.bank) : current.bank;
+      const step = BankLink.next(current.step, progress);
+      return step === current.step && bank === current.bank ? current : { ...current, step, bank };
     });
   };
 
+  const linkOpen = phase !== null && phase.step !== 'ordering';
   useEffect(() => {
-    if (phase?.step !== 'atBank') {
+    if (!linkOpen) {
       return;
     }
+    let away = false;
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        advance({ step: 'backFromBank' });
+      if (state === 'background') {
+        away = true;
+        advance({ step: 'atBank', bankName: null });
+      } else if (state === 'active' && away) {
+        away = false;
+        advance({ step: 'confirming' });
       }
     });
     return () => subscription.remove();
-  }, [phase?.step]);
+  }, [linkOpen]);
   const bankName = profile.bank?.name ?? null;
 
   const changeAmount = (next: string) => {
