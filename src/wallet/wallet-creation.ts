@@ -1,3 +1,5 @@
+import { errorReporting } from '@/ops/error-reporting';
+
 type Pending<T> = {
   userId: string;
   result: Promise<T>;
@@ -12,6 +14,7 @@ export class WalletCreation<T> {
     result
       .catch((error: unknown) => {
         console.warn('Wallet setup failed', error);
+        errorReporting.reportError(error, 'Wallet setup');
       })
       .finally(() => {
         if (this.pending === pending) {

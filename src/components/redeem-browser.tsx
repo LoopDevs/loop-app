@@ -11,6 +11,7 @@ import { ctx, type GiftCard } from '@/ctx/client';
 import { pageLinesScript, parseCardDetails, readPageLines } from '@/ctx/redeem-scrape';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
+import { errorReporting } from '@/ops/error-reporting';
 
 const saveFailedMessage = "Couldn't save the card details. Copy them from the page instead.";
 const maxSaveAttempts = 3;
@@ -44,7 +45,8 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
       const saved = await ctx.saveGiftCardCode(giftCard.id, details.number, details.pin);
       haptics.success();
       onSaved(saved);
-    } catch {
+    } catch (error) {
+      errorReporting.reportError(error, 'Gift card code save');
       failedSaves.current += 1;
       saving.current = false;
       if (failedSaves.current === 1) {

@@ -47,6 +47,7 @@ import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
+import { errorReporting } from '@/ops/error-reporting';
 import { Savings } from '@/wallet/savings';
 import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
 
@@ -117,6 +118,7 @@ export default function HomeScreen() {
       walletLoadStarted.current = false;
       walletLoadFailed.current = true;
       setScreen('no-wallet');
+      errorReporting.reportError(error, 'Wallet load');
       throw error;
     }
   }, [showWallet, openActiveOrder]);
