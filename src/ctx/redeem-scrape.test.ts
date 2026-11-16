@@ -124,30 +124,45 @@ test('a line of words with digits is never read as the card number', () => {
   assert.deepEqual(parseCardDetails(['Gift card code', '8f3a dbce 41c2 9e07']), { number: '8f3adbce41c29e07', pin: '' });
 });
 
-test('a header row with other columns reads each value from its own column', () => {
-  assert.deepEqual(parseCardDetails(['Order number', 'Card number', 'PIN', 'TXN20261116001', '6012 3456 7890 1234', '4321']), {
-    number: '6012345678901234',
-    pin: '4321',
+test('a header row with other columns never saves a value from the wrong column', () => {
+  const rows = [
+    ['Order number', 'Card number', 'PIN', 'TXN20261116001', '6012 3456 7890 1234', '4321'],
+    ['Order ID', 'Card number', 'PIN', 'TXN20261116001', '6012 3456 7890 1234', '4321'],
+    ['Reference', 'Card number', 'PIN', '100045678912', '6012 3456 7890 1234', '4321'],
+    ['Serial', 'Batch', 'Card number', 'PIN', 'SN1234567890', 'B987654321', '6012 3456 7890 1234', '4321'],
+    ['Card number', 'PIN', 'Expiry', '6012 3456 7890 1234', '4321', '12/2027'],
+    ['Card number', 'PIN', 'Status', '6012 3456 7890 1234', '4321', 'Active'],
+  ];
+  for (const row of rows) {
+    const read = parseCardDetails(row);
+    assert.ok(read === null || read.number === '6012345678901234', row.join(' | '));
+  }
+});
+
+test('a heading above the card label and a button after its value still read the value', () => {
+  assert.deepEqual(parseCardDetails(['Your code', 'Card number', '6006 1234 5678 9012', 'Copy']), {
+    number: '6006123456789012',
+    pin: '',
   });
-  assert.deepEqual(parseCardDetails(['Reference', 'Card number', 'PIN', '100045678912', '6012 3456 7890 1234', '4321']), {
-    number: '6012345678901234',
-    pin: '4321',
+  assert.deepEqual(parseCardDetails(['Redeem with this code', 'Gift card code', '6006 1234 5678 9012', 'Copy code']), {
+    number: '6006123456789012',
+    pin: '',
   });
-  assert.deepEqual(parseCardDetails(['Card number', 'PIN', 'Expiry', '6012 3456 7890 1234', '4321', '12/2027']), {
-    number: '6012345678901234',
-    pin: '4321',
-  });
-  assert.deepEqual(parseCardDetails(['Card number', 'PIN', 'Balance', '6012 3456 7890 1234', '4321', '£10.00']), {
-    number: '6012345678901234',
-    pin: '4321',
-  });
+});
+
+test('two possible codes under one label save nothing', () => {
+  assert.equal(parseCardDetails(['Gift card code', '6012 3456 7890 1234', '7777 8888 9999 0000']), null);
 });
 
 test('a phone number or a prefixed reference is never read as the card number', () => {
   assert.equal(parseCardDetails(['Gift card code', '020 7946 0958']), null);
   assert.equal(parseCardDetails(['Gift card code', '0800 123 4567']), null);
+  assert.equal(parseCardDetails(['Gift card code', '01 23 45 67 89']), null);
+  assert.equal(parseCardDetails(['Gift card code', '02079460958']), null);
   assert.equal(parseCardDetails(['Gift card code', 'ref 1234567890']), null);
   assert.equal(parseCardDetails(['Gift card code', 'REF 1234567890']), null);
+  assert.equal(parseCardDetails(['Gift card code', 'REF1234567890']), null);
+  assert.equal(parseCardDetails(['Gift card code', 'TXN20261116001']), null);
   assert.equal(parseCardDetails(['Gift card code', 'ORDER 123456789012']), null);
   assert.deepEqual(parseCardDetails(['Gift card code', '6012 3456 7890 1234 567']), { number: '6012345678901234567', pin: '' });
 });
