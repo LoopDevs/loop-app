@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeInDown, SlideInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppLockScope } from '@/components/app-lock';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
+import { Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -14,12 +15,15 @@ type BottomSheetProps = {
   open: boolean;
   onClose: () => void;
   title: string;
+  notice?: string;
   children: ReactNode;
 };
 
-export function BottomSheet({ open, onClose, title, children }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, notice = '', children }: BottomSheetProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const maxHeight = height - insets.top - Spacing.four;
   const { wide } = usePageLayout();
   const reduceMotion = useReducedMotion();
   const entering = reduceMotion
@@ -47,16 +51,21 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
             onAccessibilityEscape={onClose}
             style={[
               styles.panel,
-              { backgroundColor: theme.background },
+              { backgroundColor: theme.background, maxHeight },
               wide ? styles.panelWide : [styles.panelNarrow, { paddingBottom: insets.bottom + Spacing.three }],
             ]}>
-            <View style={styles.content}>
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.content}
+              keyboardShouldPersistTaps="handled"
+              bounces={false}>
               {!wide && <View style={[styles.grabber, { backgroundColor: theme.backgroundSelected }]} />}
               <ThemedText type="subtitle" accessibilityRole="header">
                 {title}
               </ThemedText>
+              {notice !== '' && <Notice message={notice} />}
               {children}
-            </View>
+            </ScrollView>
           </Animated.View>
         </View>
       </KeyboardAvoid>
@@ -91,6 +100,10 @@ const styles = StyleSheet.create({
     maxWidth: Layout.sheetWidth,
     borderRadius: Radius.large,
     padding: Spacing.four,
+  },
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   content: {
     gap: Spacing.three,
