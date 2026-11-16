@@ -1,6 +1,7 @@
 import { CtxError } from '../ctx/ctx-error.ts';
 import { Deadline } from '../ctx/deadline.ts';
 import { SessionTokens } from './session-tokens.ts';
+import type { StoredSession } from './stored-session.ts';
 
 export type TokenPair = {
   accessToken: string;
@@ -26,8 +27,8 @@ export type SessionEndListener = (end: SessionEnd) => void;
 export type Send = <T>(method: string, path: string, body?: unknown, options?: SendOptions) => Promise<T>;
 
 export type RefreshTokenStore = {
-  readRefreshToken(): Promise<string | null>;
-  writeRefreshToken(token: string): Promise<void>;
+  readSession(): Promise<StoredSession | null>;
+  writeSession(session: StoredSession): Promise<void>;
   clear(): Promise<void>;
   exclusive<T>(task: () => Promise<T>): Promise<T>;
 };
@@ -52,8 +53,8 @@ export class SessionAuth {
     if (this.session.token() !== null) {
       return true;
     }
-    const stored = await this.store.readRefreshToken();
-    return stored !== null && stored !== this.refusedRefreshToken;
+    const stored = await this.store.readSession();
+    return stored !== null && stored.refreshToken !== this.refusedRefreshToken;
   }
 
   async accessToken(): Promise<string | null> {
@@ -106,7 +107,7 @@ export class SessionAuth {
     }
     const generation = this.beginSession();
     await this.session.refreshOnce(generation, async () =>
-      (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null,
+      (await this.store.exclusive(() => this.storeTokens(generation, tokens, null))) ? tokens.accessToken : null,
     );
   }
 
@@ -131,10 +132,10 @@ export class SessionAuth {
     return this.session.begin();
   }
 
-  private refuse(refreshToken: string): void {
+  private stopUsing(refreshToken: string, end: Pick<SessionEnd, 'reason' | 'nextOwner'>): void {
     this.refusedRefreshToken = refreshToken;
     this.session.begin();
-    this.notifySessionEnd({ owner: this.owner, reason: 'refused', nextOwner: null });
+    this.notifySessionEnd({ owner: this.owner, ...end });
   }
 
   private ownerOrNull(accessToken: string): string | null {
@@ -166,8 +167,8 @@ export class SessionAuth {
     if (!SessionAuth.tokenRefused(error)) {
       return false;
     }
-    const stored = await this.store.exclusive(() => this.store.readRefreshToken());
-    return stored !== null && stored !== this.storedRefreshToken;
+    const stored = await this.store.exclusive(() => this.store.readSession());
+    return stored !== null && stored.refreshToken !== this.storedRefreshToken;
   }
 
   private static tokenRefused(error: unknown): boolean {
@@ -196,13 +197,13 @@ export class SessionAuth {
   }
 
   private async rotateRefreshToken(generation: number): Promise<string | null> {
-    const refreshToken = await this.store.readRefreshToken();
-    if (!refreshToken || refreshToken === this.refusedRefreshToken || !this.session.isCurrent(generation)) {
+    const stored = await this.store.readSession();
+    if (!stored || stored.refreshToken === this.refusedRefreshToken || !this.session.isCurrent(generation)) {
       return null;
     }
     try {
-      const tokens = await this.sendRefreshToken(refreshToken);
-      return (await this.storeTokens(generation, tokens)) ? tokens.accessToken : null;
+      const tokens = await this.sendRefreshToken(stored.refreshToken);
+      return (await this.storeTokens(generation, tokens, stored.owner)) ? tokens.accessToken : null;
     } catch (error) {
       if (!this.session.isCurrent(generation)) {
         return null;
@@ -228,18 +229,24 @@ export class SessionAuth {
     }
   }
 
-  private async storeTokens(generation: number, tokens: TokenPair): Promise<boolean> {
-    if (!this.session.isCurrent(generation)) {
-      return false;
-    }
-    await this.store.writeRefreshToken(tokens.refreshToken);
-    this.storedRefreshToken = tokens.refreshToken;
+  private async storeTokens(generation: number, tokens: TokenPair, storedOwner: string | null): Promise<boolean> {
     if (!this.session.isCurrent(generation)) {
       return false;
     }
     const owner = this.ownerOrNull(tokens.accessToken);
-    if (owner === null || (this.owner !== null && owner !== this.owner)) {
-      this.refuse(tokens.refreshToken);
+    if (owner === null || (storedOwner !== null && owner !== storedOwner)) {
+      await this.store.clear();
+      this.storedRefreshToken = null;
+      this.stopUsing(tokens.refreshToken, { reason: 'refused', nextOwner: null });
+      return false;
+    }
+    await this.store.writeSession({ refreshToken: tokens.refreshToken, owner });
+    this.storedRefreshToken = tokens.refreshToken;
+    if (!this.session.isCurrent(generation)) {
+      return false;
+    }
+    if (this.owner !== null && owner !== this.owner) {
+      this.stopUsing(tokens.refreshToken, { reason: 'replaced', nextOwner: owner });
       return false;
     }
     this.refusedRefreshToken = null;
