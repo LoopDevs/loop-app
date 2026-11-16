@@ -410,6 +410,37 @@ test("after a refused refresh, a later refresh with another tab's rotated token 
   );
 });
 
+test("once the owner's own session is adopted after a refusal, that owner signing in again ends nothing", async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return token === undefined && ctx.refreshes() === 1
+        ? { accessToken: 'b2', refreshToken: 'b-r2' }
+        : { accessToken: 'a4', refreshToken: 'a-r4' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore(null);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'));
+  store.refreshToken = 'a-r3';
+  await auth.sessionRequest('GET', '/me');
+  await auth.startSession({ accessToken: 'a5', refreshToken: 'a-r5' });
+
+  assert.deepEqual(
+    ended.map((end) => end.reason),
+    ['refused'],
+  );
+});
+
 test('a refresh that yields a token without a readable owner is refused once and leaves the store alone', async () => {
   const ctx = new FakeCtx(async ({ path }) => {
     if (path === '/refresh-token') {

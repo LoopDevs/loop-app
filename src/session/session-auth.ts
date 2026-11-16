@@ -242,6 +242,7 @@ export class SessionAuth {
       this.refuse(tokens.refreshToken);
       return false;
     }
+    this.refusedRefreshToken = null;
     this.owner = owner;
     return this.session.adopt(generation, tokens.accessToken);
   }
