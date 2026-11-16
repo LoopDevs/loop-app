@@ -12,6 +12,13 @@ export type BankLinkOutcome =
 export type BankLinkProgress = { step: 'atBank'; bankName: string | null } | { step: 'backFromBank' };
 
 export class BankLink {
+  static readonly returnPath = '/plaid/oauth';
+  private static readonly returnPattern = /^(?:https:\/\/loopfinance\.io)?\/plaid\/oauth(?:[/?#]|$)/;
+
+  static isReturn(path: string): boolean {
+    return BankLink.returnPattern.test(path);
+  }
+
   static async present(
     token: string,
     onProgress: (progress: BankLinkProgress) => void = () => undefined,

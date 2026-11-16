@@ -26,6 +26,7 @@ import {
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { Elevation, FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, type GiftCard } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
 import { Merchant } from '@/ctx/merchant';
@@ -309,7 +310,13 @@ export default function ShopScreen() {
               {activeOrder && (
                 <ActiveOrderCard
                   merchantName={activeOrder.merchantName}
-                  onPress={() => router.push(`/shop/pay/${activeOrder.merchantId}`)}
+                  onPress={() =>
+                    router.push(
+                      BankPayment.isBank(activeOrder)
+                        ? `/wallet/${activeOrder.id}`
+                        : `/shop/pay/${activeOrder.merchantId}`,
+                    )
+                  }
                 />
               )}
               {accountError}

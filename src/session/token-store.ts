@@ -3,23 +3,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loopEnvironment } from '@/environment';
 import { InstallScopedToken } from '@/session/install-scoped-token';
 import { secureTokenStorage } from '@/session/secure-token-storage';
+import { StoredSessionText, type StoredSession } from '@/session/stored-session';
 import { holdCriticalReload } from '@/updates/update-checker';
 
-const refreshToken = new InstallScopedToken(
+const storedSession = new InstallScopedToken(
   secureTokenStorage,
   AsyncStorage,
   loopEnvironment.storageKey('ctx.refreshToken'),
 );
 
 export const tokenStore = {
-  readRefreshToken(): Promise<string | null> {
-    return refreshToken.read();
+  async readSession(): Promise<StoredSession | null> {
+    return StoredSessionText.read(await storedSession.read());
   },
-  writeRefreshToken(token: string): Promise<void> {
-    return refreshToken.write(token);
+  writeSession(session: StoredSession): Promise<void> {
+    return storedSession.write(StoredSessionText.write(session));
   },
   clear(): Promise<void> {
-    return refreshToken.clear();
+    return storedSession.clear();
   },
   exclusive<T>(task: () => Promise<T>): Promise<T> {
     return holdCriticalReload(task);

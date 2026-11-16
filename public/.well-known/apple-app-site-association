@@ -10,7 +10,8 @@
           { "/": "/wallet/*" },
           { "/": "/savings" },
           { "/": "/profile" },
-          { "/": "/profile/*" }
+          { "/": "/profile/*" },
+          { "/": "/plaid/oauth" }
         ]
       }
     ]

@@ -1,7 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import * as WebBrowser from 'expo-web-browser';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import Animated, { FadeOut, useAnimatedStyle, useReducedMotion, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,15 +34,40 @@ function useAnnouncement(message: string) {
 
 type AppLockControls = {
   isOn: boolean;
+  covered: boolean;
+  cover: (primary: boolean) => ReactNode;
+  topHost: string | null;
+  addHost: (id: string) => () => void;
   turnOn: () => Promise<void>;
   turnOff: () => Promise<void>;
 };
 
 const AppLockContext = createContext<AppLockControls>({
   isOn: false,
+  covered: false,
+  cover: () => null,
+  topHost: null,
+  addHost: () => () => undefined,
   turnOn: async () => {},
   turnOff: async () => {},
 });
+
+export function AppLockScope({ children }: { children: ReactNode }) {
+  const { covered, cover, topHost, addHost } = useContext(AppLockContext);
+  const id = useId();
+  useEffect(() => addHost(id), [addHost, id]);
+  return (
+    <>
+      <View
+        style={styles.fill}
+        accessibilityElementsHidden={covered}
+        importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
+        {children}
+      </View>
+      {topHost === id ? cover(true) : null}
+    </>
+  );
+}
 
 export function AppLockToggle() {
   const { isOn, turnOn, turnOff } = useContext(AppLockContext);
@@ -94,6 +119,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const [inForeground, setInForeground] = useState(AppState.currentState !== 'background');
   const [message, setMessage] = useState('');
   const [unlocking, setUnlocking] = useState(false);
+  const [hosts, setHosts] = useState<string[]>([]);
   const authenticating = useRef(false);
   const autoPrompted = useRef(false);
 
@@ -169,6 +195,11 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
 
   const covered = lock.covers() || unlocking;
   const phase: LockPhase = lock.status === 'locked' ? 'locked' : unlocking ? 'unlocking' : 'covered';
+  const cover = (primary: boolean) =>
+    covered ? (
+      <LockView phase={phase} message={message} primary={primary} onUnlock={unlock} onUnlockShown={finishUnlock} />
+    ) : null;
+  const topHost = hosts.at(-1) ?? null;
   const closesBrowser = lock.closesBrowser();
   useEffect(() => {
     if (closesBrowser) {
@@ -186,6 +217,11 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       void unlock();
     }
   }, [lock.status, inForeground, unlock]);
+
+  const addHost = useCallback((id: string) => {
+    setHosts((previous) => [...previous, id]);
+    return () => setHosts((previous) => previous.filter((host) => host !== id));
+  }, []);
 
   const turnOn = useCallback(async () => {
     const result = await authenticate('Turn on app lock');
@@ -212,16 +248,14 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   }, [authenticate]);
 
   return (
-    <AppLockContext.Provider value={{ isOn: lock.isOn(), turnOn, turnOff }}>
+    <AppLockContext.Provider value={{ isOn: lock.isOn(), covered, cover, topHost, addHost, turnOn, turnOff }}>
       <View
         style={styles.fill}
         accessibilityElementsHidden={covered}
         importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
         {children}
       </View>
-      {covered && (
-        <LockView phase={phase} message={message} onUnlock={unlock} onUnlockShown={finishUnlock} />
-      )}
+      {cover(topHost === null)}
     </AppLockContext.Provider>
   );
 }
@@ -231,33 +265,37 @@ type LockPhase = 'covered' | 'locked' | 'unlocking';
 type LockViewProps = {
   phase: LockPhase;
   message: string;
+  primary: boolean;
   onUnlock: () => void;
   onUnlockShown: () => void;
 };
 
-function LockView({ phase, message, onUnlock, onUnlockShown }: LockViewProps) {
+function LockView({ phase, message, primary, onUnlock, onUnlockShown }: LockViewProps) {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const unlocking = phase === 'unlocking';
-  useAnnouncement(message);
+  useAnnouncement(primary ? message : '');
   const prompt = useAnimatedStyle(() => ({
     opacity: withTiming(unlocking ? 0 : 1, { duration: reduceMotion ? 0 : Motion.exit }),
   }));
 
   useEffect(() => {
-    if (!unlocking) {
+    if (!unlocking || !primary) {
       return;
     }
     haptics.success();
     AccessibilityInfo.announceForAccessibility('Unlocked');
     const timer = setTimeout(onUnlockShown, unlockHoldMs);
     return () => clearTimeout(timer);
-  }, [unlocking, onUnlockShown]);
+  }, [unlocking, primary, onUnlockShown]);
 
   return (
     <Animated.View
       pointerEvents={unlocking ? 'none' : 'auto'}
       exiting={reduceMotion ? undefined : FadeOut.duration(unlocking ? Motion.transition : Motion.exit)}
+      accessibilityViewIsModal={primary}
+      accessibilityElementsHidden={!primary}
+      importantForAccessibility={primary ? 'auto' : 'no-hide-descendants'}
       style={[StyleSheet.absoluteFill, styles.lock, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content} accessibilityLiveRegion="polite">

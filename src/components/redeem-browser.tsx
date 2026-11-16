@@ -4,6 +4,7 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
+import { AppLockScope } from '@/components/app-lock';
 import { useToast } from '@/components/ui/toast';
 import { FontFamily, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
@@ -54,6 +55,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <AppLockScope>
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border }]}>
           <Pressable
@@ -97,6 +99,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
           allowsBackForwardNavigationGestures
         />
       </View>
+      </AppLockScope>
     </Modal>
   );
 }

@@ -7,7 +7,7 @@ import { AppState, StyleSheet, View } from 'react-native';
 import { AmountChip, AmountEntry } from '@/components/purchase-amount';
 import { PurchaseTerms, purchaseTermsKey } from '@/components/purchase-terms';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
-import { Button, Notice } from '@/components/ui/form';
+import { Button, Field, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
 import { Radius, Spacing } from '@/constants/theme';
@@ -19,13 +19,14 @@ import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
 import { OneTapBuy } from '@/ctx/one-tap-buy';
-import type { Profile } from '@/ctx/profile';
+import { Profile } from '@/ctx/profile';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { useNow } from '@/hooks/use-now';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
 import { units } from '@/stellar/units';
+import { strings } from '@/strings';
 
 type Props = {
   merchant: Merchant;
@@ -61,7 +62,7 @@ function stageOf(order: GiftCard | null, now: number): Stage {
   return BankPayment.approvable(order, now) ? 'approve' : 'expired';
 }
 
-export function BankCheckout({ merchant, profile, activeOrder }: Props) {
+export function BankCheckout({ merchant, profile: loadedProfile, activeOrder }: Props) {
   const router = useRouter();
   const theme = useTheme();
   const toast = useToast();
@@ -76,10 +77,19 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
   const now = useNow(stageTickMs);
   const mounted = useRef(true);
   const differentBank = useRef(false);
+  const [profile, setProfile] = useState(loadedProfile);
+  const [syncedProfile, setSyncedProfile] = useState(loadedProfile);
+  const [nameRequired, setNameRequired] = useState(false);
+  const [name, setName] = useState(loadedProfile.nameSuggestion());
 
   if (activeOrder !== syncedOrder) {
     setSyncedOrder(activeOrder);
     setOrder(activeOrder);
+  }
+
+  if (loadedProfile !== syncedProfile) {
+    setSyncedProfile(loadedProfile);
+    setProfile(loadedProfile);
   }
 
   useEffect(() => {
@@ -187,7 +197,17 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
     }
   };
 
-  const approve = async (giftCard: GiftCard) => {
+  const approveOnWeb = (giftCard: GiftCard, url: string, approvalWindow: Window | null) => {
+    if (approvalWindow && !approvalWindow.closed) {
+      approvalWindow.opener = null;
+      approvalWindow.location.href = url;
+      showCard(giftCard);
+      return;
+    }
+    window.location.assign(url);
+  };
+
+  const approve = async (giftCard: GiftCard, approvalWindow: Window | null) => {
     setPhase((current) => ({ step: 'opening', viaPicker: current?.viaPicker ?? false, bank: current?.bank ?? null }));
     const token = BankPayment.linkToken(giftCard);
     const link = token ? null : BankPayment.openLink(giftCard);
@@ -216,6 +236,11 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       throw new Error(OneTapBuy.notBoughtMessage);
     }
     const url = link ?? (token ? BankPayment.openLink(giftCard) : null);
+    if (url && process.env.EXPO_OS === 'web') {
+      approveOnWeb(giftCard, url, approvalWindow);
+      return;
+    }
+    approvalWindow?.close();
     if (url) {
       await openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
       if (mounted.current) {
@@ -225,8 +250,10 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
     }
     if (BankPayment.linkRefused(giftCard)) {
       errorReporting.reportMessage(`Bank approval link refused for order ${giftCard.id}`);
+      dropOrder(giftCard);
+      throw new Error(OneTapBuy.notBoughtMessage);
     }
-    throw new Error(OneTapBuy.notBoughtMessage);
+    showCard(giftCard);
   };
 
   const pay = () =>
@@ -234,6 +261,7 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
       if (!fiatAmount) {
         return;
       }
+      const approvalWindow = process.env.EXPO_OS === 'web' ? window.open('', '_blank') : null;
       setAmountError(null);
       setPhase({ step: 'ordering', viaPicker: differentBank.current, bank: null });
       try {
@@ -246,21 +274,27 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
             ...(differentBank.current ? { chooseBank: true } : {}),
           });
         } catch (error) {
+          approvalWindow?.close();
           haptics.error();
-          const name = error instanceof CtxError ? error.errorName() : undefined;
-          const amountMessage = amountErrorMessage(name, merchant);
+          const errorName = error instanceof CtxError ? error.errorName() : undefined;
+          const amountMessage = amountErrorMessage(errorName, merchant);
           if (amountMessage) {
             setAmountError(amountMessage);
             return;
           }
-          throw new Error(BankPayment.refusalMessage(name) ?? OneTapBuy.notBoughtMessage);
+          if (BankPayment.needsLegalName(errorName)) {
+            setNameRequired(true);
+            return;
+          }
+          throw new Error(BankPayment.orderFailedMessage(error));
         }
         if (!mounted.current) {
+          approvalWindow?.close();
           return;
         }
         setOrder(created);
         haptics.tap();
-        await approve(created);
+        await approve(created, approvalWindow);
       } finally {
         setPhase(null);
       }
@@ -303,6 +337,44 @@ export function BankCheckout({ merchant, profile, activeOrder }: Props) {
             onPress={() => router.push(`/shop/pay/${merchant.slug}`)}
           />
         )}
+      </View>
+    );
+  }
+
+  if (nameRequired || profile.needsName()) {
+    const nameReady = Profile.legalNameProblem(name) === null;
+    const saveName = () =>
+      run(async () => {
+        const update = profile.legalNameUpdate(name);
+        if (update) {
+          setProfile(profile.withUser(await ctx.updateUser(update)));
+        }
+        setNameRequired(false);
+      });
+    return (
+      <View style={styles.stack}>
+        <ThemedText type="heading">Your name</ThemedText>
+        <ThemedText themeColor="textSecondary">
+          Use the name on your bank account. Your bank checks it when you pay.
+        </ThemedText>
+        <Field
+          value={name}
+          onChangeText={setName}
+          label={strings.field.fullName}
+          disabled={busy}
+          autoCapitalize="words"
+          autoComplete="name"
+          textContentType="name"
+          returnKeyType="done"
+          onSubmitEditing={() => nameReady && !busy && saveName()}
+        />
+        {message !== '' && <Notice message={message} />}
+        <Button
+          label={busy ? 'Saving…' : 'Continue'}
+          variant="primary"
+          onPress={saveName}
+          disabled={busy || !nameReady}
+        />
       </View>
     );
   }

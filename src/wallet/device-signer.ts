@@ -54,4 +54,8 @@ export const deviceSigner = {
       new DeviceKey(secureStorage, userId).sign(digest),
     );
   },
+
+  async forget(_userId: string): Promise<void> {},
+
+  async forgetAllExcept(_userId: string | null): Promise<void> {},
 };

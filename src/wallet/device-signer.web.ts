@@ -1,6 +1,6 @@
 import { errorReporting } from '@/ops/error-reporting';
 import { base64 } from '@/wallet/base64';
-import { DeviceKey } from '@/wallet/device-key';
+import { DeviceKey, MissingDeviceSecret } from '@/wallet/device-key';
 import { reportingSigningFailure } from '@/wallet/signing-report';
 
 const databaseName = 'loop-device-signer';
@@ -20,6 +20,21 @@ export const deviceSigner = {
 
   sign(userId: string, digest: Uint8Array): Promise<string> {
     return reportingSigningFailure('device key', errorReporting.reportError, () => signDigest(userId, digest));
+  },
+
+  async forget(userId: string): Promise<void> {
+    const keyName = DeviceKey.storageName(userId);
+    await transact('readwrite', (store) => store.delete(keyName));
+  },
+
+  async forgetAllExcept(userId: string | null): Promise<void> {
+    const kept = userId === null ? null : DeviceKey.storageName(userId);
+    const keyNames = await transact('readonly', (store) => store.getAllKeys());
+    for (const keyName of keyNames) {
+      if (keyName !== kept) {
+        await transact('readwrite', (store) => store.delete(keyName));
+      }
+    }
   },
 };
 
@@ -42,7 +57,7 @@ async function createKey(userId: string): Promise<string> {
 async function signDigest(userId: string, digest: Uint8Array): Promise<string> {
   const keyPair = await read(userId);
   if (!keyPair) {
-    throw new Error('No device key in this browser');
+    throw new MissingDeviceSecret();
   }
   const signature = await crypto.subtle.sign({ name: 'Ed25519' }, keyPair.privateKey, digest as BufferSource);
   return base64.encode(new Uint8Array(signature));

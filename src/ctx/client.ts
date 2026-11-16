@@ -18,7 +18,7 @@ import { Profile } from '@/ctx/profile';
 import { blockingServiceState, type BlockingServiceState } from '@/ctx/service-state';
 import { loopEnvironment } from '@/environment';
 import { errorReporting } from '@/ops/error-reporting';
-import { SessionAuth, type SendOptions, type TokenPair } from '@/session/session-auth';
+import { SessionAuth, type SendOptions, type SessionEndListener, type TokenPair } from '@/session/session-auth';
 import {
   oauthLoginBody,
   type SocialCredential,
@@ -329,10 +329,10 @@ class CtxClient {
 
   async signOut(): Promise<void> {
     await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
-    await this.auth.clearSession();
+    await this.auth.clearSession('signed-out');
   }
 
-  onSessionEnd(listener: () => void): () => void {
+  onSessionEnd(listener: SessionEndListener): () => void {
     return this.auth.onSessionEnd(listener);
   }
 
@@ -676,3 +676,9 @@ export const ctx = new CtxClient(
   process.env.EXPO_PUBLIC_CATALOG_URL || loopEnvironment.ctxApiUrl,
   CtxClient.runningAppVersion(),
 );
+
+ctx.onSessionEnd((end) => {
+  if (end.reason === 'refused') {
+    errorReporting.reportMessage('A refreshed CTX session was refused for its owner');
+  }
+});

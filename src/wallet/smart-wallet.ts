@@ -14,7 +14,9 @@ import type { BuyTimer } from '@/ctx/buy-timer';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
 import type { TokenStorage } from '@/session/install-scoped-token';
+import type { SessionEnd } from '@/session/session-auth';
 import { secureTokenStorage } from '@/session/secure-token-storage';
+import { errorReporting } from '@/ops/error-reporting';
 import { network, type PaymentCurrency, type Token } from '@/stellar/network';
 import { holdCriticalReload } from '@/updates/update-checker';
 import { i128, soroban } from '@/stellar/soroban';
@@ -87,6 +89,23 @@ export class SmartWallet {
 
   static forgetConfirmations(): void {
     SmartWallet.confirmed.clear();
+  }
+
+  static async endSession(end: SessionEnd): Promise<void> {
+    SmartWallet.forgetConfirmations();
+    await SmartWallet.forgetDeviceKeys(end).catch((error: unknown) => {
+      errorReporting.reportError(error, 'Forgetting the device key at session end failed');
+    });
+  }
+
+  private static forgetDeviceKeys(end: SessionEnd): Promise<void> {
+    if (end.reason === 'expired') {
+      return Promise.resolve();
+    }
+    if (end.nextOwner !== null) {
+      return deviceSigner.forgetAllExcept(end.nextOwner);
+    }
+    return end.owner === null ? deviceSigner.forgetAllExcept(null) : deviceSigner.forget(end.owner);
   }
 
   static async load(): Promise<SmartWallet | null> {
@@ -328,11 +347,7 @@ export class SmartWallet {
   }
 
   private async buildSignedWithdrawal(currency: PaymentCurrency, shares: bigint): Promise<SignedWithdrawal> {
-    const intent: SmartWalletIntent = {
-      intent: 'vault_withdraw',
-      currency,
-      shares: shares.toString(),
-    };
+    const intent = Savings.withdrawIntent(currency, shares);
     const built = await ctx.buildTransaction(this.id, intent);
     const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId]);
     await this.requireWithdraw(call, currency, shares);
@@ -421,4 +436,4 @@ export class SmartWallet {
   }
 }
 
-ctx.onSessionEnd(SmartWallet.forgetConfirmations);
+ctx.onSessionEnd((end) => void SmartWallet.endSession(end));

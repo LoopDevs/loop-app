@@ -37,6 +37,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
+import { errorReporting } from '@/ops/error-reporting';
 import type { PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { Savings, SavingsRate, type DepositInput } from '@/wallet/savings';
@@ -70,8 +71,10 @@ export default function SavingsScreen() {
   const stable = view?.stable ?? Rates.usd;
   const depositCurrency = Savings.depositCurrencyFor(stable);
   const depositable = view?.holdings.inWallet(depositCurrency) ?? 0n;
-  const [firstSaving] = view?.holdings.savingsHoldings() ?? [];
-  const savingsBalance = firstSaving ? money.token(firstSaving.amount, firstSaving.currency) : null;
+  const savingsHoldings = view?.holdings.savingsHoldings() ?? [];
+  const savingsBalance = savingsHoldings.length
+    ? savingsHoldings.map(({ amount, currency }) => money.token(amount, currency)).join(' and ')
+    : null;
 
   const reloadIfBlocked = (error: unknown): never => {
     if (error instanceof WalletBlocked) {
@@ -87,16 +90,33 @@ export default function SavingsScreen() {
       }
       try {
         let unfinished: WithdrawAllOutcome | null = null;
-        for (const { currency, shares } of savings) {
-          const outcome = await SavingsTopUp.withdrawAll(
-            () => wallet.withdraw(currency, shares).catch(reloadIfBlocked),
-            wallet.vaultCall(),
-          );
-          if (outcome === 'failed') {
-            setMessage(SavingsTopUp.withdrawAllMessage(outcome));
+        const moved: string[] = [];
+        const moving: string[] = [];
+        const stopped = () => SavingsTopUp.withdrawStoppedMessage(moved, moving);
+        for (const { currency, shares, value } of savings) {
+          let outcome: WithdrawAllOutcome;
+          try {
+            outcome = await SavingsTopUp.withdrawAll(
+              () => wallet.withdraw(currency, shares).catch(reloadIfBlocked),
+              wallet.vaultCall(),
+            );
+          } catch (error) {
+            if (moved.length === 0 && moving.length === 0) {
+              throw error;
+            }
+            errorReporting.reportError(error, 'Action');
+            haptics.error();
+            setMessage(stopped());
             return;
           }
-          if (outcome !== 'success') {
+          if (outcome === 'failed') {
+            setMessage(moved.length || moving.length ? stopped() : SavingsTopUp.withdrawAllMessage(outcome));
+            return;
+          }
+          if (outcome === 'success') {
+            moved.push(money.token(value, currency));
+          } else {
+            moving.push(money.token(value, currency));
             unfinished = outcome;
           }
         }
@@ -251,7 +271,6 @@ export default function SavingsScreen() {
       <Animated.View pointerEvents="none" style={scrim} />
       <BottomSheet open={adding} onClose={() => setAdding(false)} title="How much do you want to save?">
         <AddToSavings
-          stable={stable}
           currency={depositCurrency}
           depositable={depositable}
           busy={busy}
@@ -358,7 +377,6 @@ function SavingsFacts() {
 }
 
 type AddToSavingsProps = {
-  stable: string;
   currency: PaymentCurrency;
   depositable: bigint;
   busy: boolean;
@@ -367,7 +385,7 @@ type AddToSavingsProps = {
   onClose: () => void;
 };
 
-function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
+function AddToSavings({ currency, depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
   const [input, setInput] = useState('');
   const [max, setMax] = useState<bigint | null>(null);
   const amount = normalizeAmount(input);
@@ -393,7 +411,7 @@ function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, o
   return (
     <>
       <Field
-        label={money.amountLabel(stable)}
+        label={money.amountLabel(currency)}
         value={input}
         onChangeText={edit}
         keyboardType="decimal-pad"
@@ -402,7 +420,7 @@ function AddToSavings({ stable, currency, depositable, busy, ready, onDeposit, o
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
             <Button
-              label={money.ctx(quick, stable)}
+              label={money.ctx(quick, currency)}
               selected={max === null && amount === quick}
               onPress={() => edit(quick)}
             />

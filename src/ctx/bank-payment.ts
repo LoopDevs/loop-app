@@ -1,5 +1,7 @@
 import type { GiftCard } from './client.ts';
-import type { ShownOrder } from './one-tap-buy.ts';
+import { CtxError } from './ctx-error.ts';
+import { OneTapBuy, type ShownOrder } from './one-tap-buy.ts';
+import { serviceState, serviceStateMessages } from './service-state.ts';
 import type { PaymentCurrency } from '../stellar/network.ts';
 
 type BankOrder = Pick<
@@ -94,6 +96,28 @@ export class BankPayment {
       return { order, payment: { kind: 'bank', linkOpen }, follow: true, sent: null };
     }
     return { order, payment: { kind: 'ready' }, follow: order.status === 'paid', sent: null };
+  }
+
+  static needsLegalName(errorName: string | undefined): boolean {
+    return errorName === 'ErrBankPaymentIdentityRequired';
+  }
+
+  static readonly unconfirmedMessage =
+    "We couldn't confirm your order. Check your gift cards in your wallet before trying again.";
+
+  static orderFailedMessage(error: unknown): string {
+    const state = error instanceof CtxError ? serviceState(error.errorName()) : null;
+    if (state !== null) {
+      return serviceStateMessages[state];
+    }
+    if (
+      !(error instanceof CtxError) ||
+      error.status >= 500 ||
+      error.errorName() === 'ErrIdempotentRequestInFlight'
+    ) {
+      return BankPayment.unconfirmedMessage;
+    }
+    return BankPayment.refusalMessage(error.errorName()) ?? OneTapBuy.notBoughtMessage;
   }
 
   static refusalMessage(errorName: string | undefined): string | null {

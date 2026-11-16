@@ -36,6 +36,7 @@ import {
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { BottomTabInset, FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
+import { BankPayment } from '@/ctx/bank-payment';
 import { ctx } from '@/ctx/client';
 import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
@@ -44,6 +45,7 @@ import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { Savings } from '@/wallet/savings';
 import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
@@ -79,6 +81,7 @@ export default function HomeScreen() {
   const theme = useTheme();
   const { country: marketCountry, resolved: marketResolved } = useMarket();
   const { check } = useSignIn();
+  const readOwner = useSessionOwner();
   const signedOut = screen === 'signed-out';
   const signedOutCountry = marketResolved ? marketCountry : undefined;
   const catalogCountry = !sessionRead ? undefined : signedOut ? signedOutCountry : profileCountry;
@@ -92,7 +95,10 @@ export default function HomeScreen() {
   const openActiveOrder = useCallback(async () => {
     const activeOrder = await dismissedOrders.activeOrder().catch(() => null);
     if (activeOrder && homeFocused.current) {
-      router.push(`/shop/pay/${activeOrder.merchantId}`, { withAnchor: true });
+      router.push(
+        BankPayment.isBank(activeOrder) ? `/wallet/${activeOrder.id}` : `/shop/pay/${activeOrder.merchantId}`,
+        { withAnchor: true },
+      );
     }
   }, [router]);
 
@@ -117,19 +123,30 @@ export default function HomeScreen() {
 
   const loadProfileCountry = useCallback(async () => {
     const profile = await ctx.me().catch(() => null);
-    setProfileCountry(profile && !profile.needsSetup() ? profile.country : undefined);
+    if (profile !== null) {
+      setProfileCountry(profile.needsSetup() ? undefined : profile.country);
+    }
   }, []);
 
   const readSession = useCallback(async () => {
     try {
-      const signedIn = await ctx.isSignedIn();
+      const { userId, changed } = await readOwner();
+      const signedIn = userId !== null;
       setSessionRead(true);
+      if (changed) {
+        walletLoadStarted.current = false;
+        setWallet(null);
+        setBlockedWallet(null);
+        setProfileCountry(undefined);
+      }
       if (signedIn) {
-        if (preWalletScreens.includes(screen) && !walletLoadStarted.current) {
+        if ((changed || preWalletScreens.includes(screen)) && !walletLoadStarted.current) {
           setScreen('loading');
           loadProfileCountry();
           await loadWallet();
           setLoadError('');
+        } else {
+          loadProfileCountry();
         }
         return;
       }
@@ -143,7 +160,7 @@ export default function HomeScreen() {
       walletLoadStarted.current = false;
       setLoadError(errorMessage(error));
     }
-  }, [screen, loadWallet, loadProfileCountry, check]);
+  }, [screen, loadWallet, loadProfileCountry, check, readOwner]);
 
   useFocusEffect(
     useCallback(() => {

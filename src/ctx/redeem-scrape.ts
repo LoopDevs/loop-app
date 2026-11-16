@@ -5,7 +5,9 @@ export type CardDetails = {
 
 const maxLabelLength = 40;
 const lookahead = 3;
+const blockLength = 6;
 const pinLabel = /\b(pin|security code)\b/i;
+const otherLabel = /\b(number|no\.?|#|code|ref(erence)?|date|expir\w*|phone|balance|amount)\s*:?$/i;
 const numberLabel = /\b(card|gift ?card|e-?gift|e-?voucher|voucher|gift|claim|redeem|redemption)\s*(number|no\.?|#|code)\b|^(code|number)\b/i;
 
 export function parseCardDetails(lines: readonly string[]): CardDetails | null {
@@ -16,15 +18,15 @@ export function parseCardDetails(lines: readonly string[]): CardDetails | null {
     if (!label || label.length > maxLabelLength) {
       return;
     }
-    const kind = pinLabel.test(label) ? 'pin' : numberLabel.test(label) ? 'number' : null;
+    const kind = labelKind(label);
     if (!kind) {
       return;
     }
-    const candidates = inline ? [inline] : lines.slice(index + 1, index + 1 + lookahead);
+    const candidates = inline ? [inline] : candidatesFor(lines, index);
     const read = kind === 'pin' ? pinValue : numberValue;
     const value = candidates.map((candidate) => read(candidate.trim())).find(Boolean) ?? '';
     if (kind === 'number') {
-      number ||= value;
+      number ||= inline || numbersBelow(lines, index) <= 1 ? value : '';
     } else {
       pin ||= value;
     }
@@ -45,6 +47,71 @@ export function readPageLines(data: string): string[] {
   }
 }
 
+function labelKind(label: string): 'pin' | 'number' | null {
+  if (pinLabel.test(label)) {
+    return 'pin';
+  }
+  return numberLabel.test(label) ? 'number' : null;
+}
+
+function candidatesFor(lines: readonly string[], index: number): string[] {
+  const before = cardLabelRun(lines, index, -1);
+  const after = cardLabelRun(lines, index, 1);
+  if (before + after === 0) {
+    return valuesAfter(lines, index);
+  }
+  const width = before + 1 + after;
+  const values = lines.slice(index + after + 1, index + after + 1 + width);
+  if (values.length === width && !values.some(isLabelLine)) {
+    return [values[before]];
+  }
+  return after === 0 ? valuesAfter(lines, index) : [];
+}
+
+function cardLabelRun(lines: readonly string[], index: number, step: 1 | -1): number {
+  let count = 0;
+  for (let at = index + step; at >= 0 && at < lines.length && isCardLabel(lines[at]); at += step) {
+    count += 1;
+  }
+  return count;
+}
+
+function isCardLabel(line: string): boolean {
+  const { label, inline } = splitInline(line.trim());
+  return inline === null && label.length <= maxLabelLength && labelKind(label) !== null;
+}
+
+function numbersBelow(lines: readonly string[], index: number): number {
+  const start = index + 1 + cardLabelRun(lines, index, 1);
+  const found = new Set<string>();
+  for (const line of lines.slice(start, start + blockLength)) {
+    if (isLabelLine(line)) {
+      break;
+    }
+    const value = numberValue(line.trim());
+    if (value) {
+      found.add(value);
+    }
+  }
+  return found.size;
+}
+
+function isLabelLine(line: string): boolean {
+  const { label } = splitInline(line.trim());
+  return label.length <= maxLabelLength && (labelKind(label) !== null || otherLabel.test(label));
+}
+
+function valuesAfter(lines: readonly string[], index: number): string[] {
+  const values: string[] = [];
+  for (const line of lines.slice(index + 1, index + 1 + lookahead)) {
+    if (isLabelLine(line)) {
+      break;
+    }
+    values.push(line);
+  }
+  return values;
+}
+
 function splitInline(line: string): { label: string; inline: string | null } {
   const separator = line.indexOf(':');
   if (separator <= 0 || separator > maxLabelLength) {
@@ -56,7 +123,13 @@ function splitInline(line: string): { label: string; inline: string | null } {
 
 function numberValue(line: string): string {
   const compact = line.replace(/[\s-]/g, '');
-  if (!/^[A-Z0-9]{10,30}$/i.test(compact) || digitCount(compact) < 8) {
+  if (
+    !/^[A-Z0-9]{10,30}$/i.test(compact) ||
+    digitCount(compact) < 8 ||
+    hasWords(line) ||
+    !evenlyGrouped(line) ||
+    looksLikePhoneOrReference(compact)
+  ) {
     return '';
   }
   return compact;
@@ -67,6 +140,21 @@ function pinValue(line: string): string {
     return '';
   }
   return line;
+}
+
+function hasWords(line: string): boolean {
+  const parts = line.split(/\s+/);
+  return parts.length > 1 && parts.some((part) => /^[A-Z]?[a-z]{2,}$/.test(part) && (part.length > 4 || /^[A-Z]/.test(part)));
+}
+
+function looksLikePhoneOrReference(compact: string): boolean {
+  return /^0\d{9,12}$/.test(compact) || /^[A-Z]{2,5}\d{8,}$/i.test(compact);
+}
+
+function evenlyGrouped(line: string): boolean {
+  const groups = line.split(/[\s-]+/).filter(Boolean);
+  const width = groups[0]?.length ?? 0;
+  return groups.every((group, at) => (at === groups.length - 1 ? group.length <= width : group.length === width));
 }
 
 function digitCount(value: string): number {

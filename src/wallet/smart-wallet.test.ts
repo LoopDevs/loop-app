@@ -336,6 +336,43 @@ test('in a browser a pinned wallet loads once the sign-in confirms it, until the
   await assert.rejects(SmartWallet.load(), UnconfirmedIdentity);
 });
 
+function recordForgottenKeys(): string[] {
+  const forgotten: string[] = [];
+  replace(deviceSigner, 'forget', async (id: string) => {
+    forgotten.push(`only ${id}`);
+  });
+  replace(deviceSigner, 'forgetAllExcept', async (id: string | null) => {
+    forgotten.push(`all but ${id}`);
+  });
+  return forgotten;
+}
+
+test('signing out or a refused session forgets the device key of the user whose session ended', async () => {
+  const forgotten = recordForgottenKeys();
+  await SmartWallet.endSession({ owner: userId, reason: 'signed-out', nextOwner: null });
+  await SmartWallet.endSession({ owner: null, reason: 'refused', nextOwner: null });
+  assert.deepEqual(forgotten, [`only ${userId}`, 'all but null']);
+});
+
+test('a sign-in keeps only the device key of whoever signs in', async () => {
+  const forgotten = recordForgottenKeys();
+  await SmartWallet.endSession({ owner: null, reason: 'replaced', nextOwner: userId });
+  assert.deepEqual(forgotten, [`all but ${userId}`]);
+});
+
+test('an expired session keeps the device key so signing back in needs no re-link', async () => {
+  const forgotten = recordForgottenKeys();
+  await SmartWallet.endSession({ owner: userId, reason: 'expired', nextOwner: null });
+  assert.deepEqual(forgotten, []);
+});
+
+test('a device key that cannot be forgotten at session end does not stop the session ending', async () => {
+  replace(deviceSigner, 'forget', async () => {
+    throw new Error('storage blocked');
+  });
+  await SmartWallet.endSession({ owner: userId, reason: 'signed-out', nextOwner: null });
+});
+
 test('in a browser a confirmation counts for the account that gave it', async () => {
   const holder = await inBrowserWithPinnedPasskey();
   await pinWallet('user-2', holder.publicKey);
@@ -683,7 +720,7 @@ test('a withdrawal asks CTX for the vault withdraw of exactly those shares and s
     return { transaction: 'xdr-2', digest: 'cd', contextRuleIds: [1], expiryLedger: 1_040 };
   });
   const sent = await wallet.withdraw('XLM.USDC', 250n);
-  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.USDC', shares: '250' });
+  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.USDC', shares: '0.0000250' });
   assert.deepEqual(required, [250n]);
   assert.deepEqual(sent, { hash: 'tx-1', status: 'PENDING', expiryLedger: 1_040 });
   assert.equal(fakes.sponsored.length, 1);
@@ -708,7 +745,7 @@ test('a withdrawal in another savings currency targets that vault and is valued 
     return { transaction: 'xdr-2', digest: 'cd', contextRuleIds: [1], expiryLedger: 1_040 };
   });
   await wallet.withdraw('XLM.GBPLOOP', 40n);
-  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.GBPLOOP', shares: '40' });
+  assert.deepEqual(builtIntent, { intent: 'vault_withdraw', currency: 'XLM.GBPLOOP', shares: '0.0000040' });
   assert.deepEqual(required, [{ vault: gbpVault, shares: 40n }]);
   assert.equal(fakes.sponsored.length, 1);
 });

@@ -28,6 +28,8 @@ import type { SmartWallet } from '@/wallet/smart-wallet';
 type Step = 'method' | 'app' | 'waiting' | 'done' | 'bank-amount' | 'bank-details' | 'bank-sent';
 
 const quickAmounts = ['25', '50', '100'];
+const senderWarning =
+  "Most exchanges and many other apps can't send to a Loop account yet. Check that your app can send to an address starting with C before you send, or you could lose the money.";
 const checkEveryMs = 4000;
 const bankDetails = {
   name: 'Loop Finance',
@@ -175,6 +177,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
           <ThemedText type="small" themeColor="textSecondary">
             Choose an amount if you like, then open your app to send it. You can also change the amount there.
           </ThemedText>
+          <Notice message={senderWarning} />
           {amountPicker(openApp)}
           <Button
             label={shownAmount ? `Open my app to send ${shownAmount}` : 'Open my app'}
