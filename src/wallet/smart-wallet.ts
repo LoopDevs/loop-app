@@ -11,6 +11,7 @@ import {
   type SmartWalletIntent,
 } from '@/ctx/client';
 import type { BuyTimer } from '@/ctx/buy-timer';
+import { CtxError } from '@/ctx/ctx-error';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
 import type { TokenStorage } from '@/session/install-scoped-token';
@@ -297,7 +298,19 @@ export class SmartWallet {
   }
 
   async withdraw(currency: PaymentCurrency, shares: bigint): Promise<SentVaultCall> {
-    return SavingsTopUp.send(await this.signWithdrawal(currency, shares));
+    const signed = await this.signWithdrawal(currency, shares).catch((error: unknown) =>
+      SmartWallet.rethrowReported(error, 'Savings withdrawal build'),
+    );
+    return SavingsTopUp.send(signed).catch((error: unknown) =>
+      SmartWallet.rethrowReported(error, 'Savings withdrawal send'),
+    );
+  }
+
+  private static rethrowReported(error: unknown, step: string): never {
+    if (error instanceof CtxError && error.status < 500) {
+      errorReporting.reportMessage(`${step} refused: CTX ${error.status} ${error.errorName() ?? 'unnamed'}`);
+    }
+    throw error;
   }
 
   deposit(currency: PaymentCurrency, amount: bigint): Promise<SentVaultCall> {
