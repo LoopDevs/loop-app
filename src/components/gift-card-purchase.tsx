@@ -513,6 +513,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
       } catch (error) {
         rollBack();
         haptics.error();
+        errorReporting.reportError(error, 'Wallet buy');
         const name = error instanceof CtxError ? error.errorName() : undefined;
         const amountMessage = amountErrorMessage(name, merchant);
         if (amountMessage) {
