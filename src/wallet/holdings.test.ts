@@ -354,3 +354,13 @@ test('received cashback is grouped by currency', () => {
     { currency: 'XLM.EURC', amount: units.parse('5') },
   ]);
 });
+
+test('money that arrived is the first token above its earlier amount, and nothing when balances only fell', () => {
+  const before = holdings({ 'XLM.USDC': '5' }).walletAmounts();
+  assert.deepEqual(holdings({ 'XLM.USDC': '7.5' }).arrivedSince(before), {
+    currency: 'XLM.USDC',
+    amount: units.parse('2.5'),
+  });
+  assert.equal(holdings({ 'XLM.USDC': '5' }).arrivedSince(before), null);
+  assert.equal(holdings({ 'XLM.USDC': '1' }).arrivedSince(before), null);
+});

@@ -3,6 +3,7 @@ import { network } from '../stellar/network.ts';
 export class PayRequest {
   static readonly scheme = 'web+stellar:pay';
   static readonly assetCode = 'USDC';
+  static readonly currency = 'XLM.USDC';
 
   readonly destination: string;
   readonly amount: string | null;
