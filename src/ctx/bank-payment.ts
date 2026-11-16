@@ -105,7 +105,11 @@ export class BankPayment {
     "We couldn't confirm your order. Check your gift cards in your wallet before trying again.";
 
   static orderFailedMessage(error: unknown): string {
-    if (!(error instanceof CtxError) || error.status >= 500) {
+    if (
+      !(error instanceof CtxError) ||
+      error.status >= 500 ||
+      error.errorName() === 'ErrIdempotentRequestInFlight'
+    ) {
       return BankPayment.unconfirmedMessage;
     }
     return BankPayment.refusalMessage(error.errorName()) ?? OneTapBuy.notBoughtMessage;

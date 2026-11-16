@@ -336,30 +336,41 @@ test('in a browser a pinned wallet loads once the sign-in confirms it, until the
   await assert.rejects(SmartWallet.load(), UnconfirmedIdentity);
 });
 
-test('signing out or a refused session forgets the device key of the user whose session ended', async () => {
-  const forgotten: (string | null)[] = [];
-  replace(deviceSigner, 'forgetOnSessionEnd', async (endedUserId: string | null) => {
-    forgotten.push(endedUserId);
+function recordForgottenKeys(): string[] {
+  const forgotten: string[] = [];
+  replace(deviceSigner, 'forget', async (id: string) => {
+    forgotten.push(`only ${id}`);
   });
-  await SmartWallet.endSession({ owner: userId, reason: 'signed-out' });
-  await SmartWallet.endSession({ owner: null, reason: 'refused' });
-  assert.deepEqual(forgotten, [userId, null]);
+  replace(deviceSigner, 'forgetAllExcept', async (id: string | null) => {
+    forgotten.push(`all but ${id}`);
+  });
+  return forgotten;
+}
+
+test('signing out or a refused session forgets the device key of the user whose session ended', async () => {
+  const forgotten = recordForgottenKeys();
+  await SmartWallet.endSession({ owner: userId, reason: 'signed-out', nextOwner: null });
+  await SmartWallet.endSession({ owner: null, reason: 'refused', nextOwner: null });
+  assert.deepEqual(forgotten, [`only ${userId}`, 'all but null']);
+});
+
+test('a sign-in keeps only the device key of whoever signs in', async () => {
+  const forgotten = recordForgottenKeys();
+  await SmartWallet.endSession({ owner: null, reason: 'replaced', nextOwner: userId });
+  assert.deepEqual(forgotten, [`all but ${userId}`]);
 });
 
 test('an expired session keeps the device key so signing back in needs no re-link', async () => {
-  const forgotten: (string | null)[] = [];
-  replace(deviceSigner, 'forgetOnSessionEnd', async (endedUserId: string | null) => {
-    forgotten.push(endedUserId);
-  });
-  await SmartWallet.endSession({ owner: userId, reason: 'expired' });
+  const forgotten = recordForgottenKeys();
+  await SmartWallet.endSession({ owner: userId, reason: 'expired', nextOwner: null });
   assert.deepEqual(forgotten, []);
 });
 
 test('a device key that cannot be forgotten at session end does not stop the session ending', async () => {
-  replace(deviceSigner, 'forgetOnSessionEnd', async () => {
+  replace(deviceSigner, 'forget', async () => {
     throw new Error('storage blocked');
   });
-  await SmartWallet.endSession({ owner: userId, reason: 'signed-out' });
+  await SmartWallet.endSession({ owner: userId, reason: 'signed-out', nextOwner: null });
 });
 
 test('in a browser a confirmation counts for the account that gave it', async () => {

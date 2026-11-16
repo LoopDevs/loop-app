@@ -191,6 +191,10 @@ test('a failed bank order says not charged only when CTX refused it before charg
   );
   assert.equal(BankPayment.orderFailedMessage(new CtxError(409, '{"error":"ErrOther"}')), OneTapBuy.notBoughtMessage);
   assert.equal(BankPayment.orderFailedMessage(new CtxError(502, '{"error":"ErrServerError"}')), BankPayment.unconfirmedMessage);
+  assert.equal(
+    BankPayment.orderFailedMessage(new CtxError(409, '{"error":"ErrIdempotentRequestInFlight"}')),
+    BankPayment.unconfirmedMessage,
+  );
   assert.equal(BankPayment.orderFailedMessage(new TypeError('Network request failed')), BankPayment.unconfirmedMessage);
 });
 

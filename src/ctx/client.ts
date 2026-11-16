@@ -310,7 +310,6 @@ class CtxClient {
 
   signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
     return holdCriticalReload(async () => {
-      await this.isSignedIn().catch(() => false);
       await this.auth.startSession(
         await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
       );

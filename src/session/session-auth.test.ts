@@ -97,12 +97,13 @@ test('listeners hear which owner the ended session belonged to and why it ended'
   await auth.clearSession('signed-out');
   await auth.clearSession('signed-out');
   assert.deepEqual(ended, [
-    { owner: 'a', reason: 'signed-out' },
-    { owner: null, reason: 'signed-out' },
+    { owner: null, reason: 'replaced', nextOwner: 'a' },
+    { owner: 'a', reason: 'signed-out', nextOwner: null },
+    { owner: null, reason: 'signed-out', nextOwner: null },
   ]);
 });
 
-test("signing in as someone else over a live session ends the previous owner's session first", async () => {
+test('a sign-in tells listeners who signs in next, unless the same owner is already signed in', async () => {
   const ctx = new FakeCtx(async () => ({ ok: true }));
   const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
   const ended: SessionEnd[] = [];
@@ -113,23 +114,25 @@ test("signing in as someone else over a live session ends the previous owner's s
   await auth.startSession({ accessToken: 'a2', refreshToken: 'a-r2' });
   assert.deepEqual(ended, []);
   await auth.startSession({ accessToken: 'b1', refreshToken: 'b-r1' });
-  assert.deepEqual(ended, [{ owner: 'a', reason: 'signed-out' }]);
+  assert.deepEqual(ended, [{ owner: 'a', reason: 'replaced', nextOwner: 'b' }]);
   assert.equal(await auth.accessToken(), 'b1');
 });
 
-test('a stored session, once read, is ended for its owner when someone else signs in', async () => {
-  const ctx = new FakeCtx(async ({ path }) => {
-    assert.equal(path, '/refresh-token');
-    return { accessToken: 'a1', refreshToken: 'a-r2' };
+test('a sign-in after an expired session still names who signs in next', async () => {
+  const ctx = new FakeCtx(async () => {
+    throw unauthorized();
   });
   const auth = new SessionAuth(ctx.send, new MemoryStore('a-r1'), ownerOf);
   const ended: SessionEnd[] = [];
   auth.onSessionEnd((end) => {
     ended.push(end);
   });
-  await auth.accessToken();
+  assert.equal(await auth.accessToken(), null);
   await auth.startSession({ accessToken: 'b1', refreshToken: 'b-r1' });
-  assert.deepEqual(ended, [{ owner: 'a', reason: 'signed-out' }]);
+  assert.deepEqual(ended, [
+    { owner: null, reason: 'expired', nextOwner: null },
+    { owner: null, reason: 'replaced', nextOwner: 'b' },
+  ]);
 });
 
 test('a refresh token CTX rejects ends the session as expired', async () => {
@@ -142,7 +145,7 @@ test('a refresh token CTX rejects ends the session as expired', async () => {
     ended.push(end);
   });
   assert.equal(await auth.accessToken(), null);
-  assert.deepEqual(ended, [{ owner: null, reason: 'expired' }]);
+  assert.deepEqual(ended, [{ owner: null, reason: 'expired', nextOwner: null }]);
 });
 
 test('a call made during sign-in waits for and uses the new tokens', async () => {
@@ -325,11 +328,11 @@ test("a refresh that yields another user's tokens ends this session, keeps the s
   });
   const store = new MemoryStore(null);
   const auth = new SessionAuth(ctx.send, store, ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
   let ended = 0;
   auth.onSessionEnd(() => {
     ended += 1;
   });
-  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
   store.refreshToken = 'b-r1';
 
   await assert.rejects(auth.sessionRequest('GET', '/me'), (error) => error instanceof CtxError && error.status === 401);

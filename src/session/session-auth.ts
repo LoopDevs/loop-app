@@ -13,11 +13,12 @@ export type SendOptions = {
   timeoutMs?: number;
 };
 
-export type SessionEndReason = 'signed-out' | 'expired' | 'refused';
+export type SessionEndReason = 'signed-out' | 'expired' | 'refused' | 'replaced';
 
 export type SessionEnd = {
   owner: string | null;
   reason: SessionEndReason;
+  nextOwner: string | null;
 };
 
 export type SessionEndListener = (end: SessionEnd) => void;
@@ -99,9 +100,9 @@ export class SessionAuth {
   }
 
   async startSession(tokens: TokenPair): Promise<void> {
-    const previousOwner = this.owner;
-    if (previousOwner !== null && previousOwner !== this.ownerOrNull(tokens.accessToken)) {
-      this.notifySessionEnd({ owner: previousOwner, reason: 'signed-out' });
+    const nextOwner = this.ownerOrNull(tokens.accessToken);
+    if (nextOwner !== null && nextOwner !== this.owner) {
+      this.notifySessionEnd({ owner: this.owner, reason: 'replaced', nextOwner });
     }
     const generation = this.beginSession();
     await this.session.refreshOnce(generation, async () =>
@@ -114,7 +115,7 @@ export class SessionAuth {
     this.beginSession();
     this.storedRefreshToken = null;
     await this.store.clear();
-    this.notifySessionEnd({ owner: endedOwner, reason });
+    this.notifySessionEnd({ owner: endedOwner, reason, nextOwner: null });
   }
 
   onSessionEnd(listener: SessionEndListener): () => void {
@@ -133,8 +134,9 @@ export class SessionAuth {
   private refuse(refreshToken: string): void {
     this.refusedRefreshToken = refreshToken;
     this.session.begin();
-    this.notifySessionEnd({ owner: this.owner, reason: 'refused' });
+    this.notifySessionEnd({ owner: this.owner, reason: 'refused', nextOwner: null });
   }
+
   private ownerOrNull(accessToken: string): string | null {
     try {
       return this.ownerOf(accessToken) || null;

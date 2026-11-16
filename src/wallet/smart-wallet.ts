@@ -93,12 +93,19 @@ export class SmartWallet {
 
   static async endSession(end: SessionEnd): Promise<void> {
     SmartWallet.forgetConfirmations();
-    if (end.reason === 'expired') {
-      return;
-    }
-    await deviceSigner.forgetOnSessionEnd(end.owner).catch((error: unknown) => {
+    await SmartWallet.forgetDeviceKeys(end).catch((error: unknown) => {
       errorReporting.reportError(error, 'Forgetting the device key at session end failed');
     });
+  }
+
+  private static forgetDeviceKeys(end: SessionEnd): Promise<void> {
+    if (end.reason === 'expired') {
+      return Promise.resolve();
+    }
+    if (end.nextOwner !== null) {
+      return deviceSigner.forgetAllExcept(end.nextOwner);
+    }
+    return end.owner === null ? deviceSigner.forgetAllExcept(null) : deviceSigner.forget(end.owner);
   }
 
   static async load(): Promise<SmartWallet | null> {
