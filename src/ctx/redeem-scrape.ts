@@ -54,8 +54,8 @@ function labelKind(label: string): 'pin' | 'number' | null {
 }
 
 function candidatesFor(lines: readonly string[], index: number): string[] {
-  const before = cardLabelRun(lines, index, -1);
-  const after = cardLabelRun(lines, index, 1);
+  const before = headerRun(lines, index, -1);
+  const after = headerRun(lines, index, 1);
   if (before + after === 0) {
     return valuesAfter(lines, index);
   }
@@ -67,17 +67,16 @@ function candidatesFor(lines: readonly string[], index: number): string[] {
   return after === 0 ? valuesAfter(lines, index) : [];
 }
 
-function cardLabelRun(lines: readonly string[], index: number, step: 1 | -1): number {
+function headerRun(lines: readonly string[], index: number, step: 1 | -1): number {
   let count = 0;
-  for (let at = index + step; at >= 0 && at < lines.length && isCardLabel(lines[at]); at += step) {
+  for (let at = index + step; at >= 0 && at < lines.length && isHeaderCell(lines[at]); at += step) {
     count += 1;
   }
   return count;
 }
 
-function isCardLabel(line: string): boolean {
-  const { label, inline } = splitInline(line.trim());
-  return inline === null && label.length <= maxLabelLength && labelKind(label) !== null;
+function isHeaderCell(line: string): boolean {
+  return splitInline(line.trim()).inline === null && isLabelLine(line);
 }
 
 function isLabelLine(line: string): boolean {
@@ -107,7 +106,7 @@ function splitInline(line: string): { label: string; inline: string | null } {
 
 function numberValue(line: string): string {
   const compact = line.replace(/[\s-]/g, '');
-  if (!/^[A-Z0-9]{10,30}$/i.test(compact) || digitCount(compact) < 8 || hasWords(line)) {
+  if (!/^[A-Z0-9]{10,30}$/i.test(compact) || digitCount(compact) < 8 || hasWords(line) || !evenlyGrouped(line)) {
     return '';
   }
   return compact;
@@ -123,6 +122,12 @@ function pinValue(line: string): string {
 function hasWords(line: string): boolean {
   const parts = line.split(/\s+/);
   return parts.length > 1 && parts.some((part) => /^[A-Z]?[a-z]{2,}$/.test(part) && (part.length > 4 || /^[A-Z]/.test(part)));
+}
+
+function evenlyGrouped(line: string): boolean {
+  const groups = line.split(/[\s-]+/).filter(Boolean);
+  const width = groups[0]?.length ?? 0;
+  return groups.every((group, at) => (at === groups.length - 1 ? group.length <= width : group.length === width));
 }
 
 function digitCount(value: string): number {
