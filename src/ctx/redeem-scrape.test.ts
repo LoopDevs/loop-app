@@ -124,6 +124,34 @@ test('a line of words with digits is never read as the card number', () => {
   assert.deepEqual(parseCardDetails(['Gift card code', '8f3a dbce 41c2 9e07']), { number: '8f3adbce41c29e07', pin: '' });
 });
 
+test('a header row with other columns reads each value from its own column', () => {
+  assert.deepEqual(parseCardDetails(['Order number', 'Card number', 'PIN', 'TXN20261116001', '6012 3456 7890 1234', '4321']), {
+    number: '6012345678901234',
+    pin: '4321',
+  });
+  assert.deepEqual(parseCardDetails(['Reference', 'Card number', 'PIN', '100045678912', '6012 3456 7890 1234', '4321']), {
+    number: '6012345678901234',
+    pin: '4321',
+  });
+  assert.deepEqual(parseCardDetails(['Card number', 'PIN', 'Expiry', '6012 3456 7890 1234', '4321', '12/2027']), {
+    number: '6012345678901234',
+    pin: '4321',
+  });
+  assert.deepEqual(parseCardDetails(['Card number', 'PIN', 'Balance', '6012 3456 7890 1234', '4321', '£10.00']), {
+    number: '6012345678901234',
+    pin: '4321',
+  });
+});
+
+test('a phone number or a prefixed reference is never read as the card number', () => {
+  assert.equal(parseCardDetails(['Gift card code', '020 7946 0958']), null);
+  assert.equal(parseCardDetails(['Gift card code', '0800 123 4567']), null);
+  assert.equal(parseCardDetails(['Gift card code', 'ref 1234567890']), null);
+  assert.equal(parseCardDetails(['Gift card code', 'REF 1234567890']), null);
+  assert.equal(parseCardDetails(['Gift card code', 'ORDER 123456789012']), null);
+  assert.deepEqual(parseCardDetails(['Gift card code', '6012 3456 7890 1234 567']), { number: '6012345678901234567', pin: '' });
+});
+
 test('a header row with a missing value saves nothing rather than shifting the pin into the number', () => {
   assert.equal(parseCardDetails(['Card number', 'PIN', '1234567890']), null);
 });
