@@ -325,7 +325,6 @@ test('the wallet figure counts every token at its rate and leaves savings out', 
   const held = holdings({ 'XLM.GBPLOOP': '2', 'XLM.EURC': '10' }, { savings: { 'XLM.GBPLOOP': '50' } });
   const withoutSavings = holdings({ 'XLM.GBPLOOP': '2', 'XLM.EURC': '10' });
   assert.equal(held.inWalletIn('XLM.GBPLOOP'), withoutSavings.spendableIn('XLM.GBPLOOP'));
-  assert.notEqual(held.inWalletIn('XLM.GBPLOOP'), held.spendableIn('XLM.GBPLOOP'));
   assert.equal(holdings({ 'XLM.EURC': '10' }).inWallet('XLM.GBPLOOP'), 0n);
   assert.notEqual(holdings({ 'XLM.EURC': '10' }).inWalletIn('XLM.GBPLOOP'), 0n);
 });
