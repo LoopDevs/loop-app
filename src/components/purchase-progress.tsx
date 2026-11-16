@@ -118,7 +118,7 @@ export function PurchaseProgress({
         : bankExpired
           ? 'The bank link has expired'
           : bankChecking
-            ? 'Checking with your bank…'
+            ? 'Confirming payment…'
             : 'Buying your gift card…';
   const detail = failed ? null : bankApproval || bankExpired ? null : 'This only takes a moment.';
 

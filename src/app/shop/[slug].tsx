@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { type ReactNode, useState } from 'react';
+import { type ComponentRef, type ReactNode, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -63,7 +63,22 @@ export default function MerchantScreen() {
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
   const { wide } = usePageLayout();
-  const { onScroll, offset } = useScrimScroll();
+  const { scrollRef, onScroll, offset } = useScrimScroll();
+  const page = useRef<ComponentRef<typeof View>>(null);
+  const buy = useRef<ComponentRef<typeof View>>(null);
+  const showBuyCard = () => {
+    if (process.env.EXPO_OS === 'web') {
+      return;
+    }
+    page.current?.measureInWindow((_pageX, pageY) => {
+      buy.current?.measureInWindow((_buyX, buyY) => {
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, offset.get() + buyY - pageY - Spacing.three),
+          animated: true,
+        });
+      });
+    });
+  };
   const sectionLayout = useSectionLayout();
   const titleFrom = useSharedValue(0);
   const headerTitle = useAnimatedStyle(() => {
@@ -111,7 +126,12 @@ export default function MerchantScreen() {
       </View>
     ) : profile && BankPayment.offered(merchant.currency, profile) ? (
       <View style={cardStyle}>
-        <BankCheckout merchant={merchant} profile={profile} activeOrder={activeOrder} />
+        <BankCheckout
+          merchant={merchant}
+          profile={profile}
+          activeOrder={activeOrder}
+          onAmountFocus={showBuyCard}
+        />
       </View>
     ) : profile && wallet ? (
       <View style={cardStyle}>
@@ -173,8 +193,10 @@ export default function MerchantScreen() {
         }}
       />
       <PageTitle title={merchant.name} />
-      <Animated.ScrollView
-        onScroll={onScroll}
+      <View ref={page} collapsable={false} style={styles.container}>
+        <Animated.ScrollView
+          ref={scrollRef}
+          onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -196,10 +218,10 @@ export default function MerchantScreen() {
               />
             }
             buy={
-              <>
+              <View ref={buy} collapsable={false} style={styles.buy}>
                 {retry}
                 {buyCard}
-              </>
+              </View>
             }
             details={<MerchantDetails key={merchant.id} merchant={merchant} signedOut={signedIn === false} />}
           />
@@ -208,7 +230,8 @@ export default function MerchantScreen() {
           <WhyShopWithLoop />
           <SiteFooter />
         </Animated.View>
-      </Animated.ScrollView>
+        </Animated.ScrollView>
+      </View>
     </ThemedView>
   );
 }
@@ -236,7 +259,7 @@ function MerchantLayout({ wide, hero, buy, details }: LayoutProps) {
   return (
     <View style={styles.narrowPage}>
       {hero}
-      <View style={styles.buy}>{buy}</View>
+      {buy}
       {details}
     </View>
   );

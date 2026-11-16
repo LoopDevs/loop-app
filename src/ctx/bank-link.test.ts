@@ -43,18 +43,62 @@ test('a success without a bank remembers nothing', () => {
   });
 });
 
-const event = (eventName: string, viewName: string, institutionName?: string) =>
-  ({ eventName, metadata: { linkSessionId: 's1', viewName, institutionName } }) as never;
+const event = (eventName: string, viewName: string, institutionName?: string, errorCode?: string) =>
+  ({ eventName, metadata: { linkSessionId: 's1', viewName, institutionName, errorCode } }) as never;
 
 test('handing off to the bank reports the bank being approved in', () => {
   assert.deepEqual(BankLink.progress(event('OPEN_OAUTH', 'OAUTH', 'Monzo')), { step: 'atBank', bankName: 'Monzo' });
   assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'OAUTH')), { step: 'atBank', bankName: null });
 });
 
-test('coming back from the bank is reported once Link resumes', () => {
-  assert.deepEqual(BankLink.progress(event('CLOSE_OAUTH', 'OAUTH')), { step: 'backFromBank' });
+test('the bank handing back or Link finishing reports the payment being confirmed', () => {
+  assert.deepEqual(BankLink.progress(event('CLOSE_OAUTH', 'OAUTH')), { step: 'confirming' });
+  assert.deepEqual(BankLink.progress(event('HANDOFF', 'CONNECTED')), { step: 'confirming' });
+});
+
+test('a loading or connected view reports Link resuming', () => {
   assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'CONNECTED')), { step: 'backFromBank' });
   assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'LOADING')), { step: 'backFromBank' });
+});
+
+test('the bank list and a picked bank are reported', () => {
+  assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'SELECT_INSTITUTION')), { step: 'choosingBank' });
+  assert.deepEqual(BankLink.progress(event('SEARCH_INSTITUTION', 'SELECT_INSTITUTION')), { step: 'choosingBank' });
+  assert.deepEqual(BankLink.progress(event('SELECT_INSTITUTION', 'SELECT_INSTITUTION', 'Monzo')), {
+    step: 'bankChosen',
+    bankName: 'Monzo',
+  });
+});
+
+test('a Link error, a failed bank hand-off and an unavailable bank are reported with their code', () => {
+  assert.deepEqual(BankLink.progress(event('ERROR', 'ERROR', 'Monzo', 'INSTITUTION_DOWN')), {
+    step: 'problem',
+    code: 'INSTITUTION_DOWN',
+  });
+  assert.deepEqual(BankLink.progress(event('FAIL_OAUTH', 'OAUTH')), { step: 'problem', code: 'FAIL_OAUTH' });
+  assert.deepEqual(BankLink.progress(event('TRANSITION_VIEW', 'ERROR')), { step: 'problem', code: 'TRANSITION_VIEW' });
+  assert.deepEqual(BankLink.progress(event('SELECT_DOWN_INSTITUTION', 'SELECT_INSTITUTION', 'Monzo')), {
+    step: 'problem',
+    code: 'SELECT_DOWN_INSTITUTION',
+  });
+});
+
+test('the approval step follows the bank list, the bank visit and the return', () => {
+  assert.equal(BankLink.next('opening', { step: 'choosingBank' }), 'choosing');
+  assert.equal(BankLink.next('choosing', { step: 'bankChosen', bankName: 'Monzo' }), 'opening');
+  assert.equal(BankLink.next('opening', { step: 'atBank', bankName: 'Monzo' }), 'atBank');
+  assert.equal(BankLink.next('atBank', { step: 'backFromBank' }), 'confirming');
+  assert.equal(BankLink.next('opening', { step: 'confirming' }), 'confirming');
+});
+
+test('a loading view before the bank visit, a late bank list and a problem keep the step', () => {
+  assert.equal(BankLink.next('opening', { step: 'backFromBank' }), 'opening');
+  assert.equal(BankLink.next('atBank', { step: 'choosingBank' }), 'atBank');
+  assert.equal(BankLink.next('atBank', { step: 'problem', code: 'FAIL_OAUTH' }), 'atBank');
+});
+
+test('a second bank visit after a return shows the bank step', () => {
+  assert.equal(BankLink.next('confirming', { step: 'atBank', bankName: null }), 'atBank');
 });
 
 test('other Link events are not progress', () => {
