@@ -101,7 +101,7 @@ export class SessionAuth {
 
   async startSession(tokens: TokenPair): Promise<void> {
     const nextOwner = this.ownerOrNull(tokens.accessToken);
-    if (nextOwner !== null && nextOwner !== this.owner) {
+    if (nextOwner !== null && (nextOwner !== this.owner || this.refusedRefreshToken !== null)) {
       this.notifySessionEnd({ owner: this.owner, reason: 'replaced', nextOwner });
     }
     const generation = this.beginSession();
@@ -134,9 +134,7 @@ export class SessionAuth {
   private refuse(refreshToken: string): void {
     this.refusedRefreshToken = refreshToken;
     this.session.begin();
-    const refusedOwner = this.owner;
-    this.owner = null;
-    this.notifySessionEnd({ owner: refusedOwner, reason: 'refused', nextOwner: null });
+    this.notifySessionEnd({ owner: this.owner, reason: 'refused', nextOwner: null });
   }
 
   private ownerOrNull(accessToken: string): string | null {

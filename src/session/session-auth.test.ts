@@ -377,8 +377,37 @@ test('a sign-in after a refused refresh names who signs in next, even the owner 
 
   assert.deepEqual(ended, [
     { owner: 'a', reason: 'refused', nextOwner: null },
-    { owner: null, reason: 'replaced', nextOwner: 'a' },
+    { owner: 'a', reason: 'replaced', nextOwner: 'a' },
   ]);
+});
+
+test("after a refused refresh, a later refresh with another tab's rotated token is still refused", async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'b2', refreshToken: 'b-r2' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new MemoryStore(null);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'));
+  store.refreshToken = 'b-r3';
+  await assert.rejects(auth.sessionRequest('GET', '/me'));
+
+  assert.equal(await auth.hasSession(), false);
+  assert.deepEqual(
+    ended.map((end) => end.reason),
+    ['refused', 'refused'],
+  );
 });
 
 test('a refresh that yields a token without a readable owner is refused once and leaves the store alone', async () => {
