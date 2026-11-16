@@ -24,6 +24,8 @@ export type BankRail = {
 export class BankPayment {
   static readonly option = 'bank';
   static readonly approvalHost = 'plaid.com';
+  static readonly approvalUnconfirmedMessage =
+    'Payment not confirmed. If you approved it, your card will appear in your wallet.';
   static readonly rails: readonly BankRail[] = [
     {
       country: 'GB',

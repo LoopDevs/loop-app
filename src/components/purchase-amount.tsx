@@ -24,10 +24,12 @@ export function AmountEntry({
   merchant,
   value,
   onChange,
+  onFocus,
 }: {
   merchant: Merchant;
   value: string;
   onChange: (next: string) => void;
+  onFocus?: () => void;
 }) {
   const theme = useTheme();
   const wholeUnits = merchant.denominationType === 'min-max-major';
@@ -35,6 +37,7 @@ export function AmountEntry({
     <TextInput
       value={value}
       onChangeText={onChange}
+      onFocus={onFocus}
       placeholder={merchant.shortAmount('0')}
       accessibilityLabel={`Amount in ${merchant.currency}`}
       keyboardType={wholeUnits ? 'number-pad' : 'decimal-pad'}
