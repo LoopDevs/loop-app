@@ -72,10 +72,14 @@ export function outcomeText(card: GiftCard, sentUnconfirmed = false): string | n
   if (paymentStatus === 'error' || paymentStatus === 'expired') {
     return "This order didn't go through. You weren't charged.";
   }
-  if (status === 'paid') {
-    return "We'll also email your card when it's ready.";
-  }
   return null;
+}
+
+export function processingNote(card: GiftCard, sentUnconfirmed = false): string | null {
+  if (card.status !== 'paid' || outcomeText(card, sentUnconfirmed) !== null) {
+    return null;
+  }
+  return "We'll also email your card when it's ready.";
 }
 
 export function cashbackState(

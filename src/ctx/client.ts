@@ -359,7 +359,7 @@ class CtxClient {
 
   async merchants({ country, name, ids, category, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
     const query = new URLSearchParams({ enabled: '1', order, country });
-    const pattern = Merchant.searchPattern(name ?? '');
+    const pattern = Merchant.namePattern(name ?? '');
     if (pattern) {
       query.set('name', pattern);
     }

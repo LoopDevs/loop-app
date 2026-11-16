@@ -34,6 +34,7 @@ import {
   giftCardStatusLabel,
   outcomeText,
   pollDelayMs,
+  processingNote,
   settledStatuses,
   wasCharged,
 } from '@/ctx/gift-card-status';
@@ -218,6 +219,7 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
   const cashback = cashbackState(giftCard);
   const payment = usePaymentSent(giftCard);
   const outcome = payment === undefined ? null : outcomeText(giftCard, payment.kind !== 'notSent');
+  const note = payment === undefined ? null : processingNote(giftCard, payment.kind !== 'notSent');
   const sentTxId = payment?.kind === 'sent' ? payment.txId : undefined;
   const byBank = BankPayment.isBank(giftCard);
   const processing = giftCard.status === 'paid';
@@ -292,6 +294,7 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
                 </>
               }>
               {outcome ? <Notice message={outcome} /> : null}
+            {note ? <Notice message={note} tone="neutral" /> : null}
               <GiftCardDetails giftCard={giftCard} onChange={onChange} />
             </SplitLayout>
           </PageWidth>
@@ -300,6 +303,7 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
         <View style={[styles.body, styles.section]}>
           <Animated.View entering={sectionEntering(1)} style={styles.section}>
             {outcome ? <Notice message={outcome} /> : null}
+            {note ? <Notice message={note} tone="neutral" /> : null}
             <GiftCardDetails giftCard={giftCard} onChange={onChange} />
           </Animated.View>
           <Animated.View entering={sectionEntering(2)}>{summary}</Animated.View>

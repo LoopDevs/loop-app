@@ -9,6 +9,7 @@ import {
   isHiddenFromHistory,
   needsPaymentSearch,
   outcomeText,
+  processingNote,
   pollDelayMs,
 } from './gift-card-status.ts';
 
@@ -164,8 +165,14 @@ test('unpaid and fulfilled cards have no outcome text', () => {
   assert.equal(outcomeText(card({ status: 'unpaid', paymentStatus: 'unpaid' })), null);
 });
 
-test('a processing card says the card is also emailed', () => {
-  assert.equal(outcomeText(card({ status: 'paid' })), "We'll also email your card when it's ready.");
+test('a processing card has no problem outcome and notes the card is also emailed', () => {
+  assert.equal(outcomeText(card({ status: 'paid' })), null);
+  assert.equal(processingNote(card({ status: 'paid' })), "We'll also email your card when it's ready.");
+});
+
+test('a processing card with a payment problem has no processing note', () => {
+  assert.equal(processingNote(card({ status: 'paid', paymentStatus: 'cancelled' })), null);
+  assert.equal(processingNote(card({ status: 'fulfilled' })), null);
 });
 
 test('a processing card with a cancelled or failed payment keeps the payment outcome', () => {
