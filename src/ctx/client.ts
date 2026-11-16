@@ -676,3 +676,9 @@ export const ctx = new CtxClient(
   process.env.EXPO_PUBLIC_CATALOG_URL || loopEnvironment.ctxApiUrl,
   CtxClient.runningAppVersion(),
 );
+
+ctx.onSessionEnd((end) => {
+  if (end.reason === 'refused') {
+    errorReporting.reportMessage('A refreshed CTX session was refused for its owner');
+  }
+});
