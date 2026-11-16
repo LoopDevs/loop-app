@@ -134,7 +134,9 @@ export class SessionAuth {
   private refuse(refreshToken: string): void {
     this.refusedRefreshToken = refreshToken;
     this.session.begin();
-    this.notifySessionEnd({ owner: this.owner, reason: 'refused', nextOwner: null });
+    const refusedOwner = this.owner;
+    this.owner = null;
+    this.notifySessionEnd({ owner: refusedOwner, reason: 'refused', nextOwner: null });
   }
 
   private ownerOrNull(accessToken: string): string | null {

@@ -355,6 +355,32 @@ test("a refresh that yields another user's tokens ends this session, keeps the s
   assert.equal(await auth.hasSession(), true);
 });
 
+test('a sign-in after a refused refresh names who signs in next, even the owner it refused', async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'b2', refreshToken: 'b-r2' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const auth = new SessionAuth(ctx.send, new MemoryStore(null), ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'a-r1' });
+  const ended: SessionEnd[] = [];
+  auth.onSessionEnd((end) => {
+    ended.push(end);
+  });
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'));
+  await auth.startSession({ accessToken: 'a3', refreshToken: 'a-r3' });
+
+  assert.deepEqual(ended, [
+    { owner: 'a', reason: 'refused', nextOwner: null },
+    { owner: null, reason: 'replaced', nextOwner: 'a' },
+  ]);
+});
+
 test('a refresh that yields a token without a readable owner is refused once and leaves the store alone', async () => {
   const ctx = new FakeCtx(async ({ path }) => {
     if (path === '/refresh-token') {

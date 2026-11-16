@@ -5,6 +5,7 @@ import { BankPayment } from './bank-payment.ts';
 import type { GiftCard } from './client.ts';
 import { CtxError } from './ctx-error.ts';
 import { OneTapBuy } from './one-tap-buy.ts';
+import { serviceStateMessages } from './service-state.ts';
 
 const now = Date.parse('2026-10-27T12:00:00Z');
 const later = '2026-10-27T12:30:00Z';
@@ -196,6 +197,17 @@ test('a failed bank order says not charged only when CTX refused it before charg
     BankPayment.unconfirmedMessage,
   );
   assert.equal(BankPayment.orderFailedMessage(new TypeError('Network request failed')), BankPayment.unconfirmedMessage);
+});
+
+test('a bank order CTX turns away while purchases are paused or Loop is down says so', () => {
+  assert.equal(
+    BankPayment.orderFailedMessage(new CtxError(503, '{"error":"ErrKillSwitchActive"}')),
+    serviceStateMessages['purchases-paused'],
+  );
+  assert.equal(
+    BankPayment.orderFailedMessage(new CtxError(503, '{"error":"ErrMaintenanceMode"}')),
+    serviceStateMessages.maintenance,
+  );
 });
 
 test('only the identity refusal asks for the legal name', () => {
