@@ -22,6 +22,7 @@ const STATIC_ROUTE_WORDS = new Set([
   'refresh-token',
   'shop',
   'pay',
+  'plaid',
   'wallet',
   'orders',
   'cash-out',
