@@ -503,7 +503,16 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
               Where do you shop?
             </ThemedText>
           </View>
-          <CountryPicker profile={profile} busy={busy} onChoose={chooseCountry} />
+          {profile.needsSetup() ? (
+            <CountryPicker profile={profile} busy={busy} onChoose={chooseCountry} />
+          ) : (
+            <Button
+              label={busy ? 'Setting up…' : 'Continue'}
+              variant="primary"
+              onPress={() => run(openWallet)}
+              disabled={busy}
+            />
+          )}
         </Animated.View>
       )}
       {step === 'secure' && (

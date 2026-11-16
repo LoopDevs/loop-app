@@ -611,7 +611,8 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     });
 
   const short = !byBank && tokenPrice !== null && balance !== null && tokenPrice > balance;
-  const walletReady = currency !== null && view !== null && cardRates !== null && usdPrice !== null && !short;
+  const walletBlocker = byBank ? null : WalletBlocker.of({ loaded: view !== null && cardRates !== null, currency, usdPrice, short });
+  const walletReady = walletBlocker === null;
   const canBuy =
     !busy &&
     !oneTapBuy.busy &&
@@ -867,8 +868,11 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
                 <SummaryRow label="You pay" value={byBank ? bankPrice : walletPrice} />
                 <SummaryRow label="Cashback" value={estimate ? `About ${estimate}` : null} emphasis />
                 {!byBank && <SummaryRow label="Your balance" value={balanceText} />}
-                {short && <InlineError text={notEnoughMessage} />}
+                {walletBlocker && walletBlocker !== 'loading' && <InlineError text={WalletBlocker.message(walletBlocker)} />}
               </View>
+              {walletBlocker === 'noFunds' && (
+                <Button label="Go to Home to add money" variant="quiet" onPress={() => router.navigate('/')} />
+              )}
             </ScrollView>
             <View style={styles.footer}>
               {message !== '' && <Notice message={message} />}
@@ -928,6 +932,44 @@ function SummaryRow({ label, value, emphasis = false }: { label: string; value: 
       </ThemedText>
     </View>
   );
+}
+
+type WalletBlock = 'loading' | 'noFunds' | 'noRate' | 'short';
+
+class WalletBlocker {
+  static of({
+    loaded,
+    currency,
+    usdPrice,
+    short,
+  }: {
+    loaded: boolean;
+    currency: PaymentCurrency | null;
+    usdPrice: bigint | null;
+    short: boolean;
+  }): WalletBlock | null {
+    if (!loaded) {
+      return 'loading';
+    }
+    if (currency === null) {
+      return 'noFunds';
+    }
+    if (usdPrice === null) {
+      return 'noRate';
+    }
+    return short ? 'short' : null;
+  }
+
+  static message(block: Exclude<WalletBlock, 'loading'>): string {
+    switch (block) {
+      case 'noFunds':
+        return 'Your balance is empty. Add money to buy this card.';
+      case 'noRate':
+        return "Prices aren't available right now. Try again in a moment.";
+      case 'short':
+        return notEnoughMessage;
+    }
+  }
 }
 
 function InlineError({ text }: { text: string }) {
