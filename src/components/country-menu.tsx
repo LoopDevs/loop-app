@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppLockScope } from '@/components/app-lock';
 import { PressScale } from '@/components/ui/press-scale';
 import { ThemedText } from '@/components/ui/themed-text';
 import { Elevation, FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
@@ -56,6 +57,7 @@ export function CountryMenu() {
         </PressScale>
       </View>
       <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
+        <AppLockScope>
         <View style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}>
           <Pressable
             style={[StyleSheet.absoluteFill, { backgroundColor: theme.scrim }]}
@@ -86,6 +88,7 @@ export function CountryMenu() {
             </ScrollView>
           </Animated.View>
         </View>
+        </AppLockScope>
       </Modal>
     </>
   );

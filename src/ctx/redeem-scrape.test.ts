@@ -112,6 +112,22 @@ test('a pin never duplicates the number and a page without a code returns nothin
   assert.equal(parseCardDetails([]), null);
 });
 
+test('reads a header row of labels followed by their values', () => {
+  const lines = ['Card number', 'PIN', '6012 3456 7890 1234', '4321'];
+  assert.deepEqual(parseCardDetails(lines), { number: '6012345678901234', pin: '4321' });
+});
+
+test('a line of words with digits is never read as the card number', () => {
+  assert.equal(parseCardDetails(['Gift card number', 'Order number 12345678901']), null);
+  assert.equal(parseCardDetails(['Gift card code', 'Call 1-800-555-0199']), null);
+  assert.deepEqual(parseCardDetails(['Gift card code', 'ABCD 1234 EFGH 5678']), { number: 'ABCD1234EFGH5678', pin: '' });
+  assert.deepEqual(parseCardDetails(['Gift card code', '8f3a dbce 41c2 9e07']), { number: '8f3adbce41c29e07', pin: '' });
+});
+
+test('a header row with a missing value saves nothing rather than shifting the pin into the number', () => {
+  assert.equal(parseCardDetails(['Card number', 'PIN', '1234567890']), null);
+});
+
 test('page messages are read defensively', () => {
   assert.deepEqual(readPageLines('{"lines":["Code","12345678901",7,null]}'), ['Code', '12345678901']);
   assert.deepEqual(readPageLines('{"lines":"Code"}'), []);
