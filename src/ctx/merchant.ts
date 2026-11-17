@@ -85,7 +85,7 @@ export class CashbackRate {
   }
 
   label(locale?: string): string {
-    return `${this.figure(locale)} cashback`;
+    return `${this.figure(locale)} off`;
   }
 
   on(amount: string, currency: string, locale?: string): string | null {

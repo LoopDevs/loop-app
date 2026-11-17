@@ -25,7 +25,6 @@ import type { Merchant } from '@/ctx/merchant';
 import { useMarket } from '@/hooks/use-market';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
-import { Savings } from '@/wallet/savings';
 
 const welcomeSeenKey = 'welcome.seen';
 const wallColumns = 3;
@@ -67,25 +66,25 @@ export function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
     },
     {
       key: 'bank',
-      title: 'Pay straight from your bank',
-      body: 'Approve each payment in your own banking app. No card numbers to type.',
+      title: 'Pay with XLM or USDC',
+      body: 'Send the payment from your own Stellar wallet. No card numbers to type.',
       visual: (
         <FeatureCard
           icon={{ ios: 'building.columns.fill', android: 'account_balance', web: 'account_balance' }}
-          title="Approve in your bank"
-          detail="Pay in pounds, with nothing to top up first."
+          title="Pay from your wallet"
+          detail="Scan a code or tap to open your wallet app."
         />
       ),
     },
     {
       key: 'savings',
-      title: 'Cashback that keeps growing',
-      body: 'Every purchase pays cashback into Savings, where it earns interest every day.',
+      title: 'A discount on every card',
+      body: 'You see the discount before you pay, and pay the lower price.',
       visual: (
         <FeatureCard
           icon={{ ios: 'leaf.fill', android: 'savings', web: 'savings' }}
-          title="Savings"
-          detail={Savings.rateHeadline()}
+          title="Lower price"
+          detail="The discount comes off what you pay."
         />
       ),
     },

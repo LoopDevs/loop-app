@@ -176,11 +176,11 @@ export default function WalletScreen() {
   const emptyState = failure ? null : !signedIn ? (
     <EmptyState
       icon="lock"
-      title="Sign in to see your wallet"
-      detail="Your balance, gift cards and cashback show here."
+      title="Sign in to see your gift cards"
+      detail="Gift cards you buy show here."
       action="Sign in"
       onAction={() =>
-        openSignIn("Sign in to see your balance, gift cards and cashback.")
+        openSignIn("Sign in to see your gift cards.")
       }
     />
   ) : loading ? (

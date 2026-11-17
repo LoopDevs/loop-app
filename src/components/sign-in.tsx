@@ -306,7 +306,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn, onWorking }: SignInFo
       setStep('country');
       return;
     }
-    await openWallet();
+    finish();
   };
 
   const confirmName = () =>
@@ -410,7 +410,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn, onWorking }: SignInFo
               Enter your email
             </ThemedText>
             <ThemedText themeColor="textSecondary">
-              {reason || 'Buy gift cards and earn cashback on every one.'}
+              {reason || 'Buy discounted gift cards with XLM or USDC.'}
             </ThemedText>
           </View>
           <SocialSignInButtons

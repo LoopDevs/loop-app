@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { Image } from 'expo-image';
@@ -61,7 +61,14 @@ const offersShown = featuredShown + Math.max(stripShown, maxBrandColumns * brand
 
 const preWalletScreens: Screen[] = ['loading', 'signed-out'];
 
-export default function HomeScreen() {
+export default function Landing() {
+  if (Platform.OS !== 'web') {
+    return <Redirect href="/shop" />;
+  }
+  return <HomeScreen />;
+}
+
+function HomeScreen() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>(Platform.OS === 'web' ? 'signed-out' : 'loading');
   const [wallet, setWallet] = useState<SmartWallet | null>(null);

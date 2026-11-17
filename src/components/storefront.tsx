@@ -211,8 +211,8 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
           </Text>
           <Text style={[styles.heroLine, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.6}>
             {best
-              ? `Buy gift cards for the shops you already use and earn up to ${best.rateFigure()} cashback.`
-              : 'Buy gift cards for the shops you already use and earn cashback on every card.'}
+              ? `Buy gift cards for the shops you already use and save up to ${best.rateFigure()}.`
+              : 'Buy discounted gift cards for the shops you already use.'}
           </Text>
           <MerchantSearch
             country={country}
@@ -585,7 +585,7 @@ export function TopCashback({ catalog, onOpen }: { catalog: Catalog | null; onOp
   }
   return (
     <View style={styles.section}>
-      <SectionHeading title="Top cashback" detail="The highest rates in your country right now." />
+      <SectionHeading title="Top discounts" detail="The biggest discounts in your country right now." />
       <MerchantGrid
         merchants={catalog ? catalog.top.slice(0, shown) : Array.from({ length: shown }, () => null)}
         onOpen={onOpen}

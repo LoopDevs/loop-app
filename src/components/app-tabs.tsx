@@ -42,13 +42,7 @@ function SignedInTabs() {
           fontSize: 11,
         },
       }}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="index" hidden />
 
       <NativeTabs.Trigger name="shop">
         <NativeTabs.Trigger.Label>Shop</NativeTabs.Trigger.Label>
@@ -58,13 +52,10 @@ function SignedInTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="savings">
-        <NativeTabs.Trigger.Label>Savings</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="leaf" md="savings" />
-      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="savings" hidden />
 
       <NativeTabs.Trigger name="wallet">
-        <NativeTabs.Trigger.Label>Wallet</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>My cards</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="wallet.pass" md="account_balance_wallet" />
       </NativeTabs.Trigger>
 

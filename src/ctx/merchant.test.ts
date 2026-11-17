@@ -84,7 +84,7 @@ test('the shown rate, label and estimate all come from the one resolved cashback
     link: { userDiscountOverride: true, userDiscountBasisPoints: 400 },
   });
   assert.equal(merchant.cashback.basisPoints, 400);
-  assert.equal(merchant.rateLabel('en-US'), '4% cashback');
+  assert.equal(merchant.rateLabel('en-US'), '4% off');
   assert.equal(merchant.cashbackEstimate('25.00', 'en-US'), '$1.00');
 });
 
@@ -124,9 +124,9 @@ test('a zero, reversed or closed-order cashback amount is not shown as cashback'
 });
 
 test('rate label shows up to two decimals', () => {
-  assert.equal(new Merchant(json).rateLabel('en-US'), '2.5% cashback');
-  assert.equal(new Merchant({ ...json, userDiscount: 1234 }).rateLabel('en-US'), '12.34% cashback');
-  assert.equal(new Merchant({ ...json, userDiscount: 500 }).rateLabel('en-US'), '5% cashback');
+  assert.equal(new Merchant(json).rateLabel('en-US'), '2.5% off');
+  assert.equal(new Merchant({ ...json, userDiscount: 1234 }).rateLabel('en-US'), '12.34% off');
+  assert.equal(new Merchant({ ...json, userDiscount: 500 }).rateLabel('en-US'), '5% off');
 });
 
 test('estimate rounds half up to the card currency subunit', () => {
@@ -333,7 +333,7 @@ test('the name pattern treats typed regex characters as text and is empty for a 
 
 test('the spoken name carries the rate only when one is shown', () => {
   const merchant = new Merchant(json);
-  assert.equal(merchant.spokenName('en-US'), `${merchant.name}, 2.5% cashback`);
+  assert.equal(merchant.spokenName('en-US'), `${merchant.name}, 2.5% off`);
   const unrated = new Merchant({ ...json, userDiscount: 0 });
   assert.equal(unrated.spokenName('en-US'), unrated.name);
 });

@@ -26,8 +26,6 @@ import { haptics } from '@/native/haptics';
 import { MailLink } from '@/components/message-screen';
 
 const bagIcon = { ios: 'bag', android: 'shopping_bag', web: 'shopping_bag' } as const;
-const leafIcon = { ios: 'leaf', android: 'savings', web: 'savings' } as const;
-const bankIcon = { ios: 'building.columns', android: 'account_balance', web: 'account_balance' } as const;
 const personIcon = { ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' } as const;
 const helpIcon = { ios: 'questionmark.circle', android: 'help', web: 'help' } as const;
 const privacyIcon = { ios: 'lock', android: 'lock', web: 'lock' } as const;
@@ -144,19 +142,7 @@ export default function ProfileScreen() {
                     detail="Your cards and codes"
                     onPress={() => router.navigate('/wallet')}
                   />
-                  <Tile
-                    icon={leafIcon}
-                    label="Savings"
-                    detail="Grow your cashback"
-                    onPress={() => router.navigate('/savings')}
-                  />
                 </View>
-                <WideCard
-                  icon={bankIcon}
-                  label="Cash out to your bank"
-                  detail="Move your balance to a UK bank account"
-                  onPress={() => router.push('/wallet/cash-out')}
-                />
                 <ListGroup>
                   <IconRow
                     icon={personIcon}
@@ -243,28 +229,6 @@ function Tile({ icon, label, detail, onPress }: CardProps) {
           {detail}
         </ThemedText>
       </View>
-    </PressScale>
-  );
-}
-
-function WideCard({ icon, label, detail, onPress }: CardProps) {
-  const theme = useTheme();
-  return (
-    <PressScale
-      style={[styles.card, styles.wideCard, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
-      onPress={() => {
-        haptics.tap();
-        onPress();
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={label}>
-      <View style={styles.accountText}>
-        <ThemedText type="smallBold">{label}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {detail}
-        </ThemedText>
-      </View>
-      <SymbolView name={icon} size={30} tintColor={theme.text} />
     </PressScale>
   );
 }
