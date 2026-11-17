@@ -20,7 +20,7 @@ export default function TermsScreen() {
           blocks: [
             {
               list: [
-                'You must be at least 18 and live in a country where Loop is available.',
+                'By using Loop you confirm you are at least 18 and live in a country where Loop is available.',
                 'You may have one Loop account, and the details you give us must be accurate.',
                 'Keep your phone and sign-in codes secure. You are responsible for activity on your account unless it was caused by our mistake or you told us your account was at risk.',
               ],
@@ -75,7 +75,7 @@ export default function TermsScreen() {
         {
           heading: '9. Closing your account',
           blocks: [
-            'You can close your account at any time from Settings or by contacting support. Spend, save or withdraw your balance first. We may close your account with notice, or straight away if required by law or in a case of fraud.',
+            'You can ask us to close your account at any time by emailing support. In Settings, Delete my account opens that email for you. Spend, save or withdraw your balance first. We may close your account with notice, or straight away if required by law or in a case of fraud.',
           ],
         },
         {
@@ -87,7 +87,7 @@ export default function TermsScreen() {
         {
           heading: '11. Changes to these terms',
           blocks: [
-            'We may update these terms. If a change affects you materially, we will tell you in the app or by email before it takes effect.',
+            'We may update these terms. The date at the top of this page shows when they last changed.',
           ],
         },
         {
