@@ -136,6 +136,22 @@ export class Merchant {
   private readonly discount: MerchantDiscount;
   private readonly company?: CompanyCashback;
 
+  static readonly smallestBankPayment = '1';
+
+  private static payableValues(json: MerchantJson): string[] {
+    const values = json.denominationValues ?? [];
+    const smallest = units.parseTruncated(Merchant.smallestBankPayment);
+    const payable = (value: string) => {
+      const amount = units.parseTruncated(value);
+      return amount === null || smallest === null || amount >= smallest;
+    };
+    if (json.denominationType === 'fixed') {
+      return values.filter(payable);
+    }
+    const [min, max] = values;
+    return min && max && !payable(min) ? [Merchant.smallestBankPayment, max] : values;
+  }
+
   constructor(json: MerchantJson, company?: CompanyCashback) {
     this.id = json.id;
     this.slug = json.slug;
@@ -143,7 +159,7 @@ export class Merchant {
     this.country = json.country;
     this.currency = json.currency;
     this.denominationType = json.denominationType;
-    this.denominationValues = json.denominationValues ?? [];
+    this.denominationValues = Merchant.payableValues(json);
     this.logoUrl = json.logoUrl;
     this.cardImageUrl = json.cardImageUrl;
     this.website = json.website;
