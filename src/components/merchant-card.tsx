@@ -43,7 +43,7 @@ export function MerchantCard({ merchant, onPress, favourite }: CardProps) {
       <PressScale
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}>
+        accessibilityLabel={merchant.spokenName()}>
         <MerchantCover merchant={merchant} size="card" />
         <View style={[styles.text, { paddingTop: coverClearance('card') }]}>
           <ThemedText type="smallBold" style={styles.name} numberOfLines={1} ellipsizeMode="tail">

@@ -320,6 +320,10 @@ export class Merchant {
     return this.cashback.figure(locale);
   }
 
+  spokenName(locale?: string): string {
+    return this.cashbackBasisPoints() > 0 ? `${this.name}, ${this.rateLabel(locale)}` : this.name;
+  }
+
   rateLabel(locale?: string): string {
     return this.cashback.label(locale);
   }

@@ -1,4 +1,4 @@
-import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -18,9 +18,10 @@ type PressScaleProps = Omit<PressableProps, 'style'> & {
 export function PressScale({ style, scale = Motion.pressScale, onPressIn, onPressOut, ...rest }: PressScaleProps) {
   const reduceMotion = useReducedMotion();
   const pressed = useSharedValue(0);
+  const restingOpacity = Number(StyleSheet.flatten(style)?.opacity ?? 1);
   const animated = useAnimatedStyle(() => ({
     transform: [{ scale: reduceMotion ? 1 : 1 - pressed.value * (1 - scale) }],
-    opacity: reduceMotion ? 1 - pressed.value * 0.25 : 1,
+    opacity: restingOpacity * (reduceMotion ? 1 - pressed.value * 0.25 : 1),
   }));
   return (
     <AnimatedPressable

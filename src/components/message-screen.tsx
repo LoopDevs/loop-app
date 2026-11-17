@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/form';
@@ -53,14 +53,21 @@ export function MessageScreen({ title, detail, message, children }: MessageScree
   );
 }
 
+export class MailLink {
+  static open(url: string): void {
+    Linking.openURL(url).catch(() => {
+      const address = url.replace(/^mailto:/, '').split('?')[0];
+      Alert.alert('Couldn’t open your email app', `Email ${address}.`);
+    });
+  }
+}
+
 export function ContactSupportButton({ subject }: { subject: string }) {
   return (
     <Button
       label="Email support"
       variant="quiet"
-      onPress={() => {
-        void Linking.openURL(loopLinks.supportMail(subject));
-      }}
+      onPress={() => MailLink.open(loopLinks.supportMail(subject))}
     />
   );
 }
