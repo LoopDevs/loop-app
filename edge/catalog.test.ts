@@ -125,6 +125,12 @@ test('an empty catalogue page stays empty', () => {
   assert.deepEqual(JSON.parse(body), { result: null });
 });
 
+test('a page whose result is not a list of merchants is refused', () => {
+  assert.equal(CatalogPage.withEdgeImages('{"result":{}}'), null);
+  assert.equal(CatalogPage.withEdgeImages('{"result":[null]}'), null);
+  assert.equal(CatalogPage.withEdgeImages('{"result":["x"]}'), null);
+});
+
 test('a page that is not a JSON object is refused', () => {
   assert.equal(CatalogPage.withEdgeImages('<html>'), null);
   assert.equal(CatalogPage.withEdgeImages('null'), null);

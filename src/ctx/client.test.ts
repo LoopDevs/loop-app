@@ -578,3 +578,10 @@ test('a sponsor answer with a missing hash or a non-string error is rejected and
     'CTX sponsor response is not an object',
   ]);
 });
+
+test('a successful answer that is not JSON is rejected with the server-failed message and reported', async () => {
+  await signIn('user-42');
+  respond = () => new Response('<html>gateway</html>', { status: 200 });
+  await assert.rejects(ctx.wallets(), { name: 'UnexpectedResponse', message: CtxError.serverFailedMessage });
+  assert.deepEqual(reported, ['CTX answered with a body that is not JSON']);
+});
