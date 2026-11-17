@@ -54,6 +54,10 @@ export default function ProfileScreen() {
       return;
     }
     try {
+      const remembered = ctx.rememberedProfile(await ctx.userId());
+      if (remembered) {
+        setEmail(remembered.email ?? null);
+      }
       const profile = await ctx.me();
       setEmail(profile.email ?? null);
       setAccountFailed(false);

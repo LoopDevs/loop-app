@@ -22,15 +22,30 @@ export type HoldingsView = {
   problem: string;
 };
 
+type LoadedHoldings = { address: string; view: HoldingsView };
+
+let lastLoaded: LoadedHoldings | null = null;
+let sessionsEnded = 0;
+
+ctx.onSessionEnd(() => {
+  sessionsEnded += 1;
+  lastLoaded = null;
+});
+
 export function useHoldings(wallet: SmartWallet | null) {
-  const [loaded, setLoaded] = useState<{ address: string; view: HoldingsView } | null>(null);
+  const [loaded, setLoadedState] = useState<LoadedHoldings | null>(lastLoaded);
+  const setLoaded = useCallback((next: LoadedHoldings | null) => {
+    lastLoaded = next;
+    setLoadedState(next);
+  }, []);
   const latestRequest = useRef(0);
   const view = wallet && loaded?.address === wallet.address ? loaded.view : null;
 
   const refresh = useCallback(async () => {
     const request = ++latestRequest.current;
+    const session = sessionsEnded;
     if (!wallet) {
-      setLoaded(null);
+      setLoadedState(null);
       return;
     }
     const [balances, fetchedAccount, profile, rates] = await Promise.all([
@@ -45,7 +60,7 @@ export function useHoldings(wallet: SmartWallet | null) {
         : await fetchedAccount
             .withoutLandedPayouts(wallet.address, (txHash) => wallet.transactionLanded(txHash))
             .catch((error: unknown) => new Error(errorMessage(error)));
-    if (request !== latestRequest.current) {
+    if (request !== latestRequest.current || session !== sessionsEnded) {
       return;
     }
     const failure = [account, profile].find((result) => result instanceof Error);
@@ -71,7 +86,7 @@ export function useHoldings(wallet: SmartWallet | null) {
             : '',
       },
     });
-  }, [wallet]);
+  }, [wallet, setLoaded]);
 
   return { view, refresh };
 }
