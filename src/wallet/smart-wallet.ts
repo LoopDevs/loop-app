@@ -98,6 +98,8 @@ export class SmartWallet {
   }
 
   static async endSession(end: SessionEnd): Promise<void> {
+    SmartWallet.sessionsEnded += 1;
+    SmartWallet.lastLoaded = null;
     SmartWallet.forgetConfirmations();
     await SmartWallet.forgetDeviceKeys(end).catch((error: unknown) => {
       errorReporting.reportError(error, 'Forgetting the device key at session end failed');
@@ -114,11 +116,33 @@ export class SmartWallet {
     return end.owner === null ? deviceSigner.forgetAllExcept(null) : deviceSigner.forget(end.owner);
   }
 
+  private static lastLoaded: SmartWallet | null = null;
+
+  private static sessionsEnded = 0;
+
+  static remembered(userId: string): SmartWallet | null {
+    return SmartWallet.lastLoaded?.userId === userId ? SmartWallet.lastLoaded : null;
+  }
+
   static async load(): Promise<SmartWallet | null> {
+    const session = SmartWallet.sessionsEnded;
+    try {
+      const wallet = await SmartWallet.loadChecked();
+      if (session === SmartWallet.sessionsEnded) {
+        SmartWallet.lastLoaded = wallet;
+      }
+      return wallet;
+    } catch (error) {
+      SmartWallet.lastLoaded = null;
+      throw error;
+    }
+  }
+
+  private static async loadChecked(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
     await SmartWallet.creation.settled(userId);
     if ((await ctx.userId()) !== userId) {
-      return SmartWallet.load();
+      return SmartWallet.loadChecked();
     }
     const pin = SmartWallet.pinFor(userId);
     const [links, pinned] = await Promise.all([ctx.wallets(), pin.read()]);
