@@ -549,7 +549,11 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
       errorReporting.reportError(error, `Bank approval could not open for order ${giftCard.id}`);
       return null;
     });
-    if (!outcome || outcome.kind === 'approved' || !mounted.current) {
+    if (!outcome || !mounted.current) {
+      return;
+    }
+    if (outcome.kind === 'approved') {
+      setPayment((held) => (held.kind === 'bank' ? { kind: 'confirming' } : held));
       return;
     }
     if (outcome.errorCode) {
