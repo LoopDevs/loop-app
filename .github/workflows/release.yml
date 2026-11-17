@@ -89,6 +89,10 @@ jobs:
               preview) required="EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID" ;;
               *) required="" ;;
             esac
+            if [ "$CHANNEL" = "production" ] && [ "$EXPO_PUBLIC_APPLE_SIGN_IN" != "true" ]; then
+              echo "::error::EXPO_PUBLIC_APPLE_SIGN_IN must be exactly 'true' in the EAS production environment"
+              status=1
+            fi
             for key in $required; do
               if [ -z "$(printenv "$key")" ]; then
                 echo "::error::$key is empty in the EAS $CHANNEL environment"

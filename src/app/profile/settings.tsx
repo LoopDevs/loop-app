@@ -292,7 +292,7 @@ export default function SettingsScreen() {
       <ListRow
         label="Request my data"
         trailing="external"
-        onPress={() => openMail(loopLinks.supportMail("Data request"))}
+        onPress={() => openMail(profile.dataRequestMail())}
       />
       <ListRow
         label="Delete my account"

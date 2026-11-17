@@ -127,7 +127,7 @@ export default function SavingsScreen() {
         haptics.success();
         toast(SavingsTopUp.withdrawAllMessage('success'));
       } finally {
-        await refresh();
+        await refresh().catch((error: unknown) => errorReporting.reportError(error, 'Savings refresh'));
       }
     });
 
