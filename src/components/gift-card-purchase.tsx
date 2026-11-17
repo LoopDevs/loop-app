@@ -192,6 +192,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
   const following = useRef(0);
   const buyTimer = useRef<BuyTimer | null>(null);
   const mounted = useRef(true);
+  const buyStartedHere = useRef(false);
   const live = useRef({ wallet, refresh });
   const heldOrder = useRef<GiftCard | null>(null);
 
@@ -352,10 +353,18 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
   );
 
   useEffect(() => {
+    let current = true;
     if (!oneTapBuy.busy) {
       resumeOrder();
+    } else if (!buyStartedHere.current) {
+      void oneTapBuy.settled().then(() => {
+        if (current && mounted.current && !buyStartedHere.current) {
+          resumeOrder();
+        }
+      });
     }
     return () => {
+      current = false;
       following.current += 1;
     };
   }, [resumeOrder, wallet.address]);
@@ -649,6 +658,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     setDraftAmount(fiatAmount);
     setPayment({ kind: 'sending' });
     setSpent(tokenPrice ?? 0n);
+    buyStartedHere.current = true;
     void settle(currency, () => oneTapBuy.start(buySteps(fiatAmount, currency), quote));
   };
 
@@ -677,6 +687,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     setConfirmPrice(null);
     setPayment({ kind: 'sending' });
     setSpent(orderPrice(order) ?? (usdPrice === null ? 0n : (BuyPrice.inTokens(confirmPrice, usdPrice) ?? 0n)));
+    buyStartedHere.current = true;
     void settle(currency, () => oneTapBuy.confirm(buySteps(order.cardFiatAmount, currency), order, quote));
   };
 
