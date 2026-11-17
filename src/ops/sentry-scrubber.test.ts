@@ -245,3 +245,10 @@ test('stack frames, mechanism and threads keep only code location fields', () =>
     assert.ok(!everything.includes(leaked), `leaked ${leaked}`);
   }
 });
+
+test('order and user ids are filtered from messages', () => {
+  assert.equal(
+    SentryScrubber.scrubString('Order 3f2b8c1e-9a4d-4e2f-8b7a-1c2d3e4f5a6b refused'),
+    'Order [Filtered] refused',
+  );
+});

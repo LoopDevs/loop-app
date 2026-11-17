@@ -58,6 +58,9 @@ export default function PayScreen() {
 
   const content = () => {
     const settling = signedIn === null || (signedIn && !walletChecked);
+    if (!merchant && message !== '') {
+      return fallback('We couldn’t load this gift card', 'Check your connection and try again.');
+    }
     if (!merchant || (settling && message === '')) {
       return (
         <View style={[styles.fallback, { paddingTop: topPadding }]}>
@@ -69,6 +72,9 @@ export default function PayScreen() {
           </View>
         </View>
       );
+    }
+    if (!merchant.isAvailable()) {
+      return fallback('Not available right now', `${merchant.name} gift cards can’t be bought at the moment.`);
     }
     if (signedIn === false) {
       return fallback('Sign in to buy', `Sign in from the merchant page to buy a ${merchant.name} gift card.`);

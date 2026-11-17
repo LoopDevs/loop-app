@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
@@ -24,6 +23,7 @@ import { useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
+import { MailLink } from '@/components/message-screen';
 
 const bagIcon = { ios: 'bag', android: 'shopping_bag', web: 'shopping_bag' } as const;
 const leafIcon = { ios: 'leaf', android: 'savings', web: 'savings' } as const;
@@ -100,7 +100,7 @@ export default function ProfileScreen() {
       icon={helpIcon}
       label="Get help"
       href={loopLinks.supportMail()}
-      onPress={() => Linking.openURL(loopLinks.supportMail())}
+      onPress={() => MailLink.open(loopLinks.supportMail())}
     />
   );
   const privacyRow = (

@@ -208,6 +208,16 @@ test('the deletion request carries the account id and email to support', () => {
   assert.match(body, /^Account email: ash@example\.com$/m);
 });
 
+test('the data request carries the account id and email to support', () => {
+  const profile = Profile.fromMe({ user: { id: 'u1', email: 'ash@example.com' }, company });
+  const mail = new URL(profile.dataRequestMail());
+  assert.equal(mail.pathname, 'hello@loopfinance.io');
+  assert.equal(mail.searchParams.get('subject'), 'Data request');
+  const body = mail.searchParams.get('body') ?? '';
+  assert.match(body, /^Account id: u1$/m);
+  assert.match(body, /^Account email: ash@example\.com$/m);
+});
+
 test('a legal name needs a first and last name', () => {
   assert.equal(Profile.legalNameProblem('Jane Doe'), null);
   assert.equal(Profile.legalNameProblem('  Jane   Mary Doe '), null);

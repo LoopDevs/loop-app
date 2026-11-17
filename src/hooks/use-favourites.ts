@@ -72,8 +72,9 @@ export function useFavourites() {
         loadedFor.current = userId;
         replace(FavouriteIds.parse(stored));
       }
-      toast(wanted ? 'Added to favourites' : 'Removed from favourites');
+      const done = wanted ? 'Added to favourites' : 'Removed from favourites';
       if (latest.current.has(merchantId) === wanted) {
+        toast(done);
         return;
       }
       writes.current += 1;
@@ -81,8 +82,10 @@ export function useFavourites() {
       replace(next);
       try {
         await AsyncStorage.setItem(key, next.serialize());
+        toast(done);
       } catch {
         replace(latest.current.toggled(merchantId));
+        toast("Couldn't save your favourites. Try again.");
       }
     },
     [replace, toast],

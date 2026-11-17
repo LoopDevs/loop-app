@@ -114,8 +114,14 @@ export default function MerchantScreen() {
 
   const rail = BankPayment.rail(merchant.currency);
   const payCopy = rail ? `Pay from your ${rail.bankLabel}.` : 'Pay from your Loop balance.';
-  const buyCard =
-    profile && !merchant.isSoldIn(profile.country) ? (
+  const buyCard = !merchant.isAvailable() ? (
+    <View style={cardStyle}>
+      <ThemedText type="heading">Not available right now</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {merchant.name} gift cards can’t be bought at the moment. Check back later.
+      </ThemedText>
+    </View>
+  ) : profile && !merchant.isSoldIn(profile.country) ? (
       <View style={cardStyle}>
         <ThemedText type="heading">Not sold in your country</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
@@ -209,11 +215,13 @@ export default function MerchantScreen() {
                 merchant={merchant}
                 wide={wide}
                 favourite={favourites.has(merchant.id)}
-                onFavourite={() =>
-                  signedIn
-                    ? toggleFavourite(merchant.id)
-                    : openSignIn(`Sign in to save ${merchant.name} to your favourites.`)
-                }
+                onFavourite={() => {
+                  if (signedIn) {
+                    void toggleFavourite(merchant.id);
+                  } else if (signedIn === false) {
+                    openSignIn(`Sign in to save ${merchant.name} to your favourites.`);
+                  }
+                }}
                 onTitleBottom={(bottom) => titleFrom.set(heroTop + bottom)}
               />
             }

@@ -158,7 +158,11 @@ export class CatalogPage {
     if (!page || typeof page !== 'object') {
       return null;
     }
-    for (const merchant of page.result ?? []) {
+    const merchants = page.result ?? [];
+    if (!Array.isArray(merchants) || merchants.some((merchant) => !merchant || typeof merchant !== 'object')) {
+      return null;
+    }
+    for (const merchant of merchants) {
       merchant.logoUrl = CatalogImage.url(merchant.logoUrl, CatalogImage.widths.logo);
       merchant.cardImageUrl = CatalogImage.url(merchant.cardImageUrl, CatalogImage.widths.card);
     }

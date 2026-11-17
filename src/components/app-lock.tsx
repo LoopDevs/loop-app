@@ -291,7 +291,6 @@ function LockView({ phase, message, primary, onUnlock, onUnlockShown }: LockView
 
   return (
     <Animated.View
-      pointerEvents={unlocking ? 'none' : 'auto'}
       exiting={reduceMotion ? undefined : FadeOut.duration(unlocking ? Motion.transition : Motion.exit)}
       accessibilityViewIsModal={primary}
       accessibilityElementsHidden={!primary}

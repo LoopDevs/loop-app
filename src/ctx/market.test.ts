@@ -41,6 +41,7 @@ test("each market has its local currency", () => {
   assert.equal(Market.localCurrency("US"), "USD");
   assert.equal(Market.localCurrency("CA"), "CAD");
   assert.equal(Market.localCurrency("IE"), "EUR");
+  assert.equal(Market.localCurrency("BG"), "EUR");
 });
 
 test("every supported country has a name where the engine has no Intl.DisplayNames", () => {

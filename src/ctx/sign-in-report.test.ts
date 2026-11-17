@@ -28,3 +28,11 @@ test('a refusal for another sign-in method is reported', () => {
     'CTX sign-in with email 400 ErrOAuthEmailUnverified',
   );
 });
+
+test('a rejected Apple or Google token is reported', () => {
+  assert.equal(
+    signInReportMessage('google', new CtxError(401, '{"error":"ErrOAuthTokenInvalid"}')),
+    'CTX sign-in with google 401 ErrOAuthTokenInvalid',
+  );
+  assert.equal(signInReportMessage('email', new CtxError(401, '{"error":"ErrTokenInvalid"}')), null);
+});

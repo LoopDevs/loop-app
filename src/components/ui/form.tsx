@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
-import { useId, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useId, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PressScale } from '@/components/ui/press-scale';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
@@ -148,9 +148,15 @@ type NoticeProps = {
 export function Notice({ message, actionLabel, onAction, disabled = false, tone = 'danger' }: NoticeProps) {
   const theme = useTheme();
   const tint = tone === 'danger' ? theme.danger : theme.accent;
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      AccessibilityInfo.announceForAccessibility(message);
+    }
+  }, [message]);
   return (
     <View
       style={[styles.notice, { backgroundColor: theme.backgroundSubtle, borderColor: theme.border }]}
+      accessibilityRole={tone === 'danger' ? 'alert' : undefined}
       accessibilityLiveRegion="polite">
       <View style={styles.noticeRow}>
         <SymbolView

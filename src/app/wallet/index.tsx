@@ -1,4 +1,3 @@
-import * as Linking from "expo-linking";
 import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
@@ -54,6 +53,7 @@ import { useSessionOwner } from "@/hooks/use-session-owner";
 import { haptics } from "@/native/haptics";
 import { useTheme } from "@/hooks/use-theme";
 import { dates, money } from "@/money";
+import { MailLink } from "@/components/message-screen";
 
 const ordersPerPage = 20;
 const staggeredRows = 8;
@@ -130,7 +130,7 @@ export default function WalletScreen() {
               .map((giftCard) => giftCard.paymentId),
           );
           pageCount = pagination.pages;
-          if (shownResult.length > 0 || next >= pageCount) {
+          if (result.length === 0 || shownResult.length > 0 || !(next < pageCount)) {
             break;
           }
           next += 1;
@@ -482,7 +482,7 @@ function WalletHelp() {
       </ThemedText>
       <Button
         label="Contact support"
-        onPress={() => Linking.openURL(loopLinks.supportMail())}
+        onPress={() => MailLink.open(loopLinks.supportMail())}
       />
     </View>
   );

@@ -20,6 +20,7 @@ export class PayRequest {
     }
     params.set('asset_code', PayRequest.assetCode);
     params.set('asset_issuer', network.usdcIssuer);
+    params.set('network_passphrase', network.passphrase);
     return `${PayRequest.scheme}?${params.toString()}`;
   }
 }

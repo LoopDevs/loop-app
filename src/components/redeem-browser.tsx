@@ -2,7 +2,7 @@ import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
 
 import { AppLockScope } from '@/components/app-lock';
 import { useToast } from '@/components/ui/toast';
@@ -30,6 +30,18 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
   const saving = useRef(false);
   const failedSaves = useRef(0);
   const [progress, setProgress] = useState(0);
+  const pageBack = useRef<(() => void) | null>(null);
+  const canGoBack = useRef(false);
+  const holdPage = (page: { goBack(): void } | null): void => {
+    pageBack.current = page ? () => page.goBack() : null;
+  };
+  const goBackOrClose = () => {
+    if (canGoBack.current) {
+      pageBack.current?.();
+      return;
+    }
+    onClose();
+  };
   const awaitingCode = !giftCard.number && !giftCard.pin;
 
   const onMessage = async (event: WebViewMessageEvent) => {
@@ -56,7 +68,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
   };
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible animationType="slide" onRequestClose={goBackOrClose} statusBarTranslucent>
       <AppLockScope>
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border }]}>
@@ -84,6 +96,10 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
           {progress < 1 && <View style={[styles.bar, { backgroundColor: theme.accent, width: `${progress * 100}%` }]} />}
         </View>
         <WebView
+          ref={holdPage}
+          onNavigationStateChange={(state: WebViewNavigation): void => {
+            canGoBack.current = state.canGoBack;
+          }}
           source={{ uri: url }}
           style={[styles.web, { backgroundColor: theme.background }]}
           injectedJavaScript={pageLinesScript}

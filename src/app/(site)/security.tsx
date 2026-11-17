@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
 
@@ -9,6 +8,7 @@ import { loopLinks } from '@/constants/loop-links';
 import { Radius, Spacing } from '@/constants/theme';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { MailLink } from '@/components/message-screen';
 
 type Protection = {
   icon: SymbolViewProps['name'];
@@ -74,7 +74,7 @@ export default function SecurityScreen() {
         <View style={styles.report}>
           <Button
             label={`Email ${loopLinks.securityEmail}`}
-            onPress={() => Linking.openURL(`mailto:${loopLinks.securityEmail}`)}
+            onPress={() => MailLink.open(`mailto:${loopLinks.securityEmail}`)}
           />
         </View>
       </SiteSection>

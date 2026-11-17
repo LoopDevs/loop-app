@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 
-import { CatalogImage, CatalogPage, CatalogQuery, EdgeCache, serveImage } from './catalog.ts';
+import { CatalogImage, CatalogPage, CatalogQuery, EdgeCache, serveImage, serveMerchants } from './catalog.ts';
 
 const s3 = 'https://ctx-spend.s3.us-west-2.amazonaws.com/0/abc';
 const realFetch = globalThis.fetch;
@@ -125,6 +125,12 @@ test('an empty catalogue page stays empty', () => {
   assert.deepEqual(JSON.parse(body), { result: null });
 });
 
+test('a page whose result is not a list of merchants is refused', () => {
+  assert.equal(CatalogPage.withEdgeImages('{"result":{}}'), null);
+  assert.equal(CatalogPage.withEdgeImages('{"result":[null]}'), null);
+  assert.equal(CatalogPage.withEdgeImages('{"result":["x"]}'), null);
+});
+
 test('a page that is not a JSON object is refused', () => {
   assert.equal(CatalogPage.withEdgeImages('<html>'), null);
   assert.equal(CatalogPage.withEdgeImages('null'), null);
@@ -231,5 +237,82 @@ test('a cached entry that is not an image is refused and evicted', async () => {
   assert.equal(await response.text(), '');
   assert.equal(response.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; sandbox");
   assert.equal(log.deletes.length, 1);
+  assert.equal(log.puts.length, 0);
+});
+
+function merchantsContext(url: string, method = 'GET') {
+  const background: Promise<unknown>[] = [];
+  const context = {
+    request: new Request(url, { method }),
+    env,
+    waitUntil: (promise: Promise<unknown>) => background.push(promise),
+  };
+  return { context, background };
+}
+
+test('a catalogue request that is not a GET is refused before any lookup', async () => {
+  globalThis.fetch = (async () => assert.fail('nothing is fetched')) as typeof fetch;
+  globalThis.caches = {
+    default: { match: async () => assert.fail('the cache is not read') },
+  } as unknown as CacheStorage;
+  const { context } = merchantsContext('https://loop.test/api/catalog/merchants?country=US', 'POST');
+  const response = await serveMerchants(context);
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('allow'), 'GET');
+});
+
+test('a catalogue request with an unsupported query is refused before any lookup', async () => {
+  globalThis.fetch = (async () => assert.fail('nothing is fetched')) as typeof fetch;
+  globalThis.caches = {
+    default: { match: async () => assert.fail('the cache is not read') },
+  } as unknown as CacheStorage;
+  const { context } = merchantsContext('https://loop.test/api/catalog/merchants?country=usa');
+  const response = await serveMerchants(context);
+  assert.equal(response.status, 400);
+  assert.equal(await response.text(), 'Unsupported catalogue query');
+});
+
+test('a catalogue page from CTX is rewritten for the edge, cached and served as a miss', async () => {
+  const log: CacheLog = { puts: [], deletes: [] };
+  globalThis.caches = { default: fakeCache(undefined, log) } as unknown as CacheStorage;
+  const fetched: { url: string; headers: Headers }[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetched.push({ url: String(input), headers: new Headers(init?.headers) });
+    return new Response(JSON.stringify({ result: [{ logoUrl: s3 }] }), { status: 200 });
+  }) as typeof fetch;
+  const { context } = merchantsContext('https://loop.test/api/catalog/merchants?page=2&country=US');
+  const response = await serveMerchants(context);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-catalog-cache'), 'MISS');
+  assert.equal(response.headers.get('content-type'), 'application/json; charset=UTF-8');
+  const page = await response.json();
+  assert.equal(page.result[0].logoUrl, `/api/catalog/image?src=${encodeURIComponent(s3)}&w=256`);
+  assert.deepEqual(
+    fetched.map((call) => call.url),
+    ['https://ctx.test/merchants?country=US&page=2'],
+  );
+  assert.equal(fetched[0].headers.get('x-client-id'), 'loopapp');
+  assert.equal(log.puts.length, 1);
+});
+
+test('a catalogue page that is not a list of merchants answers 502 and is not cached', async () => {
+  const log: CacheLog = { puts: [], deletes: [] };
+  globalThis.caches = { default: fakeCache(undefined, log) } as unknown as CacheStorage;
+  globalThis.fetch = (async () => new Response('not json', { status: 200 })) as typeof fetch;
+  const { context } = merchantsContext('https://loop.test/api/catalog/merchants?country=US');
+  const response = await serveMerchants(context);
+  assert.equal(response.status, 502);
+  assert.equal(log.puts.length, 0);
+});
+
+test('a CTX failure is passed through uncached', async () => {
+  const log: CacheLog = { puts: [], deletes: [] };
+  globalThis.caches = { default: fakeCache(undefined, log) } as unknown as CacheStorage;
+  globalThis.fetch = (async () => new Response('upstream down', { status: 503 })) as typeof fetch;
+  const { context } = merchantsContext('https://loop.test/api/catalog/merchants?country=US');
+  const response = await serveMerchants(context);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(await response.text(), 'upstream down');
   assert.equal(log.puts.length, 0);
 });

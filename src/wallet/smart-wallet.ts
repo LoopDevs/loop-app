@@ -11,6 +11,7 @@ import {
   type SmartWalletIntent,
 } from '@/ctx/client';
 import type { BuyTimer } from '@/ctx/buy-timer';
+import { Deadline } from '@/ctx/deadline';
 import { CtxError } from '@/ctx/ctx-error';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
@@ -250,7 +251,8 @@ export class SmartWallet {
     if (!network.friendbotUrl) {
       throw new Error('Friendbot is only available on testnet');
     }
-    const response = await fetch(`${network.friendbotUrl}/?addr=${this.address}`);
+    const url = `${network.friendbotUrl}/?addr=${this.address}`;
+    const response = await Deadline.run(Deadline.requestMs, (signal) => fetch(url, { signal }));
     if (!response.ok) {
       throw new Error(`Friendbot ${response.status}: ${await response.text()}`);
     }
