@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import type { GiftCard } from './client.ts';
 import {
   cashbackState,
+  codeWaitPolls,
+  followsOrder,
   cashbackStateLabel,
   giftCardStatusLabel,
   isHiddenFromHistory,
@@ -213,4 +215,14 @@ test('an expired order with a sent payment is shown in history', () => {
 test('cashback CTX has credited reads on the way, as the Cashback screen does until the payout lands', () => {
   assert.equal(cashbackStateLabel('pending'), 'pending');
   assert.equal(cashbackStateLabel('credited'), 'on the way');
+});
+
+test('an order is followed until it settles, and a fulfilled card with no code is followed until the wait runs out', () => {
+  assert.equal(followsOrder(card({ status: 'paid' }), 500), true);
+  assert.equal(followsOrder(card({ status: 'expired' }), 0), false);
+  assert.equal(followsOrder(card({ status: 'fulfilled', number: '1234' }), 0), false);
+  assert.equal(followsOrder(card({ status: 'fulfilled', redeemUrl: 'https://supplier.example/c' }), 0), false);
+  const bare = card({ status: 'fulfilled', number: undefined, pin: undefined, redeemUrl: undefined, barcodeUrl: undefined });
+  assert.equal(followsOrder(bare, 0), true);
+  assert.equal(followsOrder(bare, codeWaitPolls), false);
 });

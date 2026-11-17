@@ -10,6 +10,16 @@ export function pollDelayMs(polls: number): number {
 }
 export const settledStatuses: GiftCard['status'][] = ['fulfilled', 'rejected', 'refunded', 'expired'];
 export const unpaidStatuses: GiftCard['status'][] = ['unpaid'];
+export const codeWaitPolls = 60;
+
+export function awaitsCode(card: GiftCard): boolean {
+  const delivered = card.barcodeUrl || card.number || card.pin || card.redeemUrlChallenge || card.redeemUrl;
+  return card.status === 'fulfilled' && !delivered;
+}
+
+export function followsOrder(card: GiftCard, polls: number): boolean {
+  return !settledStatuses.includes(card.status) || (awaitsCode(card) && polls < codeWaitPolls);
+}
 
 export function wasCharged(card: GiftCard): boolean {
   return card.paymentStatus === 'paid' || Boolean(card.paymentCryptoTxId) || card.paymentMethod !== 'crypto';
