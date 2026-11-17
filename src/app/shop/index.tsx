@@ -37,6 +37,7 @@ import { useFavourites } from '@/hooks/use-favourites';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useProfile } from '@/hooks/use-profile';
+import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 
 const merchantsPerPage = 20;
@@ -78,7 +79,8 @@ export default function ShopScreen() {
   const runAccount = account.load;
   const runListing = listing.load;
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const { profile, startProfileRead } = useProfile();
+  const { profile, setProfile, startProfileRead } = useProfile();
+  const readSession = useSessionOwner();
   const { country: marketCountry } = useMarket();
   const [profileUnread, setProfileUnread] = useState(false);
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
@@ -108,9 +110,14 @@ export default function ShopScreen() {
   const loadAccount = useCallback(
     () =>
       runAccount(async () => {
-        const isSignedIn = await ctx.isSignedIn();
-        setSignedIn(isSignedIn);
-        if (!isSignedIn) {
+        const { userId, changed } = await readSession();
+        if (userId === null || changed) {
+          setProfile(null);
+          setActiveOrder(null);
+          setRecentlyBought([]);
+        }
+        setSignedIn(userId !== null);
+        if (userId === null) {
           return;
         }
         const loadedOrder = dismissedOrders.activeOrder().catch(() => null);
@@ -124,7 +131,7 @@ export default function ShopScreen() {
         }
         setActiveOrder(await loadedOrder);
       }),
-    [runAccount, startProfileRead],
+    [runAccount, startProfileRead, readSession, setProfile],
   );
 
   useFocusEffect(
