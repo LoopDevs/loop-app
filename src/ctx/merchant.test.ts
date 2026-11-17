@@ -47,12 +47,13 @@ test('a link without an override keeps the merchant default', () => {
   assert.equal(new Merchant({ ...json, link: { userDiscountOverride: true } }).cashbackBasisPoints(), 250);
 });
 
-test('the company default rate replaces the merchant default', () => {
+test('the company default rate replaces the merchant default for a linked merchant only', () => {
   const company = new CompanyCashback();
   company.learn({ defaultUserDiscountBasisPoints: 500 });
-  assert.equal(new Merchant(json, company).cashbackBasisPoints(), 500);
-  assert.equal(new Merchant({ ...json, link: {} }, company).cashbackBasisPoints(), 500);
-  assert.equal(new Merchant(json, company).cashbackEstimate('25.00', 'en-US'), '$1.25');
+  const linked = { ...json, link: {} };
+  assert.equal(new Merchant(linked, company).cashbackBasisPoints(), 500);
+  assert.equal(new Merchant(linked, company).cashbackEstimate('25.00', 'en-US'), '$1.25');
+  assert.equal(new Merchant(json, company).cashbackBasisPoints(), 250);
 });
 
 test('a link override beats the company default', () => {
@@ -67,7 +68,7 @@ test('a link override beats the company default', () => {
 
 test('a company default learned later reaches merchants already loaded', () => {
   const company = new CompanyCashback();
-  const merchant = new Merchant(json, company);
+  const merchant = new Merchant({ ...json, link: {} }, company);
   assert.equal(merchant.cashbackBasisPoints(), 250);
   company.learn({ defaultUserDiscountBasisPoints: 500 });
   assert.equal(merchant.cashbackBasisPoints(), 500);
