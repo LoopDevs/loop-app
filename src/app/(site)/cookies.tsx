@@ -7,25 +7,25 @@ export default function CookiesScreen() {
       title="Cookie policy"
       updated="26 October 2026"
       draft
-      lead="Cookies are small files a website stores in your browser. This page explains which ones Loop uses on the web and why."
+      lead="This page explains what the Loop website stores in your browser and why. Loop doesn’t use cookies for analytics or advertising."
       sections={[
         {
-          heading: 'Cookies we need',
+          heading: 'Storage we need',
           blocks: [
             'These keep the site working and can’t be switched off:',
             {
               list: [
                 'Keeping you signed in as you move between pages.',
-                'Remembering the country you shop in.',
-                'Protecting your account and spotting suspicious activity.',
+                'Remembering the country you shop in and your favourites.',
+                'Keeping the key that approves your payments on this browser.',
               ],
             },
           ],
         },
         {
-          heading: 'Cookies that help us improve',
+          heading: 'Analytics and crash reports',
           blocks: [
-            'With your permission, we use privacy-friendly analytics to understand which pages are used and where things go wrong. This information is grouped and doesn’t identify you.',
+            'We don’t use analytics, so there is no cookie banner to answer. If the site hits an error, a crash report may be sent to our error-reporting provider so we can fix it.',
           ],
         },
         {
@@ -33,10 +33,10 @@ export default function CookiesScreen() {
           blocks: ['We don’t use advertising cookies, and we don’t let advertisers track you on Loop.'],
         },
         {
-          heading: 'Managing cookies',
+          heading: 'Managing stored data',
           blocks: [
-            'You can change your choice at any time, and you can block or delete cookies in your browser settings. If you block the cookies we need, parts of the site may stop working.',
-            'The Loop app on your phone stores similar information on your device for the same reasons.',
+            'You can clear this storage in your browser settings. If you do, you will be signed out and parts of the site may stop working.',
+            'The Loop app on your phone keeps similar information on your device for the same reasons.',
           ],
         },
         {
