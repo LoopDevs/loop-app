@@ -65,8 +65,9 @@ export function CryptoPay({ giftCard }: { giftCard: GiftCard }) {
     <View style={styles.stack}>
       <ThemedText type="heading">{`Send ${amount} ${asset}`}</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Pay from any Stellar wallet. Send the exact amount{link.memo ? ' with the memo below' : ''}. Your gift card
-        arrives here a few minutes after the payment.
+        Pay from a Stellar wallet such as LOBSTR or Freighter. Open it with the button, scan the code, or choose Send
+        in your wallet and paste the details below. Send the exact amount{link.memo ? ' and include the memo' : ''}.
+        Your gift card arrives here a few minutes after the payment.
       </ThemedText>
       <QrCode value={link.uri ?? link.destination} accessibilityLabel="Payment code for your wallet app" />
       {left && (
@@ -77,7 +78,7 @@ export function CryptoPay({ giftCard }: { giftCard: GiftCard }) {
       {link.uri && <Button label="Open my wallet app" variant="primary" onPress={() => openWallet(link.uri ?? '')} />}
       <Detail label="Amount" value={`${amount} ${asset}`} onCopy={() => copy(amount, 'Amount')} />
       <Detail label="Address" value={link.destination} onCopy={() => copy(link.destination, 'Address')} />
-      {link.memo && <Detail label="Memo" value={link.memo} onCopy={() => copy(link.memo ?? '', 'Memo')} />}
+      {link.memo && <Detail label="Memo (text)" value={link.memo} onCopy={() => copy(link.memo ?? '', 'Memo')} />}
       {message !== '' && <Notice message={message} />}
     </View>
   );
