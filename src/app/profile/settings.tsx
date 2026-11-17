@@ -457,7 +457,7 @@ function SpendingDevice() {
         const next = await SmartWallet.load().then(
           (wallet): SpendingAccess | null =>
             wallet && { wallet, device: "ready" },
-          (error: unknown) => {
+          (error: unknown): SpendingAccess => {
             if (error instanceof UnlinkedDevice) {
               return { wallet: error.wallet, device: "elsewhere" };
             }
