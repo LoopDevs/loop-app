@@ -39,7 +39,6 @@ import {
   followsOrder,
   wasCharged,
 } from '@/ctx/gift-card-status';
-import { CashbackRate } from '@/ctx/merchant';
 import { OrderWake } from '@/ctx/order-wake';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { CryptoPay } from '@/components/crypto-pay';
@@ -241,10 +240,9 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
       ? amountInMoney(giftCard.paymentCryptoAmount, giftCard.paymentCryptoCurrency)
       : null;
   const cashbackAmount = amountInMoney(giftCard.cashbackAmount, giftCard.cashbackCurrency);
-  const quotedCashback = cashback === 'none' ? CashbackRate.quotedFor(giftCard) : null;
   const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
 
-  const summary = (paid || cashback !== 'none' || quotedCashback) && (
+  const summary = (paid || cashback !== 'none') && (
     <View
       style={[
         styles.summary,
@@ -261,7 +259,6 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
           tone={cashback === 'reversed' ? 'danger' : 'success'}
         />
       )}
-      {quotedCashback && <SummaryRow label="Cashback, expected" value={quotedCashback} />}
       <SummaryRow label="Ordered" value={dates.day(giftCard.created)} />
     </View>
   );

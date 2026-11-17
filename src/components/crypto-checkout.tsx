@@ -15,6 +15,7 @@ import { ctx, CtxError, type GiftCard } from '@/ctx/client';
 import type { Merchant } from '@/ctx/merchant';
 import type { Profile } from '@/ctx/profile';
 import { useBusyAction } from '@/hooks/use-busy-action';
+import { useNow } from '@/hooks/use-now';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import type { PaymentCurrency } from '@/stellar/network';
@@ -32,6 +33,8 @@ const payWithChoices: readonly { currency: PaymentCurrency; label: string }[] = 
   { currency: 'XLM.USDC', label: 'USDC' },
 ];
 
+const payableTickMs = 30_000;
+
 function firstAmount(merchant: Merchant): string {
   return merchant.denominationType === 'fixed' ? (merchant.denominationValues[0] ?? '') : '';
 }
@@ -45,6 +48,7 @@ export function CryptoCheckout({ merchant, profile, activeOrder, onAmountFocus }
   const [payWith, setPayWith] = useState<PaymentCurrency>('XLM');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showingTerms, setShowingTerms] = useState(false);
+  const now = useNow(payableTickMs);
 
   useEffect(() => {
     let current = true;
@@ -112,7 +116,11 @@ export function CryptoCheckout({ merchant, profile, activeOrder, onAmountFocus }
     void order();
   };
 
-  if (activeOrder) {
+  const payable =
+    activeOrder !== null &&
+    (!activeOrder.paymentUrlExpiration || Date.parse(activeOrder.paymentUrlExpiration) > now);
+
+  if (activeOrder && payable) {
     return (
       <View style={styles.stack}>
         <ThemedText type="heading">Your order is waiting for payment</ThemedText>

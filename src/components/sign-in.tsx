@@ -357,7 +357,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn, onWorking }: SignInFo
   const chooseCountry = (choice: CountryChoice) =>
     run(async () => {
       await applyCountryChoice(choice);
-      await openWallet();
+      finish();
     });
 
   const secureAccount = () => run(createWallet);

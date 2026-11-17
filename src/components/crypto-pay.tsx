@@ -38,7 +38,15 @@ export function CryptoPay({ giftCard }: { giftCard: GiftCard }) {
   if (!link || !amount || !asset) {
     return <Notice message="We couldn’t load the payment details for this order. Pull down to try again." />;
   }
+  if (!link.uri && asset !== 'XLM') {
+    return <Notice message="We couldn’t load the payment details for this order. Pull down to try again." />;
+  }
   const left = timeLeft(giftCard.paymentUrlExpiration, now);
+  if (left === '0:00') {
+    return (
+      <Notice message="The time to pay for this order has run out. Don’t send a payment for it. Go back to the shop to start a new order." />
+    );
+  }
 
   const copy = async (text: string, what: string) => {
     await Clipboard.setStringAsync(text);
@@ -63,7 +71,7 @@ export function CryptoPay({ giftCard }: { giftCard: GiftCard }) {
       <QrCode value={link.uri ?? link.destination} accessibilityLabel="Payment code for your wallet app" />
       {left && (
         <ThemedText type="smallBold" style={styles.centered} accessibilityLiveRegion="none">
-          {left === '0:00' ? 'The time to pay has run out' : `Pay within ${left}`}
+          {`Pay within ${left}`}
         </ThemedText>
       )}
       {link.uri && <Button label="Open my wallet app" variant="primary" onPress={() => openWallet(link.uri ?? '')} />}
