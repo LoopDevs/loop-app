@@ -329,3 +329,10 @@ test('the name pattern treats typed regex characters as text and is empty for a 
   assert.equal(new RegExp(Merchant.namePattern('a.b'), 'i').test('axb'), false);
   assert.equal(Merchant.namePattern('a,b').includes(','), false);
 });
+
+test('the spoken name carries the rate only when one is shown', () => {
+  const merchant = new Merchant(json);
+  assert.equal(merchant.spokenName('en-US'), `${merchant.name}, 2.5% cashback`);
+  const unrated = new Merchant({ ...json, userDiscount: 0 });
+  assert.equal(unrated.spokenName('en-US'), unrated.name);
+});

@@ -107,6 +107,7 @@ export default function GiftCardScreen() {
           return;
         }
         setGiftCard(loaded);
+        setRefreshing(false);
         while (active && !settledStatuses.includes(loaded.status)) {
           stopWatching ??= ctx.watchOrder(id, wake).catch(() => () => undefined);
           await wake.wait(Math.max(wake.interval(), pollDelayMs(polls)));

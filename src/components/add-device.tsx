@@ -5,7 +5,7 @@ export function AddDevice({ wallet, onAdded }: { wallet: SmartWallet; onAdded: (
   return (
     <WalletStep
       title="Use Loop on this device"
-      body="You’ll confirm it’s you with Face ID, your fingerprint or your screen lock. You can then pay from this device only. To pay from another device again, set it up again there."
+      body="You’ll confirm it’s you with Face ID or your fingerprint. You can then pay from this device only. To pay from another device again, set it up again there."
       label="Continue"
       busyLabel="Setting up…"
       run={(signal) => wallet.addThisDevice(signal)}

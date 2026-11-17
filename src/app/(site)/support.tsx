@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import { Link } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
@@ -9,6 +8,7 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { loopLinks } from '@/constants/loop-links';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { MailLink } from '@/components/message-screen';
 
 const details = [
   'The email address on your Loop account.',
@@ -51,7 +51,7 @@ function ContactActions() {
         <Button
           label="Email support"
           variant="primary"
-          onPress={() => Linking.openURL(loopLinks.supportMail())}
+          onPress={() => MailLink.open(loopLinks.supportMail())}
         />
       </View>
       <ThemedText type="small" themeColor="textSecondary">
