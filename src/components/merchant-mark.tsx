@@ -59,10 +59,18 @@ type LogoDiscProps = {
 export function LogoDisc({ merchant, name, size = 40 }: LogoDiscProps) {
   const theme = useTheme();
   const frame = { width: size, height: size };
-  if (merchant?.logoUrl) {
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const logoUrl = merchant?.logoUrl;
+  if (logoUrl && logoUrl !== failedLogoUrl) {
     return (
       <View style={[styles.disc, frame, { backgroundColor: brandTint(merchant) }]}>
-        <Image source={{ uri: merchant.logoUrl }} contentFit="contain" style={styles.logo} accessible={false} />
+        <Image
+          source={{ uri: logoUrl }}
+          contentFit="contain"
+          style={styles.logo}
+          accessible={false}
+          onError={() => setFailedLogoUrl(logoUrl)}
+        />
       </View>
     );
   }

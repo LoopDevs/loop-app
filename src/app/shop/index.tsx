@@ -96,6 +96,7 @@ export default function ShopScreen() {
   const [recentlyBought, setRecentlyBought] = useState<Merchant[]>([]);
   const [favouriteMerchants, setFavouriteMerchants] = useState<Merchant[]>([]);
   const { favourites, toggle: toggleFavourite } = useFavourites();
+  const favouriteIdList = favourites.ids.join(',');
   const [pickedCategory, setPickedCategory] = useState<{ country?: string; category: string | null }>({
     category: null,
   });
@@ -242,7 +243,7 @@ export default function ShopScreen() {
       return;
     }
     let current = true;
-    loadByIds(country, favourites.ids)
+    loadByIds(country, favouriteIdList ? favouriteIdList.split(',') : [])
       .catch(() => [])
       .then((loaded) => {
         if (current) {
@@ -252,7 +253,7 @@ export default function ShopScreen() {
     return () => {
       current = false;
     };
-  }, [country, favourites]);
+  }, [country, favouriteIdList]);
 
   const openMerchant = (merchant: Merchant) => router.push(`/shop/${merchant.slug}`);
   const favouriteOf = (merchant: Merchant) => ({

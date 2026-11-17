@@ -16,6 +16,7 @@ import { CountryMenu } from '@/components/country-menu';
 import { SignInButton, useSignIn } from '@/components/sign-in';
 import { MerchantSearch } from '@/components/storefront';
 import { Wordmark } from '@/components/wordmark';
+import { ctx } from '@/ctx/client';
 import { FontFamily, Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { PageLayout } from '@/hooks/page-layout';
@@ -150,8 +151,29 @@ function HomeLink() {
 
 function HeaderSearch() {
   const router = useRouter();
-  const { country } = useMarket();
+  const { country: marketCountry } = useMarket();
+  const { signedIn } = useSignIn();
+  const [profileCountry, setProfileCountry] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const searching = search !== '';
+  useEffect(() => {
+    if (!signedIn) {
+      return undefined;
+    }
+    let current = true;
+    ctx
+      .me()
+      .then((profile) => {
+        if (current) {
+          setProfileCountry(profile.country ?? null);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [signedIn, searching]);
+  const country = (signedIn && profileCountry) || marketCountry;
   const submit = () => {
     const q = search.trim();
     router.navigate(q ? { pathname: '/shop', params: { q } } : '/shop');
