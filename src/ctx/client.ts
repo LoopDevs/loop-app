@@ -272,6 +272,8 @@ class CtxClient {
     private readonly appVersion: string,
   ) {}
 
+  private static readonly activeOrderPages = 4;
+
   static runningAppVersion(): string {
     const version = Constants.expoConfig?.version ?? 'unknown';
     const updateId = runningUpdateId();
@@ -590,9 +592,17 @@ class CtxClient {
   }
 
   async activeGiftCard(merchantId?: string, skip?: (order: GiftCard) => boolean): Promise<GiftCard | null> {
-    const { result } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], perPage: 5 });
-    const newest = result.find((order) => !skip?.(order));
-    return newest ? this.giftCard(newest.id) : null;
+    for (let page = 1; page <= CtxClient.activeOrderPages; page += 1) {
+      const { result, pagination } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], page, perPage: 5 });
+      const newest = result.find((order) => !skip?.(order));
+      if (newest) {
+        return this.giftCard(newest.id);
+      }
+      if (page >= pagination.pages) {
+        break;
+      }
+    }
+    return null;
   }
 
   async wallets(): Promise<WalletLink[]> {

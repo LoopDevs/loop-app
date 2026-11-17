@@ -477,6 +477,23 @@ test('the active order is the newest in-progress card that is not skipped', asyn
   assert.equal(await ctx.activeGiftCard('m1', () => true), null);
 });
 
+test('the active order is found on a later page when the first page holds only skipped orders', async () => {
+  await signIn('user-42');
+  respond = (request) => {
+    if (request.url.endsWith('/gift-cards/g9')) {
+      return json({ ...card({}), id: 'g9' });
+    }
+    const page = Number(new URL(request.url).searchParams.get('page') ?? '1');
+    const result = page === 2 ? [{ ...card({}), id: 'g9' }] : [card({})];
+    return json({ result, pagination: { page, pages: 2, perPage: 5, total: 6 } });
+  };
+  const active = await ctx.activeGiftCard('m1', (candidate) => candidate.id === 'g1');
+  assert.equal(active?.id, 'g9');
+  sent = [];
+  assert.equal(await ctx.activeGiftCard('m1', () => true), null);
+  assert.equal(sent.length, 2);
+});
+
 test('an account watch opens a socket with the session headers and relays account events', async () => {
   await signIn('user-42');
   await ctx.status();
