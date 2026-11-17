@@ -82,9 +82,10 @@ export default function ShopScreen() {
   const { country: marketCountry } = useMarket();
   const [profileUnread, setProfileUnread] = useState(false);
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
-  const { q } = useLocalSearchParams<{ q?: string }>();
+  const { q: linked } = useLocalSearchParams<{ q?: string | string[] }>();
+  const q = Array.isArray(linked) ? linked[0] : linked;
   const [search, setSearch] = useState(q ?? '');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState((q ?? '').trim());
   const { columns, wide, gutter } = usePageLayout();
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [page, setPage] = useState(0);
@@ -275,7 +276,7 @@ export default function ShopScreen() {
   );
 
   if (signedIn === false) {
-    return <SignedOutShop initialSearch={search} onOpen={openMerchant} />;
+    return <SignedOutShop search={search} onSearch={setSearch} onOpen={openMerchant} />;
   }
 
   const pageWidth = wide ? { maxWidth: Layout.pageMaxWidth, paddingHorizontal: gutter } : null;
@@ -414,11 +415,16 @@ export default function ShopScreen() {
   );
 }
 
-function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpen: (merchant: Merchant) => void }) {
+type SignedOutShopProps = {
+  search: string;
+  onSearch: (search: string) => void;
+  onOpen: (merchant: Merchant) => void;
+};
+
+function SignedOutShop({ search, onSearch, onOpen }: SignedOutShopProps) {
   const { country } = useMarket();
   const { wide } = usePageLayout();
   const catalog = useCatalog(country, stripSize);
-  const [search, setSearch] = useState(initialSearch);
   const loadMoreRef = useRef<(() => void) | null>(null);
   const loadMore = useCallback(() => loadMoreRef.current?.(), []);
   const { scrollRef, onScroll, scrim } = useScrimScroll(loadMore);
@@ -437,7 +443,7 @@ function SignedOutShop({ initialSearch, onOpen }: { initialSearch: string; onOpe
           <MerchantCatalog
             country={country}
             search={search}
-            onSearch={setSearch}
+            onSearch={onSearch}
             onOpen={onOpen}
             loadMoreRef={loadMoreRef}
           />
