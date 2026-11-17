@@ -8,7 +8,7 @@ import { AppLockScope } from '@/components/app-lock';
 import { useToast } from '@/components/ui/toast';
 import { FontFamily, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
-import { pageLinesScript, parseCardDetails, readPageLines } from '@/ctx/redeem-scrape';
+import { pageLinesScript, parseCardDetails, readPageLines, RedeemPage } from '@/ctx/redeem-scrape';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
@@ -43,9 +43,13 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
     onClose();
   };
   const awaitingCode = !giftCard.number && !giftCard.pin;
+  const [page] = useState(() => new RedeemPage(url));
 
   const onMessage = async (event: WebViewMessageEvent) => {
     if (!awaitingCode || saving.current || failedSaves.current >= maxSaveAttempts) {
+      return;
+    }
+    if (!page.trusts(event.nativeEvent.url)) {
       return;
     }
     const details = parseCardDetails(readPageLines(event.nativeEvent.data));
@@ -104,6 +108,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
           style={[styles.web, { backgroundColor: theme.background }]}
           injectedJavaScript={pageLinesScript}
           onMessage={onMessage}
+          onLoadEnd={({ nativeEvent }) => page.land(nativeEvent.url)}
           onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent.progress)}
           startInLoadingState
           renderLoading={() => (

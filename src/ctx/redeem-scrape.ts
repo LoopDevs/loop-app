@@ -161,6 +161,44 @@ function digitCount(value: string): number {
   return value.replace(/\D/g, '').length;
 }
 
+export class RedeemPage {
+  private readonly trusted = new Set<string>();
+  private landed = false;
+
+  constructor(startUrl: string) {
+    this.trust(startUrl);
+  }
+
+  land(url: string): void {
+    if (this.landed) {
+      return;
+    }
+    this.landed = true;
+    this.trust(url);
+  }
+
+  trusts(url: string): boolean {
+    const host = RedeemPage.secureHost(url);
+    return host !== null && this.trusted.has(host);
+  }
+
+  private trust(url: string): void {
+    const host = RedeemPage.secureHost(url);
+    if (host !== null) {
+      this.trusted.add(host);
+    }
+  }
+
+  private static secureHost(url: string): string | null {
+    try {
+      const { protocol, hostname } = new URL(url);
+      return protocol === 'https:' ? hostname : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 export const pageLinesScript = `
 (function () {
   if (window.__loopPageLines) {
@@ -170,6 +208,16 @@ export const pageLinesScript = `
   var limit = 2000;
   var skipped = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1 };
   var skippedInputs = { hidden: 1, password: 1, submit: 1, button: 1, checkbox: 1, radio: 1 };
+  var typed = new WeakSet();
+  document.addEventListener(
+    'input',
+    function (event) {
+      if (event.isTrusted && event.target) {
+        typed.add(event.target);
+      }
+    },
+    true
+  );
   function collect() {
     var out = [];
     var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null);
@@ -184,6 +232,7 @@ export const pageLinesScript = `
         text = node.textContent;
       } else if ((node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') && (node.readOnly || node.disabled)) {
         if (
+          typed.has(node) ||
           skippedInputs[(node.getAttribute('type') || 'text').toLowerCase()] ||
           /^cc-/i.test(node.getAttribute('autocomplete') || '')
         ) {

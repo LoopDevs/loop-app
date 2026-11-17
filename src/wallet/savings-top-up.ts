@@ -106,6 +106,10 @@ export class SavingsTopUp {
     }
   }
 
+  static withdrawMovingMessage(moved: string[], moving: string[]): string {
+    return `Moved ${moved.join(' and ')} to your balance. ${moving.join(' and ')} may still be moving, so check your balance before trying again.`;
+  }
+
   static withdrawStoppedMessage(moved: string[], moving: string[]): string {
     const parts: string[] = [];
     if (moved.length) {
