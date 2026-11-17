@@ -18,7 +18,7 @@ import { Holdings } from './holdings.ts';
 import { passkey } from './passkey.ts';
 import { passkeyHolder, type PasskeyHolder } from './passkey-holder.fixture.ts';
 import { Savings, UnansweredDeposit } from './savings.ts';
-import { SmartWallet, UnconfirmedIdentity, UnlinkedDevice, type WalletBlocked } from './smart-wallet.ts';
+import { SmartWallet, UnconfirmedIdentity, UnlinkedDevice, UnpinnedWallet, type WalletBlocked } from './smart-wallet.ts';
 import { SponsoredCall } from './sponsored-call.ts';
 import { WalletPin } from './wallet-pin.ts';
 import type { ContextRule } from './wallet-rules.ts';
@@ -124,8 +124,8 @@ function blockedWallet(blocked: new (wallet: SmartWallet) => WalletBlocked): Pro
   );
 }
 
-function unlinkedWallet(): Promise<SmartWallet> {
-  return blockedWallet(UnlinkedDevice);
+function unpinnedWallet(): Promise<SmartWallet> {
+  return blockedWallet(UnpinnedWallet);
 }
 
 function unconfirmedWallet(): Promise<SmartWallet> {
@@ -210,9 +210,13 @@ test('a pinned wallet that lists this device loads', async () => {
   assert.equal(wallet?.userId, userId);
 });
 
-test('a wallet this device neither pinned nor created is an unlinked device and stays unpinned', async () => {
+test('a linked device that neither pinned nor created the wallet loads as an unpinned wallet, never as an unlinked device', async () => {
   await clearPins();
-  await assert.rejects(SmartWallet.load(), UnlinkedDevice);
+  await assert.rejects(SmartWallet.load(), (error: unknown) => {
+    assert.ok(error instanceof UnpinnedWallet);
+    assert.ok(!(error instanceof UnlinkedDevice));
+    return true;
+  });
   assert.equal(await pinned(), null);
 });
 
@@ -231,7 +235,7 @@ test('a wallet that holds the passkey this device created is pinned and the pend
 test('a wallet holding a different passkey than the one this device created is not pinned', async () => {
   await clearPins();
   await leavePendingPasskey(new Uint8Array(65).fill(9));
-  await assert.rejects(SmartWallet.load(), UnlinkedDevice);
+  await assert.rejects(SmartWallet.load(), UnpinnedWallet);
   assert.equal(await pinned(), null);
 });
 
@@ -239,7 +243,7 @@ test('a wallet other than the one the passkey made here makes is not pinned', as
   await clearPins();
   await leavePendingPasskey();
   chain.walletOfCreatedPasskey = 'COTHER';
-  await assert.rejects(SmartWallet.load(), UnlinkedDevice);
+  await assert.rejects(SmartWallet.load(), UnpinnedWallet);
   assert.equal(await pinned(), null);
 });
 
@@ -260,13 +264,13 @@ test('a phone with no device key is an unlinked device', async () => {
   await assert.rejects(SmartWallet.load(), UnlinkedDevice);
 });
 
-test('a pin for another wallet or another passkey reads as an unlinked device', async () => {
+test('a pin for another wallet or another passkey reads as an unpinned wallet', async () => {
   for (const stale of [
     { address: 'CPINNED', passkeyPublicKey: base64.encode(passkeyKey) },
     { address, passkeyPublicKey: base64.encode(new Uint8Array(65).fill(9)) },
   ]) {
     await pinFor(userId).write(stale);
-    const wallet = await unlinkedWallet();
+    const wallet = await unpinnedWallet();
     assert.equal(wallet.address, address);
   }
 });
@@ -300,7 +304,7 @@ test('a linked device with no pin is pinned once the sign-in proves it makes thi
   replace(DeviceLink.prototype, 'add', async () => {
     calls.push('add');
   });
-  const wallet = await unlinkedWallet();
+  const wallet = await unpinnedWallet();
   await wallet.addThisDevice();
   assert.deepEqual(calls, [network.factory]);
   assert.equal(JSON.parse((await pinned()) ?? '{}').address, address);
@@ -311,7 +315,7 @@ test('a sign-in that makes another wallet leaves the device unpinned', async () 
   await clearPins();
   const holder = holdPasskey();
   factoryDerives(holder, 'COTHER');
-  const wallet = await unlinkedWallet();
+  const wallet = await unpinnedWallet();
   await assert.rejects(wallet.addThisDevice(), /couldn't confirm this wallet is yours/);
   assert.equal(await pinned(), null);
 });
@@ -778,7 +782,7 @@ test('a linked device is not pinned when another passkey signs the confirmation'
   holdPasskey();
   replace(passkey, 'sign', passkeyHolder().sign);
   await clearPins();
-  const wallet = await unlinkedWallet();
+  const wallet = await unpinnedWallet();
   await assert.rejects(wallet.addThisDevice(), /sign-in you set Loop up with/);
   assert.equal(await pinned(), null);
 });

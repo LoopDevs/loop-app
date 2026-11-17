@@ -49,7 +49,7 @@ import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { errorReporting } from '@/ops/error-reporting';
 import { Savings } from '@/wallet/savings';
-import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
+import { DeviceSetupNeeded, SmartWallet, WalletBlocked } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'confirm-identity' | 'wallet';
 
@@ -114,7 +114,7 @@ export default function HomeScreen() {
     } catch (error) {
       if (error instanceof WalletBlocked) {
         setBlockedWallet(error.wallet);
-        setScreen(error instanceof UnlinkedDevice ? 'unlinked-device' : 'confirm-identity');
+        setScreen(error instanceof DeviceSetupNeeded ? 'unlinked-device' : 'confirm-identity');
         return;
       }
       walletLoadStarted.current = false;
