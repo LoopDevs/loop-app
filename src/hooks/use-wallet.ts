@@ -58,7 +58,10 @@ export function useWallet() {
       }
       errorReporting.reportError(error, 'Wallet load');
       setProblem(errorMessage(error));
-      setState((current) => (current === 'ready' ? current : 'failed'));
+      if (!loaded.current) {
+        setWallet(null);
+        setState('failed');
+      }
     }
   }, [readSession, refresh]);
 

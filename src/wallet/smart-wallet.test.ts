@@ -216,6 +216,15 @@ test('a loaded wallet is remembered for its own user only', async () => {
   assert.equal(SmartWallet.remembered('someone-else'), null);
 });
 
+test('a session end forgets the remembered wallet, and a load that began before it is not remembered', async () => {
+  await SmartWallet.load();
+  const loading = SmartWallet.load();
+  await SmartWallet.endSession({ owner: userId, reason: 'expired', nextOwner: null });
+  assert.equal(SmartWallet.remembered(userId), null);
+  await loading;
+  assert.equal(SmartWallet.remembered(userId), null);
+});
+
 test('a linked device that neither pinned nor created the wallet loads as an unpinned wallet, never as an unlinked device', async () => {
   await clearPins();
   await assert.rejects(SmartWallet.load(), (error: unknown) => {

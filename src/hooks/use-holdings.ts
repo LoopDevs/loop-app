@@ -25,6 +25,12 @@ export type HoldingsView = {
 type LoadedHoldings = { address: string; view: HoldingsView };
 
 let lastLoaded: LoadedHoldings | null = null;
+let sessionsEnded = 0;
+
+ctx.onSessionEnd(() => {
+  sessionsEnded += 1;
+  lastLoaded = null;
+});
 
 export function useHoldings(wallet: SmartWallet | null) {
   const [loaded, setLoadedState] = useState<LoadedHoldings | null>(lastLoaded);
@@ -37,6 +43,7 @@ export function useHoldings(wallet: SmartWallet | null) {
 
   const refresh = useCallback(async () => {
     const request = ++latestRequest.current;
+    const session = sessionsEnded;
     if (!wallet) {
       setLoadedState(null);
       return;
@@ -53,7 +60,7 @@ export function useHoldings(wallet: SmartWallet | null) {
         : await fetchedAccount
             .withoutLandedPayouts(wallet.address, (txHash) => wallet.transactionLanded(txHash))
             .catch((error: unknown) => new Error(errorMessage(error)));
-    if (request !== latestRequest.current) {
+    if (request !== latestRequest.current || session !== sessionsEnded) {
       return;
     }
     const failure = [account, profile].find((result) => result instanceof Error);

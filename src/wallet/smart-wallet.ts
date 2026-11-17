@@ -98,6 +98,8 @@ export class SmartWallet {
   }
 
   static async endSession(end: SessionEnd): Promise<void> {
+    SmartWallet.sessionsEnded += 1;
+    SmartWallet.lastLoaded = null;
     SmartWallet.forgetConfirmations();
     await SmartWallet.forgetDeviceKeys(end).catch((error: unknown) => {
       errorReporting.reportError(error, 'Forgetting the device key at session end failed');
@@ -116,18 +118,24 @@ export class SmartWallet {
 
   private static lastLoaded: SmartWallet | null = null;
 
+  private static sessionsEnded = 0;
+
   static remembered(userId: string): SmartWallet | null {
     return SmartWallet.lastLoaded?.userId === userId ? SmartWallet.lastLoaded : null;
   }
 
   static async load(): Promise<SmartWallet | null> {
+    const session = SmartWallet.sessionsEnded;
     try {
-      SmartWallet.lastLoaded = await SmartWallet.loadChecked();
+      const wallet = await SmartWallet.loadChecked();
+      if (session === SmartWallet.sessionsEnded) {
+        SmartWallet.lastLoaded = wallet;
+      }
+      return wallet;
     } catch (error) {
       SmartWallet.lastLoaded = null;
       throw error;
     }
-    return SmartWallet.lastLoaded;
   }
 
   private static async loadChecked(): Promise<SmartWallet | null> {
