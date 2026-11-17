@@ -661,9 +661,11 @@ test('a bank order reuses the newest open order for the same request that can st
   const soon = new Date(Date.now() + 600_000).toISOString();
   const past = new Date(Date.now() - 600_000).toISOString();
   const cards = [
-    bankCard('g-expired', '2026-10-27T12:00:00Z', past),
-    bankCard('g-open', '2026-10-27T11:00:00Z', soon),
     bankCard('g-older', '2026-10-27T10:00:00Z', soon),
+    { ...bankCard('g-crypto', '2026-10-27T14:00:00Z', soon), paymentMethod: 'crypto' },
+    { ...bankCard('g-other-amount', '2026-10-27T13:00:00Z', soon), cardFiatAmount: '50.00' },
+    bankCard('g-open', '2026-10-27T11:00:00Z', soon),
+    bankCard('g-expired', '2026-10-27T12:00:00Z', past),
   ];
   respond = (request) =>
     request.url.startsWith(`${apiUrl}/gift-cards?`)
@@ -672,8 +674,32 @@ test('a bank order reuses the newest open order for the same request that can st
   const reused = await ctx.orderGiftCard(bankOrder);
   assert.equal(reused.id, 'g-open');
   assert.deepEqual(
-    sent.map((request) => request.method),
-    ['GET', 'GET', 'GET'],
+    sent.map((request) => new URL(request.url).pathname.split('/').pop()),
+    ['gift-cards', 'g-expired', 'g-open'],
+  );
+});
+
+test('an open bank order made for another platform is not reused', async () => {
+  await signIn('user-42');
+  const soon = new Date(Date.now() + 600_000).toISOString();
+  const webOrder = { ...bankCard('g-web', '2026-10-27T11:00:00Z', soon), plaidLinkToken: undefined, paymentUrl: 'https://secure.plaid.com/pay/1' };
+  const created = bankCard('g-new', '2026-10-27T12:00:00Z', soon);
+  respond = (request) => {
+    if (request.method === 'POST') {
+      return json(created);
+    }
+    return request.url.startsWith(`${apiUrl}/gift-cards?`) ? cardList([webOrder]) : json(webOrder);
+  };
+  assert.equal((await ctx.orderGiftCard(bankOrder)).id, 'g-new');
+});
+
+test('a bank order is not created when the open orders cannot be read', async () => {
+  await signIn('user-42');
+  respond = (request) => (request.method === 'POST' ? json(bankCard('g-new', '2026-10-27T12:00:00Z', '')) : new Response('{}', { status: 500 }));
+  await assert.rejects(ctx.orderGiftCard(bankOrder));
+  assert.equal(
+    sent.some((request) => request.method === 'POST'),
+    false,
   );
 });
 

@@ -407,7 +407,7 @@ class CtxClient {
     order: GiftCardOrderIn,
     adoptable: (placed: GiftCard) => Promise<boolean> = async () => true,
   ): Promise<GiftCard> {
-    const open = await this.openBankOrder(order).catch(() => null);
+    const open = await this.openBankOrder(order);
     if (open) {
       return open;
     }
@@ -433,7 +433,7 @@ class CtxClient {
       .sort((a, b) => Date.parse(b.created) - Date.parse(a.created));
     for (const card of newestFirst) {
       const open = await this.giftCard(card.id);
-      if (BankPayment.approvable(open, Date.now())) {
+      if (BankPayment.approvableOn(open, Date.now(), Platform.OS !== 'web')) {
         return open;
       }
     }

@@ -84,6 +84,13 @@ export class BankPayment {
     return !BankPayment.linkExpired(order, now) && BankPayment.approvalReady(order);
   }
 
+  static approvableOn(order: BankOrder, now: number, native: boolean): boolean {
+    if (BankPayment.linkExpired(order, now)) {
+      return false;
+    }
+    return native ? BankPayment.linkToken(order) !== null : BankPayment.openLink(order) !== null;
+  }
+
   static linkExpired(order: BankOrder, now: number): boolean {
     if (!BankPayment.awaitingApproval(order)) {
       return false;

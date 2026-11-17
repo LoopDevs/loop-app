@@ -12,6 +12,7 @@ import { OrderHelp } from '@/components/order-help';
 import { PageTitle } from '@/components/page-title';
 import { useOnSignIn, useSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
+import { haptics } from '@/native/haptics';
 import { OrderDetailSkeleton } from '@/components/ui/skeleton';
 import { SplitLayout } from '@/components/split-layout';
 import { PageWidth } from '@/components/storefront';
@@ -108,6 +109,7 @@ export default function GiftCardScreen() {
         }
         setGiftCard(loaded);
         setRefreshing(false);
+        let charged = BankPayment.charged(loaded);
         while (active && !settledStatuses.includes(loaded.status)) {
           stopWatching ??= ctx.watchOrder(id, wake).catch(() => () => undefined);
           await wake.wait(Math.max(wake.interval(), pollDelayMs(polls)));
@@ -122,6 +124,10 @@ export default function GiftCardScreen() {
           }
           if (active) {
             setGiftCard(loaded);
+          }
+          if (active && !charged && BankPayment.charged(loaded)) {
+            charged = true;
+            haptics.success();
           }
         }
       } catch (error) {
