@@ -67,20 +67,20 @@ export function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
     },
     {
       key: 'bank',
-      title: 'Pay straight from your bank',
-      body: 'Approve each payment in your own banking app. No card numbers to type.',
+      title: 'Pay from your UK bank',
+      body: 'When you pay in pounds, you can approve each payment in your own banking app. No card numbers to type.',
       visual: (
         <FeatureCard
           icon={{ ios: 'building.columns.fill', android: 'account_balance', web: 'account_balance' }}
           title="Approve in your bank"
-          detail="Pay in pounds, with nothing to top up first."
+          detail="For UK customers paying in pounds."
         />
       ),
     },
     {
       key: 'savings',
       title: 'Cashback that keeps growing',
-      body: 'Every purchase pays cashback into Savings, where it earns interest every day.',
+      body: 'Cashback can go straight into Savings, where it earns interest.',
       visual: (
         <FeatureCard
           icon={{ ios: 'leaf.fill', android: 'savings', web: 'savings' }}

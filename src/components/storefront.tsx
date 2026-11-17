@@ -784,29 +784,29 @@ const steps: Point[] = [
   {
     icon: { ios: 'hand.tap', android: 'touch_app', web: 'touch_app' },
     title: 'Pay in a tap',
-    body: 'Pay from your Loop balance. You see the exact price and your cashback first.',
+    body: 'Pay from your Loop balance. You see the price and about how much cashback you’ll get first.',
   },
   {
     icon: { ios: 'bolt.fill', android: 'bolt', web: 'bolt' },
-    title: 'Get your card instantly',
-    body: 'Your card number and PIN appear in Loop, ready to use in store or online.',
+    title: 'Get your card in minutes',
+    body: 'Your card number and PIN usually appear in Loop within minutes, ready to use in store or online.',
   },
   {
     icon: { ios: 'arrow.uturn.backward', android: 'replay', web: 'replay' },
     title: 'Cashback lands',
-    body: 'Cashback goes into your balance. Spend it on your next card or put it in savings.',
+    body: 'Cashback goes into your balance, or into savings if you choose that. Spend it on your next card or keep it growing.',
   },
 ];
 
 const benefits: Point[] = [
   {
     icon: { ios: 'bolt.fill', android: 'bolt', web: 'bolt' },
-    title: 'Instant delivery',
-    body: 'Your gift card is in Loop as soon as you pay. No waiting for an email.',
+    title: 'Fast delivery',
+    body: 'Your gift card usually arrives in Loop within minutes of paying. No waiting for an email.',
   },
   {
     icon: { ios: 'banknote', android: 'payments', web: 'payments' },
-    title: 'Cashback on every card',
+    title: 'Cashback, not points',
     body: 'Real money back in your balance, not points that expire.',
   },
   {
@@ -817,7 +817,7 @@ const benefits: Point[] = [
   {
     icon: { ios: 'lock.shield', android: 'verified_user', web: 'verified_user' },
     title: 'Simple, safe sign-in',
-    body: 'Sign in with Face ID or your fingerprint, with no password to remember.',
+    body: 'Sign in with an email code, or with Google or Apple where available. No password to remember.',
   },
 ];
 
