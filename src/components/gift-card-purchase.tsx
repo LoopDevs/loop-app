@@ -743,8 +743,11 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
   const range = merchant.rangeLabel();
   const cardLabel = fiatAmount ? merchant.shortAmount(fiatAmount) : null;
   const bankPrice = fiatAmount ? money.fiat(fiatAmount, merchant.currency) : null;
+  const signedPrice = order ? orderPrice(order) : null;
   const walletPrice =
-    tokenPrice !== null && currency
+    signedPrice !== null && currency && order?.paymentCryptoCurrency === currency
+      ? money.token(signedPrice, currency)
+      : tokenPrice !== null && currency
       ? money.token(tokenPrice, currency)
       : shownPrice !== null
         ? dollars(shownPrice)
@@ -766,7 +769,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
             <PurchaseConfirm
               merchant={merchant}
               cardAmount={cardAmount}
-              price={confirmPrice}
+              priceText={walletPrice ?? dollars(confirmPrice)}
               busy={busy}
               onConfirm={payConfirmedPrice}
               onCancel={cancelOrder}
