@@ -39,7 +39,7 @@ import { usePageLayout } from "@/hooks/use-page-layout";
 import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
 import { runningUpdateId } from "@/updates/update-checker";
-import { SmartWallet, UnlinkedDevice, WalletBlocked } from "@/wallet/smart-wallet";
+import { SmartWallet, UnlinkedDevice, UnpinnedWallet, WalletBlocked } from "@/wallet/smart-wallet";
 
 type SettingsSection = "account" | "help" | "data";
 
@@ -438,7 +438,13 @@ export default function SettingsScreen() {
   );
 }
 
-type SpendingAccess = { wallet: SmartWallet; thisDevice: boolean };
+type SpendingAccess = { wallet: SmartWallet; device: "ready" | "unpinned" | "elsewhere" };
+
+const spendingDetail: Record<SpendingAccess["device"], string | undefined> = {
+  ready: undefined,
+  unpinned: "Confirm it’s you to finish setting up.",
+  elsewhere: "Lost that device? Move spending here.",
+};
 
 function SpendingDevice() {
   const [access, setAccess] = useState<SpendingAccess | null>(null);
@@ -450,13 +456,16 @@ function SpendingDevice() {
       load(async () => {
         const next = await SmartWallet.load().then(
           (wallet): SpendingAccess | null =>
-            wallet && { wallet, thisDevice: true },
+            wallet && { wallet, device: "ready" },
           (error: unknown) => {
             if (error instanceof UnlinkedDevice) {
-              return { wallet: error.wallet, thisDevice: false };
+              return { wallet: error.wallet, device: "elsewhere" };
+            }
+            if (error instanceof UnpinnedWallet) {
+              return { wallet: error.wallet, device: "unpinned" };
             }
             if (error instanceof WalletBlocked) {
-              return { wallet: error.wallet, thisDevice: true };
+              return { wallet: error.wallet, device: "ready" };
             }
             throw error;
           },
@@ -484,7 +493,7 @@ function SpendingDevice() {
   if (!access) {
     return null;
   }
-  if (moving && !access.thisDevice) {
+  if (moving && access.device !== "ready") {
     return (
       <AddDevice
         wallet={access.wallet}
@@ -502,11 +511,9 @@ function SpendingDevice() {
     >
       <ListRow
         label="Spending"
-        value={access.thisDevice ? "This device" : "Another device"}
-        detail={
-          access.thisDevice ? undefined : "Lost that device? Move spending here."
-        }
-        onPress={access.thisDevice ? undefined : () => setMoving(true)}
+        value={access.device === "elsewhere" ? "Another device" : "This device"}
+        detail={spendingDetail[access.device]}
+        onPress={access.device === "ready" ? undefined : () => setMoving(true)}
       />
     </ListGroup>
   );
