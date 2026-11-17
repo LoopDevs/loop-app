@@ -269,7 +269,11 @@ export default function SavingsScreen() {
       </Animated.ScrollView>
       </KeyboardAvoid>
       <Animated.View pointerEvents="none" style={scrim} />
-      <BottomSheet open={adding} onClose={() => setAdding(false)} title="How much do you want to save?">
+      <BottomSheet
+        open={adding}
+        onClose={() => setAdding(false)}
+        title="How much do you want to save?"
+        notice={message}>
         <AddToSavings
           currency={depositCurrency}
           depositable={depositable}

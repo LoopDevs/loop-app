@@ -123,6 +123,46 @@ export class Holdings {
     return (amount * price) / stablePrice;
   }
 
+  walletAmounts(): { currency: PaymentCurrency; amount: bigint }[] {
+    return this.balances.tokens.map(({ token, amount }) => ({ currency: token.currency, amount }));
+  }
+
+  arrivedSince(
+    baseline: readonly { currency: PaymentCurrency; amount: bigint }[],
+  ): { currency: PaymentCurrency; amount: bigint } | null {
+    for (const { currency, amount } of this.walletAmounts()) {
+      const before = baseline.find((held) => held.currency === currency)?.amount ?? 0n;
+      if (amount > before) {
+        return { currency, amount: amount - before };
+      }
+    }
+    return null;
+  }
+
+  sumIn(amounts: readonly { currency: string; amount: bigint }[], stable: string): bigint | null {
+    let sum = 0n;
+    for (const { currency, amount } of amounts) {
+      const value = this.valueIn(amount, currency, stable);
+      if (value === null) {
+        return null;
+      }
+      sum += value;
+    }
+    return sum;
+  }
+
+  inWalletIn(stable: string): bigint | null {
+    let sum = 0n;
+    for (const { token } of this.balances.tokens) {
+      const value = this.valueIn(this.inWallet(token.currency), token.currency, stable);
+      if (value === null) {
+        return null;
+      }
+      sum += value;
+    }
+    return Holdings.shown(sum);
+  }
+
   spendableIn(stable: string): bigint | null {
     let sum = 0n;
     for (const { token } of this.balances.tokens) {

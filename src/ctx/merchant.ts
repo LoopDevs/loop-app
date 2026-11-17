@@ -161,6 +161,28 @@ export class Merchant {
     return Merchant.escapedPattern(name.trim());
   }
 
+  private static readonly accentedForms: Readonly<Record<string, string>> = {
+    a: 'aàáâãäå',
+    c: 'cç',
+    e: 'eèéêë',
+    i: 'iìíîï',
+    n: 'nñ',
+    o: 'oòóôõöø',
+    u: 'uùúûü',
+    y: 'yýÿ',
+  };
+  private static readonly namePatternLength = 60;
+
+  static namePattern(name: string): string {
+    const letters = [...Merchant.searchKey(name).replace(/\s/g, '')].slice(0, Merchant.namePatternLength);
+    return letters
+      .map((letter) => {
+        const forms = Merchant.accentedForms[letter];
+        return forms ? `[${forms}]` : Merchant.escapedPattern(letter);
+      })
+      .join('[^a-z0-9]*');
+  }
+
   static exactPattern(value: string): string {
     return `^${Merchant.escapedPattern(value)}$`;
   }

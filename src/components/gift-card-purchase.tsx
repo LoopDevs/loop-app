@@ -192,6 +192,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
   const following = useRef(0);
   const buyTimer = useRef<BuyTimer | null>(null);
   const mounted = useRef(true);
+  const buyStartedHere = useRef(false);
   const live = useRef({ wallet, refresh });
   const heldOrder = useRef<GiftCard | null>(null);
 
@@ -352,10 +353,18 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
   );
 
   useEffect(() => {
+    let current = true;
     if (!oneTapBuy.busy) {
       resumeOrder();
+    } else if (!buyStartedHere.current) {
+      void oneTapBuy.settled().then(() => {
+        if (current && mounted.current && !buyStartedHere.current) {
+          resumeOrder();
+        }
+      });
     }
     return () => {
+      current = false;
       following.current += 1;
     };
   }, [resumeOrder, wallet.address]);
@@ -449,12 +458,16 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     const holdings = view?.holdings ?? null;
     return {
       createOrder: async () => {
-        const created = await ctx.orderGiftCard({
-          merchantId: merchant.id,
-          fiatAmount: cardAmount,
-          fiatCurrency: merchant.currency,
-          cryptoCurrency: payWith,
-        });
+        const created = await ctx.orderGiftCard(
+          {
+            merchantId: merchant.id,
+            fiatAmount: cardAmount,
+            fiatCurrency: merchant.currency,
+            cryptoCurrency: payWith,
+          },
+          async (placed) =>
+            !(await dismissedOrders.dismissed(placed)) && !(await sentPayments.get(placed.paymentId)),
+        );
         buyTimer.current?.mark('order created');
         setOrder(created);
         setSpent((held) => orderPrice(created) ?? held);
@@ -513,6 +526,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
       } catch (error) {
         rollBack();
         haptics.error();
+        errorReporting.reportError(error, 'Wallet buy');
         const name = error instanceof CtxError ? error.errorName() : undefined;
         const amountMessage = amountErrorMessage(name, merchant);
         if (amountMessage) {
@@ -568,11 +582,14 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
 
   const createBankOrder = async (cardAmount: string): Promise<GiftCard | null> => {
     try {
-      return await ctx.orderGiftCard({
-        merchantId: merchant.id,
-        fiatAmount: cardAmount,
-        fiatCurrency: merchant.currency,
-      });
+      return await ctx.orderGiftCard(
+        {
+          merchantId: merchant.id,
+          fiatAmount: cardAmount,
+          fiatCurrency: merchant.currency,
+        },
+        async (placed) => !(await dismissedOrders.dismissed(placed)),
+      );
     } catch (error) {
       rollBack();
       haptics.error();
@@ -611,7 +628,8 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     });
 
   const short = !byBank && tokenPrice !== null && balance !== null && tokenPrice > balance;
-  const walletReady = currency !== null && view !== null && cardRates !== null && usdPrice !== null && !short;
+  const walletBlocker = byBank ? null : WalletBlocker.of({ loaded: view !== null && cardRates !== null, currency, usdPrice, short });
+  const walletReady = walletBlocker === null;
   const canBuy =
     !busy &&
     !oneTapBuy.busy &&
@@ -640,6 +658,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     setDraftAmount(fiatAmount);
     setPayment({ kind: 'sending' });
     setSpent(tokenPrice ?? 0n);
+    buyStartedHere.current = true;
     void settle(currency, () => oneTapBuy.start(buySteps(fiatAmount, currency), quote));
   };
 
@@ -668,6 +687,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     setConfirmPrice(null);
     setPayment({ kind: 'sending' });
     setSpent(orderPrice(order) ?? (usdPrice === null ? 0n : (BuyPrice.inTokens(confirmPrice, usdPrice) ?? 0n)));
+    buyStartedHere.current = true;
     void settle(currency, () => oneTapBuy.confirm(buySteps(order.cardFiatAmount, currency), order, quote));
   };
 
@@ -734,8 +754,11 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
   const range = merchant.rangeLabel();
   const cardLabel = fiatAmount ? merchant.shortAmount(fiatAmount) : null;
   const bankPrice = fiatAmount ? money.fiat(fiatAmount, merchant.currency) : null;
+  const signedPrice = order ? orderPrice(order) : null;
   const walletPrice =
-    tokenPrice !== null && currency
+    signedPrice !== null && currency && order?.paymentCryptoCurrency === currency
+      ? money.token(signedPrice, currency)
+      : tokenPrice !== null && currency
       ? money.token(tokenPrice, currency)
       : shownPrice !== null
         ? dollars(shownPrice)
@@ -757,7 +780,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
             <PurchaseConfirm
               merchant={merchant}
               cardAmount={cardAmount}
-              price={confirmPrice}
+              priceText={walletPrice ?? dollars(confirmPrice)}
               busy={busy}
               onConfirm={payConfirmedPrice}
               onCancel={cancelOrder}
@@ -867,8 +890,11 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
                 <SummaryRow label="You pay" value={byBank ? bankPrice : walletPrice} />
                 <SummaryRow label="Cashback" value={estimate ? `About ${estimate}` : null} emphasis />
                 {!byBank && <SummaryRow label="Your balance" value={balanceText} />}
-                {short && <InlineError text={notEnoughMessage} />}
+                {walletBlocker && walletBlocker !== 'loading' && <InlineError text={WalletBlocker.message(walletBlocker)} />}
               </View>
+              {walletBlocker === 'noFunds' && (
+                <Button label="Go to Home to add money" variant="quiet" onPress={() => router.navigate('/')} />
+              )}
             </ScrollView>
             <View style={styles.footer}>
               {message !== '' && <Notice message={message} />}
@@ -928,6 +954,44 @@ function SummaryRow({ label, value, emphasis = false }: { label: string; value: 
       </ThemedText>
     </View>
   );
+}
+
+type WalletBlock = 'loading' | 'noFunds' | 'noRate' | 'short';
+
+class WalletBlocker {
+  static of({
+    loaded,
+    currency,
+    usdPrice,
+    short,
+  }: {
+    loaded: boolean;
+    currency: PaymentCurrency | null;
+    usdPrice: bigint | null;
+    short: boolean;
+  }): WalletBlock | null {
+    if (!loaded) {
+      return 'loading';
+    }
+    if (currency === null) {
+      return 'noFunds';
+    }
+    if (usdPrice === null) {
+      return 'noRate';
+    }
+    return short ? 'short' : null;
+  }
+
+  static message(block: Exclude<WalletBlock, 'loading'>): string {
+    switch (block) {
+      case 'noFunds':
+        return 'Your balance is empty. Add money to buy this card.';
+      case 'noRate':
+        return "Prices aren't available right now. Try again in a moment.";
+      case 'short':
+        return notEnoughMessage;
+    }
+  }
 }
 
 function InlineError({ text }: { text: string }) {

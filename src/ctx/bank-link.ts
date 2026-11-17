@@ -23,6 +23,14 @@ export class BankLink {
   static readonly returnPath = '/plaid/oauth';
   private static readonly returnPattern = /^(?:https:\/\/loopfinance\.io)?\/plaid\/oauth(?:[/?#]|$)/;
 
+  private static readonly orderReturnPattern =
+    /^(?:loop:\/\/|(?:https:\/\/loopfinance\.io)?\/)orders\/([A-Za-z0-9_-]+)\/?(?:[?#]|$)/;
+
+  static orderReturn(path: string): string | null {
+    const id = BankLink.orderReturnPattern.exec(path)?.[1];
+    return id ? `/wallet/${id}` : null;
+  }
+
   static isReturn(path: string): boolean {
     return BankLink.returnPattern.test(path);
   }
@@ -32,21 +40,25 @@ export class BankLink {
     onProgress: (progress: BankLinkProgress) => void = () => undefined,
   ): Promise<BankLinkOutcome> {
     const { createPlaidLinkSession } = await import('react-native-plaid-link-sdk');
-    return new Promise<BankLinkOutcome>((resolve, reject) => {
-      createPlaidLinkSession({
-        token,
-        onSuccess: (success) => resolve(BankLink.approved(success)),
-        onExit: (exit) => resolve(BankLink.left(exit)),
-        onEvent: (event) => {
-          const progress = BankLink.progress(event);
-          if (progress) {
-            onProgress(progress);
-          }
-        },
-      })
-        .then((session) => session.open())
-        .catch(reject);
-    });
+    const { holdCriticalReload } = await import('@/updates/update-checker');
+    return holdCriticalReload(
+      () =>
+        new Promise<BankLinkOutcome>((resolve, reject) => {
+          createPlaidLinkSession({
+            token,
+            onSuccess: (success) => resolve(BankLink.approved(success)),
+            onExit: (exit) => resolve(BankLink.left(exit)),
+            onEvent: (event) => {
+              const progress = BankLink.progress(event);
+              if (progress) {
+                onProgress(progress);
+              }
+            },
+          })
+            .then((session) => session.open())
+            .catch(reject);
+        }),
+    );
   }
 
   static approved(success: LinkSuccess): BankLinkOutcome {

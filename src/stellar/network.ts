@@ -36,12 +36,11 @@ export type StellarNetwork = {
   ed25519Verifier: string;
   payee: string;
   tokens: Token[];
-  usdc: string;
   usdcIssuer: string;
   vaults: Partial<Record<PaymentCurrency, string>>;
 };
 
-const networks: Record<StellarNetworkName, StellarNetwork> = {
+export const networks: Record<StellarNetworkName, StellarNetwork> = {
   testnet: {
     rpcUrls: ['https://soroban-testnet.stellar.org', 'https://rpc.ankr.com/stellar_testnet_soroban'],
     passphrase: Networks.TESTNET,
@@ -57,7 +56,6 @@ const networks: Record<StellarNetworkName, StellarNetwork> = {
       { currency: 'XLM.EURC', symbol: 'EURC', contract: 'CCUUDM434BMZMYWYDITHFXHDMIVTGGD6T2I5UKNX5BSLXLW7HVR4MCGZ' },
       { currency: 'XLM.GBPLOOP', symbol: 'GBPLOOP', contract: 'CBSQZMHXIRMRAFCE2FRDDZOSNFH5WKJO4Z6G4KMH4RLXZWHI6UYTVUWM' },
     ],
-    usdc: 'CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU',
     usdcIssuer: 'GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56',
     vaults: {
       'XLM.USDC': 'CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN',
@@ -78,7 +76,6 @@ const networks: Record<StellarNetworkName, StellarNetwork> = {
       { currency: 'XLM.EURC', symbol: 'EURC', contract: 'CDTKPWPLOURQA2SGTKTUQOWRCBZEORB4BWBOMJ3D3ZTQQSGE5F6JBQLV' },
       { currency: 'XLM.GBPLOOP', symbol: 'GBPLOOP', contract: 'CCU2SGN67UX2TI4KTZGGY457LBYBEPTWO5PMFTWELVUQLU5OEJEWSVNO' },
     ],
-    usdc: 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75',
     usdcIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
     vaults: {
       'XLM.USDC': 'CAJ2L33QVORJFSFCZYMXN7KU7E3TDVGXCLNHXUX64RJZNT4XYZJUA4WY',

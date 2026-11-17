@@ -513,3 +513,48 @@ test('a deposit must authorize exactly one transfer of the amount from the walle
   depositRejected({ transfers: [depositTransfer({ amount: 41n })] }, /transfer does not match/);
   depositRejected({ transfers: [depositTransfer({ contract: network.tokens[0].contract })] }, /not a USDC transfer/);
 });
+
+function withdrawalCall(functionName: string, args: xdr.ScVal[]): SponsoredCall {
+  return verified(
+    new xdr.InvokeContractArgs({
+      contractAddress: new Address(usdcVault).toScAddress(),
+      functionName,
+      args,
+    }),
+  );
+}
+
+const withdrawnShares = nativeToScVal(40n, { type: 'i128' });
+const withdrawnMinimums = xdr.ScVal.scvVec([nativeToScVal(39n, { type: 'i128' })]);
+const withdrawOwner = new Address(wallet).toScVal();
+
+test('a call to the vault with another method name is not a withdrawal', () => {
+  const args = [withdrawnShares, withdrawnMinimums, withdrawOwner];
+  assert.equal(withdrawalCall('withdraw', args).requireWithdrawal(expectedWithdrawal), 39n);
+  for (const method of ['deposit', 'transfer', 'Withdraw', 'withdraw_all']) {
+    assert.throws(() => withdrawalCall(method, args).requireWithdrawal(expectedWithdrawal), /not a withdrawal/);
+  }
+});
+
+test('a withdrawal with the wrong argument count or argument types is refused', () => {
+  const refused = [
+    [withdrawnShares, withdrawnMinimums],
+    [withdrawnShares, withdrawnMinimums, withdrawOwner, withdrawOwner],
+    [withdrawnMinimums, withdrawnShares, withdrawOwner],
+    [withdrawnShares, withdrawOwner, withdrawOwner],
+    [withdrawnShares, withdrawnMinimums, withdrawnShares],
+    [nativeToScVal(40n, { type: 'u64' }), withdrawnMinimums, withdrawOwner],
+  ];
+  for (const args of refused) {
+    assert.throws(() => withdrawalCall('withdraw', args).requireWithdrawal(expectedWithdrawal), /not a withdrawal/);
+  }
+});
+
+test('a withdrawal for one more share, one fewer share or another owner is refused', () => {
+  const call = verified(withdrawArgs(usdcVault, 40n, [39n], wallet));
+  assert.equal(call.requireWithdrawal(expectedWithdrawal), 39n);
+  assert.throws(() => call.requireWithdrawal({ ...expectedWithdrawal, shares: 39n }), /does not match/);
+  assert.throws(() => call.requireWithdrawal({ ...expectedWithdrawal, shares: 41n }), /does not match/);
+  assert.throws(() => call.requireWithdrawal({ ...expectedWithdrawal, from: otherWallet }), /does not match/);
+  assert.throws(() => call.requireWithdrawal({ ...expectedWithdrawal, vault: wallet }), /not a withdrawal/);
+});

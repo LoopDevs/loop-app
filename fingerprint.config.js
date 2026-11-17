@@ -1,5 +1,10 @@
 const { DEFAULT_SOURCE_SKIPS, SourceSkips } = require('@expo/fingerprint');
 
 module.exports = {
-  sourceSkips: DEFAULT_SOURCE_SKIPS | SourceSkips.ExpoConfigExtraSection,
+  sourceSkips:
+    DEFAULT_SOURCE_SKIPS |
+    SourceSkips.ExpoConfigExtraSection |
+    SourceSkips.PackageJsonScriptsAll |
+    SourceSkips.GitIgnore,
+  ignorePaths: ['src/**/*'],
 };

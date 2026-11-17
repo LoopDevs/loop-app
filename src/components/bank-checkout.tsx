@@ -288,12 +288,15 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
       try {
         let created: GiftCard;
         try {
-          created = await ctx.orderGiftCard({
-            merchantId: merchant.id,
-            fiatAmount,
-            fiatCurrency: merchant.currency,
-            ...(differentBank.current ? { chooseBank: true } : {}),
-          });
+          created = await ctx.orderGiftCard(
+            {
+              merchantId: merchant.id,
+              fiatAmount,
+              fiatCurrency: merchant.currency,
+              ...(differentBank.current ? { chooseBank: true } : {}),
+            },
+            async (placed) => !(await dismissedOrders.dismissed(placed)),
+          );
         } catch (error) {
           approvalWindow?.close();
           haptics.error();

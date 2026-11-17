@@ -19,15 +19,12 @@ import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { FontFamily, Motion, Radius, Spacing } from '@/constants/theme';
 import { BankPayment } from '@/ctx/bank-payment';
-import { BuyPrice } from '@/ctx/buy-price';
 import type { GiftCard } from '@/ctx/client';
 import { DismissedOrders } from '@/ctx/dismissed-orders';
-import { giftCardStatusLabel, outcomeText } from '@/ctx/gift-card-status';
+import { giftCardStatusLabel, outcomeText, processingNote } from '@/ctx/gift-card-status';
 import { CashbackRate, type Merchant } from '@/ctx/merchant';
 import type { PaymentState } from '@/ctx/payment-state';
-import { Rates } from '@/ctx/rates';
 import { useTheme } from '@/hooks/use-theme';
-import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 
 const cashbackType = {
@@ -71,6 +68,7 @@ export function PurchaseProgress({
   const bank = order ? BankPayment.isBank(order) : payment.kind === 'bank';
   const cashback = order ? CashbackRate.shownFor(order) : merchant.cashbackEstimate(cardAmount);
   const outcome = order ? outcomeText(order, payment.kind === 'confirming') : null;
+  const note = order ? processingNote(order, payment.kind === 'confirming') : null;
   const submitted = order?.status === 'paid' || payment.kind === 'confirming';
   const working = payment.kind === 'sending' || payment.kind === 'movingSavings';
   const bankApproval = order && payment.kind === 'bank' && payment.linkOpen ? BankPayment.approvalReady(order) : false;
@@ -161,6 +159,7 @@ export function PurchaseProgress({
       </View>
       <View style={styles.footer}>
         {outcome && <Notice message={outcome} />}
+        {note && <Notice message={note} tone="neutral" />}
         {paymentFailed && <Notice message="You weren't charged. Try again or pick another way to pay." />}
         {bankExpired && (
           <Notice
@@ -192,13 +191,13 @@ export function PurchaseProgress({
 type ConfirmProps = {
   merchant: Merchant;
   cardAmount: string;
-  price: bigint;
+  priceText: string;
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
-export function PurchaseConfirm({ merchant, cardAmount, price, busy, onConfirm, onCancel }: ConfirmProps) {
+export function PurchaseConfirm({ merchant, cardAmount, priceText, busy, onConfirm, onCancel }: ConfirmProps) {
   return (
     <View style={styles.stage}>
       <View style={styles.body}>
@@ -207,12 +206,12 @@ export function PurchaseConfirm({ merchant, cardAmount, price, busy, onConfirm, 
             The price has changed
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Your {merchant.shortAmount(cardAmount)} {merchant.name} gift card is now {dollars(price)}.
+            Your {merchant.shortAmount(cardAmount)} {merchant.name} gift card is now {priceText}.
           </ThemedText>
         </View>
       </View>
       <View style={styles.footer}>
-        <Button label={`Buy for ${dollars(price)}`} variant="primary" onPress={onConfirm} disabled={busy} />
+        <Button label={`Buy for ${priceText}`} variant="primary" onPress={onConfirm} disabled={busy} />
         <Button label="Cancel" variant="quiet" onPress={onCancel} disabled={busy} />
       </View>
     </View>
@@ -350,10 +349,6 @@ function progressStep(order: GiftCard | null, payment: PaymentState): number {
     return 1;
   }
   return 0;
-}
-
-function dollars(price: bigint): string {
-  return money.fiat(BuyPrice.dollars(price), Rates.usd);
 }
 
 const styles = StyleSheet.create({

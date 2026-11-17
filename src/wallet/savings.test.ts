@@ -5,7 +5,7 @@ import { CtxError } from '../ctx/ctx-error.ts';
 import { money } from '../money.ts';
 import { network } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
-import { Savings, SavingsRate, UnansweredDeposit } from './savings.ts';
+import { PendingDeposit, Savings, SavingsRate, UnansweredDeposit } from './savings.ts';
 import { VaultCall, type SentVaultCall } from './vault-call.ts';
 
 test('savings takes every currency with a vault', () => {
@@ -180,4 +180,45 @@ test('the projected value grows from the daily step at the yearly rate', () => {
   const expected = 100 + (100 * 0.04) / 365 / 2;
   assert.ok(Math.abs(rate.projected(value, halfDay) - expected) < 1e-9);
   assert.ok(rate.projected(value, halfDay + 1) > rate.projected(value, halfDay));
+});
+
+function depositStorage() {
+  const items = new Map<string, string>();
+  return {
+    items,
+    getItem: async (key: string) => items.get(key) ?? null,
+    setItem: async (key: string, value: string) => void items.set(key, value),
+    removeItem: async (key: string) => void items.delete(key),
+  };
+}
+
+test('a deposit whose sponsor answer is lost blocks the next one until its landing window closes', async () => {
+  const storage = depositStorage();
+  const pending = new PendingDeposit(storage, 'CWALLET');
+  await assert.rejects(
+    pending.sponsored(500, async () => {
+      throw new TypeError('Network request failed');
+    }),
+    UnansweredDeposit,
+  );
+  await assert.rejects(new PendingDeposit(storage, 'CWALLET').requireNone(async () => 500), {
+    message: PendingDeposit.inFlightMessage,
+  });
+  await new PendingDeposit(storage, 'COTHER').requireNone(async () => 500);
+  await new PendingDeposit(storage, 'CWALLET').requireNone(async () => 600);
+  assert.equal(storage.items.size, 0);
+});
+
+test('an answered or refused deposit leaves no pending record', async () => {
+  const storage = depositStorage();
+  const pending = new PendingDeposit(storage, 'CWALLET');
+  assert.equal(await pending.sponsored(500, async () => 'sent'), 'sent');
+  assert.equal(storage.items.size, 0);
+  await assert.rejects(
+    pending.sponsored(500, async () => {
+      throw new CtxError(400, '{"error":"ErrSavingsUnavailable"}');
+    }),
+    CtxError,
+  );
+  assert.equal(storage.items.size, 0);
 });

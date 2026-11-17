@@ -32,6 +32,7 @@ export type SignedTransfer = {
 type SentRecord = {
   expiryLedger?: number;
   txId?: string;
+  failed?: true;
 };
 
 type ChainTransaction = {
@@ -47,6 +48,9 @@ export function resumedPaymentState(giftCard: GiftCardPayment, sent?: SentRecord
   }
   if (giftCard.paymentCryptoTxId) {
     return { kind: 'confirming', txId: giftCard.paymentCryptoTxId };
+  }
+  if (sent?.failed) {
+    return { kind: 'failed' };
   }
   if (sent) {
     return { kind: 'confirming', txId: sent.txId, expiryLedger: sent.expiryLedger };

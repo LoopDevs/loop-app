@@ -6,6 +6,7 @@ import { Button, Notice } from '@/components/ui/form';
 import { ThemedText } from '@/components/ui/themed-text';
 import { Layout, Motion, Spacing } from '@/constants/theme';
 import { errorMessage } from '@/hooks/use-busy-action';
+import { errorReporting } from '@/ops/error-reporting';
 
 type WalletStepProps = {
   title: string;
@@ -39,6 +40,7 @@ export function WalletStep({ title, body, label, busyLabel, run, onDone }: Walle
       await run(unmounted.current.signal);
       await onDone();
     } catch (error) {
+      errorReporting.reportError(error, 'Wallet step');
       if (!unmounted.current.signal.aborted) {
         setMessage(errorMessage(error));
       }

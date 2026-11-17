@@ -123,3 +123,23 @@ test('the iOS app links claim the bank return path', async () => {
   const paths = site.applinks.details.flatMap((detail) => detail.components.map((component) => component['/']));
   assert.ok(paths.includes(BankLink.returnPath));
 });
+
+test('an order return link opens the order in Wallet', () => {
+  assert.equal(BankLink.orderReturn('loop://orders/abc-123'), '/wallet/abc-123');
+  assert.equal(BankLink.orderReturn('/orders/abc-123?status=done'), '/wallet/abc-123');
+  assert.equal(BankLink.orderReturn('https://loopfinance.io/orders/abc-123'), '/wallet/abc-123');
+  assert.equal(BankLink.orderReturn('https://evil.example/orders/abc-123'), null);
+  assert.equal(BankLink.orderReturn('/orders/abc/extra'), null);
+  assert.equal(BankLink.orderReturn('/wallet/abc-123'), null);
+});
+
+test('every top-level native route is a tab or a rewritten link', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const tabs = await readFile('src/components/app-tabs.tsx', 'utf8');
+  const rewritten = new Set(['plaid']);
+  const routes = (await readdir('src/app'))
+    .map((entry) => entry.replace(/\.tsx$/, ''))
+    .filter((route) => !route.startsWith('+') && !route.startsWith('_'));
+  const unreachable = routes.filter((route) => !rewritten.has(route) && !tabs.includes(`name="${route}"`));
+  assert.deepEqual(unreachable, []);
+});

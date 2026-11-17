@@ -310,3 +310,22 @@ test('amounts show the range, or each fixed value', () => {
   assert.equal(fixed.amountsLabel('en-US'), '$10, $25.50');
   assert.equal(new Merchant({ ...json, denominationType: 'fixed', denominationValues: [] }).amountsLabel(), null);
 });
+
+test('the name pattern finds brands typed without their punctuation, spacing or accents', () => {
+  const finds = (typed: string, brand: string) => new RegExp(Merchant.namePattern(typed), 'i').test(brand);
+  assert.equal(finds('lowes', "Lowe's"), true);
+  assert.equal(finds('macys', "Macy's"), true);
+  assert.equal(finds('bm', 'B&M'), true);
+  assert.equal(finds('b & m', 'B&M'), true);
+  assert.equal(finds('decathlon', 'Décathlon'), true);
+  assert.equal(finds('Décathlon', 'Decathlon'), true);
+  assert.equal(finds('toys r us', 'Toys"R"Us'), true);
+  assert.equal(finds('nike', 'Adidas'), false);
+});
+
+test('the name pattern treats typed regex characters as text and is empty for a blank query', () => {
+  assert.equal(Merchant.namePattern('  '), '');
+  assert.equal(Merchant.namePattern('.*'), '');
+  assert.equal(new RegExp(Merchant.namePattern('a.b'), 'i').test('axb'), false);
+  assert.equal(Merchant.namePattern('a,b').includes(','), false);
+});

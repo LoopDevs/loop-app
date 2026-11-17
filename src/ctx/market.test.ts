@@ -42,3 +42,17 @@ test("each market has its local currency", () => {
   assert.equal(Market.localCurrency("CA"), "CAD");
   assert.equal(Market.localCurrency("IE"), "EUR");
 });
+
+test("every supported country has a name where the engine has no Intl.DisplayNames", () => {
+  const original = Intl.DisplayNames;
+  Object.defineProperty(Intl, "DisplayNames", { value: undefined, configurable: true, writable: true });
+  try {
+    for (const country of Market.countries) {
+      assert.notEqual(Market.countryName(country), country);
+    }
+    assert.equal(Market.countryName("GB"), "United Kingdom");
+    assert.equal(Market.countryName("ZZ"), "ZZ");
+  } finally {
+    Object.defineProperty(Intl, "DisplayNames", { value: original, configurable: true, writable: true });
+  }
+});

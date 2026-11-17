@@ -124,3 +124,24 @@ test('the payload holds the raw signature and the uncompressed public key', () =
   assert.equal(base64.decode(json.signature).length, 64);
   assert.ok(scalar(base64.decode(json.signature).slice(32)) <= half);
 });
+
+test('a fixed assertion encodes to a known payload with its high-S signature folded to low-S', () => {
+  const highR = (1n << 255n) + 12345n;
+  const highS = order - 777n;
+  const authenticatorData = Uint8Array.from({ length: 37 }, (_, index) => index + 1);
+  const clientDataJson = new TextEncoder().encode('{"type":"webauthn.get"}');
+  const fixedPublicKey = Uint8Array.from({ length: 65 }, (_, index) => (index === 0 ? 4 : index));
+  const json = PasskeyAssertion.fromResponse({
+    authenticatorData: base64.encodeUrl(authenticatorData),
+    clientDataJSON: base64.encodeUrl(clientDataJson),
+    signature: base64.encodeUrl(new p256.Signature(highR, highS).toBytes('der')),
+  }).toJson(fixedPublicKey);
+  assert.deepEqual(json, {
+    publicKey:
+      'BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=',
+    authenticatorData: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJQ==',
+    clientDataJson: 'eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0=',
+    signature:
+      'gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADCQ==',
+  });
+});

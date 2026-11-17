@@ -44,6 +44,7 @@ export class OneTapBuy {
   static readonly paidElsewhereMessage = 'This order was already paid, so nothing more was sent from this device.';
 
   private running = false;
+  private current: Promise<unknown> = Promise.resolve();
 
   static beforeTopUp(current: OrderPayment): SendOutcome | null {
     if (current.status === 'expired') {
@@ -147,6 +148,13 @@ export class OneTapBuy {
     return this.running;
   }
 
+  settled(): Promise<void> {
+    return this.current.then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
   start(steps: BuySteps, quote: BuyQuote): Promise<BuyResult> {
     return this.exclusive(async () => this.attempt(steps, await steps.createOrder(), quote, true));
   }
@@ -160,8 +168,10 @@ export class OneTapBuy {
       return { kind: 'busy' };
     }
     this.running = true;
+    const attempt = task();
+    this.current = attempt;
     try {
-      return await task();
+      return await attempt;
     } finally {
       this.running = false;
     }

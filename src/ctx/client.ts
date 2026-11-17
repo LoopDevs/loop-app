@@ -359,7 +359,7 @@ class CtxClient {
 
   async merchants({ country, name, ids, category, order = 'name', page, perPage }: MerchantQuery): Promise<MerchantPage> {
     const query = new URLSearchParams({ enabled: '1', order, country });
-    const pattern = Merchant.searchPattern(name ?? '');
+    const pattern = Merchant.namePattern(name ?? '');
     if (pattern) {
       query.set('name', pattern);
     }
@@ -396,10 +396,13 @@ class CtxClient {
     return new Merchant(json, this.companyCashback);
   }
 
-  async orderGiftCard(order: GiftCardOrderIn): Promise<GiftCard> {
+  async orderGiftCard(
+    order: GiftCardOrderIn,
+    adoptable: (placed: GiftCard) => Promise<boolean> = async () => true,
+  ): Promise<GiftCard> {
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback', ...this.orderPlatform() };
     const idempotencyKey = this.orderKeys.keyFor(order);
-    const card = await this.sentOrder(body, idempotencyKey);
+    const card = await this.sentOrder(body, idempotencyKey, adoptable);
     if (!new OrderRequest(order).matches(card)) {
       errorReporting.reportMessage('CTX order does not match the request');
       throw new Error('CTX order does not match the request');
@@ -413,7 +416,11 @@ class CtxClient {
     return os === 'android' || os === 'ios' ? { platform: os } : {};
   }
 
-  private async sentOrder(body: GiftCardOrderBody, idempotencyKey: string): Promise<GiftCard> {
+  private async sentOrder(
+    body: GiftCardOrderBody,
+    idempotencyKey: string,
+    adoptable: (placed: GiftCard) => Promise<boolean>,
+  ): Promise<GiftCard> {
     try {
       return this.checked(
         CtxResponse.giftCard,
@@ -423,7 +430,7 @@ class CtxClient {
       if (error instanceof CtxError) {
         throw error;
       }
-      const placed = await this.placedOrder(idempotencyKey).catch(() => null);
+      const placed = await this.placedOrder(idempotencyKey, adoptable).catch(() => null);
       if (!placed) {
         throw error;
       }
@@ -432,14 +439,24 @@ class CtxClient {
     }
   }
 
-  private async placedOrder(idempotencyKey: string): Promise<GiftCard | null> {
+  private async placedOrder(
+    idempotencyKey: string,
+    adoptable: (placed: GiftCard) => Promise<boolean>,
+  ): Promise<GiftCard | null> {
     const request = this.orderKeys.requestFor(idempotencyKey);
     if (!request) {
       return null;
     }
     const { result } = await this.giftCards({ merchantId: request.asked.merchantId, status: ['unpaid'], perPage: 5 });
-    const placed = result.find((card) => request.placed(card));
-    return placed ? this.giftCard(placed.id) : null;
+    const newestFirst = result
+      .filter((card) => request.placed(card))
+      .sort((a, b) => Date.parse(b.created) - Date.parse(a.created));
+    for (const placed of newestFirst) {
+      if (await adoptable(placed)) {
+        return this.giftCard(placed.id);
+      }
+    }
+    return null;
   }
 
   async giftCard(id: string): Promise<GiftCard> {

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import type { rpc } from '@stellar/stellar-sdk';
 
-import { Soroban } from './soroban.ts';
+import { LedgerProgress, Soroban } from './soroban.ts';
 
 function fakeServer(latestLedger: () => Promise<{ sequence: number }>, calls: string[], name: string): rpc.Server {
   return {
@@ -91,4 +91,50 @@ test('a failing hedge does not discard the answer the slow endpoint still gives'
 
   assert.equal(await soroban.latestLedger(), 42);
   assert.deepEqual(calls, ['primary', 'fallback']);
+});
+
+test('an endpoint whose ledger stops advancing loses to the next one, which becomes preferred', async () => {
+  const calls: string[] = [];
+  let now = 0;
+  let fallbackLedger = 100;
+  const soroban = new Soroban(
+    [
+      fakeServer(() => Promise.resolve({ sequence: 42 }), calls, 'primary'),
+      fakeServer(() => Promise.resolve({ sequence: (fallbackLedger += 1) }), calls, 'fallback'),
+    ],
+    Soroban.hedgeMs,
+    () => now,
+  );
+
+  assert.equal(await soroban.latestLedger(), 42);
+  now += LedgerProgress.stalledAfterMs + 1;
+  assert.equal(await soroban.latestLedger(), 101);
+  assert.equal(await soroban.latestLedger(), 102);
+  assert.deepEqual(calls, ['primary', 'primary', 'fallback', 'fallback']);
+});
+
+test('a stalled answer is used when no other endpoint answers', async () => {
+  const calls: string[] = [];
+  let now = 0;
+  const soroban = new Soroban(
+    [
+      fakeServer(() => Promise.resolve({ sequence: 42 }), calls, 'primary'),
+      fakeServer(() => Promise.reject(new Error('Network Error')), calls, 'fallback'),
+    ],
+    Soroban.hedgeMs,
+    () => now,
+  );
+
+  assert.equal(await soroban.latestLedger(), 42);
+  now += LedgerProgress.stalledAfterMs + 1;
+  assert.equal(await soroban.latestLedger(), 42);
+});
+
+test('a single endpoint is never treated as stalled', async () => {
+  let now = 0;
+  const soroban = new Soroban([fakeServer(() => Promise.resolve({ sequence: 42 }), [], 'only')], Soroban.hedgeMs, () => now);
+
+  assert.equal(await soroban.latestLedger(), 42);
+  now += LedgerProgress.stalledAfterMs + 1;
+  assert.equal(await soroban.latestLedger(), 42);
 });

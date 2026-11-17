@@ -320,3 +320,47 @@ test('nothing is preferred when no funded currency is accepted', () => {
   assert.equal(holdings({}).preferredCurrency(currencies, 'USD', new Set()), null);
   assert.equal(holdings({ 'XLM.USDC': '1' }).preferredCurrency(currencies, 'USD', new Set(currencies)), null);
 });
+
+test('the wallet figure counts every token at its rate and leaves savings out', () => {
+  const held = holdings({ 'XLM.GBPLOOP': '2', 'XLM.EURC': '10' }, { savings: { 'XLM.GBPLOOP': '50' } });
+  const withoutSavings = holdings({ 'XLM.GBPLOOP': '2', 'XLM.EURC': '10' });
+  assert.equal(held.inWalletIn('XLM.GBPLOOP'), withoutSavings.spendableIn('XLM.GBPLOOP'));
+  assert.equal(holdings({ 'XLM.EURC': '10' }).inWallet('XLM.GBPLOOP'), 0n);
+  assert.notEqual(holdings({ 'XLM.EURC': '10' }).inWalletIn('XLM.GBPLOOP'), 0n);
+});
+
+test('amounts in several currencies are summed at their rates, and unknown without a rate', () => {
+  const held = holdings({});
+  const amounts = [
+    { currency: 'XLM.GBPLOOP', amount: units.parse('1') },
+    { currency: 'XLM.EURC', amount: units.parse('10') },
+  ];
+  assert.equal(held.sumIn(amounts, 'XLM.GBPLOOP'), units.parse('9.3878207'));
+  assert.equal(holdings({}, { rates: Rates.fromPrices({}) }).sumIn(amounts, 'XLM.GBPLOOP'), null);
+});
+
+test('received cashback is grouped by currency', () => {
+  const account = accountOf(
+    [],
+    [
+      payout({ id: 'a', status: 'complete', currency: 'XLM.GBPLOOP', amount: '1' }),
+      payout({ id: 'b', status: 'complete', currency: 'XLM.EURC', amount: '2' }),
+      payout({ id: 'c', status: 'complete', currency: 'XLM.EURC', amount: '3' }),
+      payout({ id: 'd', status: 'pending', currency: 'XLM.EURC', amount: '9' }),
+    ],
+  );
+  assert.deepEqual(account.receivedCashbackByCurrency(new Set(['XLM.GBPLOOP', 'XLM.EURC'])), [
+    { currency: 'XLM.GBPLOOP', amount: units.parse('1') },
+    { currency: 'XLM.EURC', amount: units.parse('5') },
+  ]);
+});
+
+test('money that arrived is the first token above its earlier amount, and nothing when balances only fell', () => {
+  const before = holdings({ 'XLM.USDC': '5' }).walletAmounts();
+  assert.deepEqual(holdings({ 'XLM.USDC': '7.5' }).arrivedSince(before), {
+    currency: 'XLM.USDC',
+    amount: units.parse('2.5'),
+  });
+  assert.equal(holdings({ 'XLM.USDC': '5' }).arrivedSince(before), null);
+  assert.equal(holdings({ 'XLM.USDC': '1' }).arrivedSince(before), null);
+});

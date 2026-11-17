@@ -15,12 +15,11 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { useToast } from '@/components/ui/toast';
 import { Layout, Motion, Radius, Spacing } from '@/constants/theme';
 import { invalidAmountMessage, normalizeAmount } from '@/ctx/amount-input';
-import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
-import { network } from '@/stellar/network';
+import { network, type PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
 import { PayRequest } from '@/wallet/pay-request';
 import type { SmartWallet } from '@/wallet/smart-wallet';
@@ -55,13 +54,12 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
   const { busy, message, setMessage, run } = useBusyAction();
   const [step, setStep] = useState<Step>('method');
   const [input, setInput] = useState('');
-  const [received, setReceived] = useState<bigint>(0n);
-  const [startingTotal, setStartingTotal] = useState<bigint | null>(null);
-  const stable = view?.stable ?? Rates.usd;
-  const total = view?.stable ? view.holdings.totalIn(view.stable) : null;
+  const [received, setReceived] = useState<{ currency: PaymentCurrency; amount: bigint } | null>(null);
+  const [baseline, setBaseline] = useState<{ currency: PaymentCurrency; amount: bigint }[] | null>(null);
+  const requested = PayRequest.currency;
   const amount = normalizeAmount(input);
   const validAmount = amount !== null && Number(amount) > 0;
-  const shownAmount = validAmount ? money.ctx(amount, stable) : '';
+  const shownAmount = validAmount ? money.token(units.parse(amount), requested) : '';
   const payRequest = new PayRequest(wallet.address, validAmount ? amount : null).uri();
   const reference = `LOOP${wallet.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase()}`;
 
@@ -75,13 +73,20 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
     return () => clearInterval(timer);
   }, [step, refresh]);
 
-  if (step === 'waiting' && total !== null && startingTotal !== null && total > startingTotal) {
-    setReceived(total - startingTotal);
-    setStep('done');
+  if (step === 'waiting' && view) {
+    if (baseline === null) {
+      setBaseline(view.holdings.walletAmounts());
+    } else {
+      const arrived = view.holdings.arrivedSince(baseline);
+      if (arrived) {
+        setReceived(arrived);
+        setStep('done');
+      }
+    }
   }
 
   const startWaiting = () => {
-    setStartingTotal(total ?? 0n);
+    setBaseline(view ? view.holdings.walletAmounts() : null);
     setStep('waiting');
   };
 
@@ -114,7 +119,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
   const amountPicker = (onSubmit: () => void) => (
     <>
       <Field
-        label={money.amountLabel(stable)}
+        label={money.amountLabel(requested)}
         value={input}
         onChangeText={setInput}
         keyboardType="decimal-pad"
@@ -124,7 +129,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
       <View style={styles.chips}>
         {quickAmounts.map((quick) => (
           <View key={quick} style={styles.chip}>
-            <Button label={money.ctx(quick, stable)} selected={amount === quick} onPress={() => setInput(quick)} />
+            <Button label={money.token(units.parse(quick), requested)} selected={amount === quick} onPress={() => setInput(quick)} />
           </View>
         ))}
       </View>
@@ -227,7 +232,7 @@ export function AddMoney({ wallet, view, refresh, onClose }: AddMoneyProps) {
             tintColor={theme.success}
           />
           <ThemedText type="heading" accessibilityRole="header" accessibilityLiveRegion="polite">
-            {`${money.ctx(units.format(received, units.decimals), stable)} added`}
+            {received ? `${money.token(received.amount, received.currency)} added` : 'Money added'}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {"It's in your balance and ready to spend on gift cards."}
