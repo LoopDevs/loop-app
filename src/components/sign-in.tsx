@@ -39,7 +39,7 @@ import { type CountryChoice, Profile } from '@/ctx/profile';
 import { SignInGate } from '@/session/sign-in-gate';
 import type { SocialProvider } from '@/session/social-sign-in';
 import { passkey } from '@/wallet/passkey';
-import { SmartWallet, UnlinkedDevice, WalletBlocked } from '@/wallet/smart-wallet';
+import { DeviceSetupNeeded, SmartWallet, WalletBlocked } from '@/wallet/smart-wallet';
 
 type SignInListener = () => void;
 
@@ -327,7 +327,7 @@ function SignInForm({ reason, onAuthenticated, onSignedIn, onWorking }: SignInFo
         return;
       }
     } catch (error) {
-      if (error instanceof UnlinkedDevice) {
+      if (error instanceof DeviceSetupNeeded) {
         setUnlinkedWallet(error.wallet);
         setStep('add-device');
         return;
