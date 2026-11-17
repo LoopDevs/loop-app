@@ -255,7 +255,6 @@ test('a sent payment shows as confirming and is followed with its chain record',
       follow: true,
       sent: { txId: 'tx-payment-1', expiryLedger: 500 },
     },
-    celebrate: true,
   });
 });
 
@@ -281,7 +280,6 @@ test('an order paid from elsewhere is followed with a notice and no celebration'
   assert.deepEqual(OneTapBuy.view({ kind: 'payment', order, outcome }, null), {
     kind: 'show',
     shown: { order, payment: outcome.state, follow: true, sent: { txId: 'tx-elsewhere', expiryLedger: undefined } },
-    celebrate: false,
     notice: OneTapBuy.paidElsewhereMessage,
   });
 });
@@ -369,16 +367,15 @@ test('an already paying order shown after a sent record keeps its chain record',
   assert.deepEqual(paidView, {
     kind: 'show',
     shown: { order: paid, payment: { kind: 'confirming' }, follow: true, sent: null },
-    celebrate: false,
   });
 });
 
-test('a send with no transaction hash shows as confirming without celebrating', () => {
+test('a send with no transaction hash shows as confirming', () => {
   const view = OneTapBuy.view(
     { kind: 'payment', order: giftCard(1), outcome: { state: { kind: 'confirming' }, resumed: false } },
     null,
   );
-  assert.equal(view.kind === 'show' && view.celebrate, false);
+  assert.equal(view.kind === 'show' && view.shown.payment.kind, 'confirming');
 });
 
 test('a running buy can be awaited by a screen that did not start it', async () => {

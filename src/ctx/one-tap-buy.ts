@@ -33,7 +33,7 @@ export type ShownOrder = {
 export type BuyView =
   | { kind: 'rollBack'; message: string }
   | { kind: 'confirm'; order: GiftCard; price: bigint }
-  | { kind: 'show'; shown: ShownOrder; celebrate: boolean; notice?: string };
+  | { kind: 'show'; shown: ShownOrder; notice?: string };
 
 const expired: SendOutcome = { state: { kind: 'priceExpired' }, resumed: false };
 
@@ -97,26 +97,22 @@ export class OneTapBuy {
       case 'alreadyPaying': {
         const payment = OneTapBuy.paymentShown(result.order, sent);
         if (payment.kind === 'confirming') {
-          return { kind: 'show', shown: OneTapBuy.shown(result.order, payment, true), celebrate: false };
+          return { kind: 'show', shown: OneTapBuy.shown(result.order, payment, true) };
         }
         const shown: ShownOrder = { order: result.order, payment: { kind: 'confirming' }, follow: true, sent: null };
-        return { kind: 'show', shown, celebrate: false };
+        return { kind: 'show', shown };
       }
       case 'payment': {
-        const { state, resumed } = result.outcome;
+        const { state } = result.outcome;
         if (state.kind !== 'confirming') {
           const detail = state.kind === 'notSent' ? state.detail : '';
           return { kind: 'rollBack', message: detail !== '' ? detail : OneTapBuy.notBoughtMessage };
         }
         if (result.outcome.paidElsewhere) {
           const shown = OneTapBuy.shown(result.order, state, true);
-          return { kind: 'show', shown, celebrate: false, notice: OneTapBuy.paidElsewhereMessage };
+          return { kind: 'show', shown, notice: OneTapBuy.paidElsewhereMessage };
         }
-        return {
-          kind: 'show',
-          shown: OneTapBuy.shown(result.order, state, true),
-          celebrate: !resumed && state.txId !== undefined,
-        };
+        return { kind: 'show', shown: OneTapBuy.shown(result.order, state, true) };
       }
     }
   }

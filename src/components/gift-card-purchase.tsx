@@ -239,6 +239,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     async (giftCard: GiftCard, sent: SentRecord | null, isCurrent: () => boolean, wake: OrderWake) => {
       let current = giftCard;
       let landed = false;
+      const paidAtOpen = giftCard.paymentStatus === 'paid';
       while (isCurrent()) {
         if (BankPayment.linkExpired(current, Date.now())) {
           setPayment((held) => (held.kind === 'bank' && held.linkOpen ? { kind: 'bank', linkOpen: false } : held));
@@ -277,6 +278,9 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
         }
         if (!landed && current.paymentStatus === 'paid') {
           landed = true;
+          if (!paidAtOpen) {
+            haptics.success();
+          }
           buyTimer.current?.mark('paid seen');
           if (BankPayment.isBank(current)) {
             void dismissBrowser();
@@ -505,9 +509,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
         const { order: shownOrder, payment: shownPayment, follow, sent: shownSent } = view.shown;
         setOrder(shownOrder);
         setPayment(shownPayment);
-        if (view.celebrate) {
-          haptics.success();
-        }
         if (view.notice) {
           setMessage(view.notice);
         }

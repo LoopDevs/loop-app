@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
+import { BankPayment } from '@/ctx/bank-payment';
 import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
 import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { signInReportMessage } from '@/ctx/sign-in-report';
@@ -406,6 +407,10 @@ class CtxClient {
     order: GiftCardOrderIn,
     adoptable: (placed: GiftCard) => Promise<boolean> = async () => true,
   ): Promise<GiftCard> {
+    const open = await this.openBankOrder(order);
+    if (open) {
+      return open;
+    }
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback', ...this.orderPlatform() };
     const idempotencyKey = this.orderKeys.keyFor(order);
     const card = await this.sentOrder(body, idempotencyKey, adoptable);
@@ -415,6 +420,24 @@ class CtxClient {
     }
     this.orderKeys.settle(idempotencyKey);
     return card;
+  }
+
+  private async openBankOrder(order: GiftCardOrderIn): Promise<GiftCard | null> {
+    if (order.cryptoCurrency !== undefined || order.chooseBank) {
+      return null;
+    }
+    const request = new OrderRequest(order);
+    const { result } = await this.giftCards({ merchantId: order.merchantId, status: ['unpaid'], perPage: 10 });
+    const newestFirst = result
+      .filter((card) => request.matches(card) && BankPayment.isBank(card))
+      .sort((a, b) => Date.parse(b.created) - Date.parse(a.created));
+    for (const card of newestFirst) {
+      const open = await this.giftCard(card.id);
+      if (BankPayment.approvableOn(open, Date.now(), Platform.OS !== 'web')) {
+        return open;
+      }
+    }
+    return null;
   }
 
   private orderPlatform(): Pick<GiftCardOrderBody, 'platform'> {
