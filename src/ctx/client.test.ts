@@ -238,6 +238,33 @@ test('after signing in, account reads go to the user id inside the access token 
   assert.equal(await ctx.userId(), 'user-42');
 });
 
+test('a new sign-in ends the previous session at CTX only once the new tokens exist', async () => {
+  await signIn('user-42');
+  respond = (request) =>
+    request.url.endsWith('/verify-email')
+      ? json({ accessToken: accessToken('user-77'), refreshToken: 'refresh-2' })
+      : json({});
+  await ctx.verifyCode('b@example.com', '654321');
+  assert.deepEqual(
+    sent.map((request) => request.url.replace(apiUrl, '')),
+    ['/verify-email', '/logout'],
+  );
+  assert.equal(sent[1].headers.Authorization, `Bearer ${accessToken('user-42')}`);
+  assert.equal(await ctx.userId(), 'user-77');
+});
+
+test('a refused code leaves the current session signed in', async () => {
+  await signIn('user-42');
+  respond = () => json({ error: 'ErrVerificationCodeInvalid' }, 400);
+  await assert.rejects(ctx.verifyCode('b@example.com', '000000'), CtxError);
+  assert.deepEqual(
+    sent.map((request) => request.url.replace(apiUrl, '')),
+    ['/verify-email'],
+  );
+  respond = () => json({});
+  assert.equal(await ctx.userId(), 'user-42');
+});
+
 test('signing out clears the session even when the logout call fails', async () => {
   await signIn('user-42');
   respond = () => json({ error: 'ErrInternal' }, 500);
