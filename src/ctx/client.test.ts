@@ -634,3 +634,64 @@ test('a successful answer that is not JSON is rejected with the server-failed me
   await assert.rejects(ctx.wallets(), { name: 'UnexpectedResponse', message: CtxError.serverFailedMessage });
   assert.deepEqual(reported, ['CTX answered with a body that is not JSON']);
 });
+
+const bankOrder: GiftCardOrderIn = {
+  merchantId: 'm1',
+  fiatAmount: '25',
+  fiatCurrency: 'GBP',
+};
+
+function bankCard(id: string, created: string, paymentUrlExpiration: string) {
+  return {
+    ...card({}),
+    id,
+    created,
+    paymentMethod: 'plaid-uk-eu',
+    paymentCryptoCurrency: undefined,
+    plaidLinkToken: `link-${id}`,
+    paymentUrlExpiration,
+  };
+}
+
+const cardList = (cards: object[]) =>
+  json({ result: cards, pagination: { page: 1, pages: 1, perPage: 10, total: cards.length } });
+
+test('a bank order reuses the newest open order for the same request that can still be approved', async () => {
+  await signIn('user-42');
+  const soon = new Date(Date.now() + 600_000).toISOString();
+  const past = new Date(Date.now() - 600_000).toISOString();
+  const cards = [
+    bankCard('g-expired', '2026-10-27T12:00:00Z', past),
+    bankCard('g-open', '2026-10-27T11:00:00Z', soon),
+    bankCard('g-older', '2026-10-27T10:00:00Z', soon),
+  ];
+  respond = (request) =>
+    request.url.startsWith(`${apiUrl}/gift-cards?`)
+      ? cardList(cards)
+      : json(cards.find((candidate) => request.url.endsWith(`/${candidate.id}`)));
+  const reused = await ctx.orderGiftCard(bankOrder);
+  assert.equal(reused.id, 'g-open');
+  assert.deepEqual(
+    sent.map((request) => request.method),
+    ['GET', 'GET', 'GET'],
+  );
+});
+
+test('a bank order is created when no open order matches, and always when another bank is chosen', async () => {
+  await signIn('user-42');
+  const soon = new Date(Date.now() + 600_000).toISOString();
+  const created = bankCard('g-new', '2026-10-27T12:00:00Z', soon);
+  respond = (request) => (request.method === 'POST' ? json(created) : cardList([]));
+  assert.equal((await ctx.orderGiftCard(bankOrder)).id, 'g-new');
+  assert.deepEqual(
+    sent.map((request) => request.method),
+    ['GET', 'POST'],
+  );
+  sent = [];
+  respond = (request) => (request.method === 'POST' ? json(created) : cardList([created]));
+  assert.equal((await ctx.orderGiftCard({ ...bankOrder, chooseBank: true })).id, 'g-new');
+  assert.deepEqual(
+    sent.map((request) => request.method),
+    ['POST'],
+  );
+});
