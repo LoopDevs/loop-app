@@ -12,7 +12,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 
-import { BankCheckout } from '@/components/bank-checkout';
+import { CryptoCheckout } from '@/components/crypto-checkout';
 import { ExternalLink } from '@/components/external-link';
 import { Button, Notice } from '@/components/ui/form';
 import { PageTitle } from '@/components/page-title';
@@ -27,7 +27,6 @@ import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { useSignIn } from '@/components/sign-in';
 import { FontFamily, Layout, MaxContentWidth, Motion, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
-import { BankPayment } from '@/ctx/bank-payment';
 import { Market } from '@/ctx/market';
 import { Merchant } from '@/ctx/merchant';
 import { useBump } from '@/hooks/use-bump';
@@ -56,9 +55,9 @@ export default function MerchantScreen() {
   const router = useRouter();
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const { merchant, wallet, walletChecked, profile, signedIn, activeOrder, busy, message, load } = useMerchantAccount(
+  const { merchant, profile, signedIn, activeOrder, busy, message, load } = useMerchantAccount(
     slug,
-    { withActiveOrder: true, walletOnlyWithoutBank: true },
+    { withActiveOrder: true, withoutWallet: true },
   );
   const { favourites, toggle: toggleFavourite } = useFavourites();
   const { openSignIn } = useSignIn();
@@ -109,11 +108,9 @@ export default function MerchantScreen() {
     );
   }
 
-  const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and earn ${merchant.rateLabel()}` : '';
+  const earnLine = merchant.cashbackBasisPoints() > 0 ? ` and get ${merchant.rateLabel()}` : '';
   const cardStyle = [styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
-  const rail = BankPayment.rail(merchant.currency);
-  const payCopy = rail ? `Pay from your ${rail.bankLabel}.` : 'Pay from your Loop balance.';
   const buyCard = !merchant.isAvailable() ? (
     <View style={cardStyle}>
       <ThemedText type="heading">Not available right now</ThemedText>
@@ -130,48 +127,19 @@ export default function MerchantScreen() {
         </ThemedText>
         <Button label="Open Settings" variant="secondary" onPress={() => router.navigate('/profile/settings')} />
       </View>
-    ) : profile && BankPayment.offered(merchant.currency, profile) ? (
+    ) : profile ? (
       <View style={cardStyle}>
-        <BankCheckout
-          merchant={merchant}
-          profile={profile}
-          activeOrder={activeOrder}
-          onAmountFocus={showBuyCard}
-        />
+        <CryptoCheckout merchant={merchant} profile={profile} activeOrder={activeOrder} onAmountFocus={showBuyCard} />
       </View>
-    ) : profile && wallet ? (
-      <View style={cardStyle}>
-        <ThemedText type="heading">
-          {activeOrder ? 'Your order is in progress' : `Buy a ${merchant.name} gift card`}
-        </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {activeOrder
-            ? `Your ${merchant.shortAmount(activeOrder.cardFiatAmount)} gift card is still being paid for.`
-            : `Choose an amount${earnLine}. ${payCopy}`}
-        </ThemedText>
-        <Button
-          label={activeOrder ? 'Continue your order' : 'Buy gift card'}
-          variant="primary"
-          onPress={() => router.push(`/shop/pay/${slug}`)}
-        />
-      </View>
-    ) : signedIn === null || (signedIn && !walletChecked) ? (
+    ) : signedIn !== false ? (
       retry ? null : (
         <BuySkeleton />
       )
-    ) : signedIn ? (
-      <View style={cardStyle}>
-        <ThemedText type="heading">Finish setting up Loop</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          Turn on Face ID or your fingerprint to pay for gift cards and collect your cashback.
-        </ThemedText>
-        <Button label="Finish setup" variant="primary" onPress={() => router.navigate('/')} />
-      </View>
     ) : (
       <View style={cardStyle}>
         <ThemedText type="heading">Buy a {merchant.name} gift card</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Sign in to choose an amount{earnLine}. {payCopy}
+          Sign in to choose an amount{earnLine}. Pay with XLM or USDC from your own wallet.
         </ThemedText>
         <Button
           label="Sign in to buy"

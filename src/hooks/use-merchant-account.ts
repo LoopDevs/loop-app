@@ -12,7 +12,7 @@ import { useBusyAction } from '@/hooks/use-busy-action';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { SmartWallet } from '@/wallet/smart-wallet';
 
-export function useMerchantAccount(slug: string, { withActiveOrder = false, walletOnlyWithoutBank = false } = {}) {
+export function useMerchantAccount(slug: string, { withActiveOrder = false, walletOnlyWithoutBank = false, withoutWallet = false } = {}) {
   const { busy, message, load: track } = useBusyAction();
   const [merchant, setMerchant] = useState<Merchant | null>(() => cachedMerchant(slug));
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
@@ -52,7 +52,8 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false, wall
           setSignedIn(true);
           return loaded;
         });
-        const loadWallet = () => SmartWallet.load().catch(SmartWallet.unlessBlocked);
+        const loadWallet = () =>
+          withoutWallet ? Promise.resolve(null) : SmartWallet.load().catch(SmartWallet.unlessBlocked);
         const walletLoad = (
           walletOnlyWithoutBank
             ? Promise.all([merchantLoad, profileLoad]).then(([loadedMerchant, loadedProfile]) =>
@@ -70,7 +71,7 @@ export function useMerchantAccount(slug: string, { withActiveOrder = false, wall
           : null;
         await Promise.all([merchantLoad, profileLoad, walletLoad, orderLoad]);
       }),
-    [track, slug, readSession, withActiveOrder, walletOnlyWithoutBank],
+    [track, slug, readSession, withActiveOrder, walletOnlyWithoutBank, withoutWallet],
   );
 
   useFocusEffect(

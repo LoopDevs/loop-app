@@ -125,10 +125,18 @@ test('a cancelled card hedges about being charged, with or without a transfer', 
   );
 });
 
-test('only a payment error or an unsent crypto expiry says the user was not charged', () => {
-  const expected = "This order didn't go through. You weren't charged.";
-  assert.equal(outcomeText(card({ status: 'rejected', paymentStatus: 'error' })), expected);
-  assert.equal(outcomeText(card({ status: 'expired', paymentStatus: 'expired' })), expected);
+test('only a payment error says the user was not charged', () => {
+  assert.equal(
+    outcomeText(card({ status: 'rejected', paymentStatus: 'error' })),
+    "This order didn't go through. You weren't charged.",
+  );
+});
+
+test('a payment window that ran out points a user who paid late to support', () => {
+  assert.equal(
+    outcomeText(card({ status: 'expired', paymentStatus: 'expired' })),
+    'The time to pay ran out. If you sent a payment, contact support about a refund.',
+  );
 });
 
 test('an order that expired after payment says to contact support', () => {

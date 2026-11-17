@@ -127,7 +127,7 @@ export type GiftCardOrderIn = {
 export type OrderPlatform = 'android' | 'ios';
 
 type GiftCardOrderBody = GiftCardOrderIn & {
-  rewardType: 'cashback';
+  rewardType: 'discount';
   platform?: OrderPlatform;
 };
 
@@ -149,6 +149,7 @@ export type GiftCard = {
   paymentCryptoAddress?: string;
   paymentCryptoTxId?: string;
   paymentUrl?: string;
+  paymentUrls?: Record<string, unknown>;
   paymentUrlExpiration?: string;
   plaidLinkToken?: string;
   number?: string;
@@ -417,7 +418,7 @@ class CtxClient {
     if (open) {
       return open;
     }
-    const body: GiftCardOrderBody = { ...order, rewardType: 'cashback', ...this.orderPlatform() };
+    const body: GiftCardOrderBody = { ...order, rewardType: 'discount', ...this.orderPlatform() };
     const idempotencyKey = this.orderKeys.keyFor(order);
     const card = await this.sentOrder(body, idempotencyKey, adoptable);
     if (!new OrderRequest(order).matches(card)) {

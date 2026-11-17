@@ -79,7 +79,10 @@ export function outcomeText(card: GiftCard, sentUnconfirmed = false): string | n
   if (paymentStatus === 'cancelled') {
     return `This order was cancelled. If you were charged, ${refundAdvice}`;
   }
-  if (paymentStatus === 'error' || paymentStatus === 'expired') {
+  if (paymentStatus === 'expired') {
+    return `The time to pay ran out. If you sent a payment, ${refundAdvice}`;
+  }
+  if (paymentStatus === 'error') {
     return "This order didn't go through. You weren't charged.";
   }
   return null;

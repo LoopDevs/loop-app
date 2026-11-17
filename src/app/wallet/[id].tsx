@@ -42,6 +42,7 @@ import {
 import { CashbackRate } from '@/ctx/merchant';
 import { OrderWake } from '@/ctx/order-wake';
 import { usePageLayout } from '@/hooks/use-page-layout';
+import { CryptoPay } from '@/components/crypto-pay';
 import { usePaymentSent } from '@/hooks/use-sent-payment';
 import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
@@ -231,6 +232,7 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
   const byBank = BankPayment.isBank(giftCard);
   const processing = giftCard.status === 'paid';
   const awaitingBank = giftCard.status === 'unpaid' && byBank;
+  const payPanel = giftCard.status === 'unpaid' && !byBank ? <CryptoPay giftCard={giftCard} /> : null;
   const paid = byBank
     ? BankPayment.charged(giftCard)
       ? amountInMoney(giftCard.paymentFiatAmount, giftCard.paymentFiatCurrency)
@@ -300,6 +302,7 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
                   <OrderHelp giftCard={giftCard} sentTxId={sentTxId} />
                 </>
               }>
+              {payPanel}
               {outcome ? <Notice message={outcome} /> : null}
             {note ? <Notice message={note} tone="neutral" /> : null}
               <GiftCardDetails giftCard={giftCard} onChange={onChange} />
@@ -309,6 +312,7 @@ function GiftCardSummary({ giftCard, wide, onChange }: GiftCardSummaryProps) {
       ) : (
         <View style={[styles.body, styles.section]}>
           <Animated.View entering={sectionEntering(1)} style={styles.section}>
+            {payPanel}
             {outcome ? <Notice message={outcome} /> : null}
             {note ? <Notice message={note} tone="neutral" /> : null}
             <GiftCardDetails giftCard={giftCard} onChange={onChange} />
