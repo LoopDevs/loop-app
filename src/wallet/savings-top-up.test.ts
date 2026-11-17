@@ -516,3 +516,10 @@ test('a withdraw that stops part way names what moved and says the rest is still
     "10.00 USDC may still be moving, so check your balance before trying again. The rest couldn't move and is still in savings.",
   );
 });
+
+test('a withdraw where one currency moved and another is in flight names both', () => {
+  assert.equal(
+    SavingsTopUp.withdrawMovingMessage(['10.00 USDC'], ['5.00 EURC']),
+    'Moved 10.00 USDC to your balance. 5.00 EURC may still be moving, so check your balance before trying again.',
+  );
+});

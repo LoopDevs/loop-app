@@ -80,6 +80,7 @@ export default function ShopScreen() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const { profile, startProfileRead } = useProfile();
   const { country: marketCountry } = useMarket();
+  const [profileUnread, setProfileUnread] = useState(false);
   const [activeOrder, setActiveOrder] = useState<GiftCard | null>(null);
   const { q } = useLocalSearchParams<{ q?: string }>();
   const [search, setSearch] = useState(q ?? '');
@@ -113,7 +114,13 @@ export default function ShopScreen() {
         }
         const loadedOrder = dismissedOrders.activeOrder().catch(() => null);
         const commitProfile = startProfileRead();
-        commitProfile(await ctx.me());
+        try {
+          commitProfile(await ctx.me());
+          setProfileUnread(false);
+        } catch (error) {
+          setProfileUnread(true);
+          throw error;
+        }
         setActiveOrder(await loadedOrder);
       }),
     [runAccount, startProfileRead],
@@ -140,7 +147,8 @@ export default function ShopScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const country = profile ? (profile.country ?? marketCountry) : undefined;
+  const unreadCountry = profileUnread ? marketCountry : undefined;
+  const country = profile ? (profile.country ?? marketCountry) : unreadCountry;
   const catalog = useCatalog(country, stripSize);
   const topCashback = catalog?.top ?? [];
   const category = pickedCategory.country === country ? pickedCategory.category : null;

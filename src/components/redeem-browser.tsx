@@ -8,13 +8,22 @@ import { AppLockScope } from '@/components/app-lock';
 import { useToast } from '@/components/ui/toast';
 import { FontFamily, Spacing } from '@/constants/theme';
 import { ctx, type GiftCard } from '@/ctx/client';
-import { pageLinesScript, parseCardDetails, readPageLines } from '@/ctx/redeem-scrape';
+import {
+  pageLinesScript,
+  parseCardDetails,
+  readPageLines,
+  readPageTouched,
+  RedeemPage,
+  typedFieldsScript,
+} from '@/ctx/redeem-scrape';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
 
 const saveFailedMessage = "Couldn't save the card details. Copy them from the page instead.";
 const maxSaveAttempts = 3;
+
+type PageMessage = Pick<WebViewMessageEvent['nativeEvent'], 'url' | 'data'>;
 
 type RedeemBrowserProps = {
   giftCard: GiftCard;
@@ -43,12 +52,20 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
     onClose();
   };
   const awaitingCode = !giftCard.number && !giftCard.pin;
+  const [page] = useState(() => new RedeemPage(url));
 
-  const onMessage = async (event: WebViewMessageEvent) => {
+  const heldMessage = useRef<PageMessage | null>(null);
+
+  const readMessage = async (message: PageMessage) => {
     if (!awaitingCode || saving.current || failedSaves.current >= maxSaveAttempts) {
       return;
     }
-    const details = parseCardDetails(readPageLines(event.nativeEvent.data));
+    if (!page.trusts(message.url)) {
+      heldMessage.current = message;
+      return;
+    }
+    heldMessage.current = null;
+    const details = parseCardDetails(readPageLines(message.data));
     if (!details) {
       return;
     }
@@ -64,6 +81,22 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
       if (failedSaves.current === 1) {
         toast(saveFailedMessage);
       }
+    }
+  };
+
+  const onMessage = ({ nativeEvent }: WebViewMessageEvent) => {
+    if (readPageTouched(nativeEvent.data)) {
+      page.settle();
+      return;
+    }
+    void readMessage({ url: nativeEvent.url, data: nativeEvent.data });
+  };
+
+  const land = (landedUrl: string) => {
+    page.land(landedUrl);
+    const held = heldMessage.current;
+    if (held && page.trusts(held.url)) {
+      void readMessage(held);
     }
   };
 
@@ -99,11 +132,15 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
           ref={holdPage}
           onNavigationStateChange={(state: WebViewNavigation): void => {
             canGoBack.current = state.canGoBack;
+            land(state.url);
           }}
           source={{ uri: url }}
           style={[styles.web, { backgroundColor: theme.background }]}
           injectedJavaScript={pageLinesScript}
+          injectedJavaScriptBeforeContentLoaded={typedFieldsScript}
+          onTouchStart={() => page.settle()}
           onMessage={onMessage}
+          onLoadEnd={({ nativeEvent }) => land(nativeEvent.url)}
           onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent.progress)}
           startInLoadingState
           renderLoading={() => (

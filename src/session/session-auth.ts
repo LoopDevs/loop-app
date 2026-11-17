@@ -201,6 +201,10 @@ export class SessionAuth {
     if (!stored || stored.refreshToken === this.refusedRefreshToken || !this.session.isCurrent(generation)) {
       return null;
     }
+    if (this.owner !== null && stored.owner !== null && stored.owner !== this.owner) {
+      this.stopUsing(stored.refreshToken, { reason: 'replaced', nextOwner: stored.owner });
+      return null;
+    }
     try {
       const tokens = await this.sendRefreshToken(stored.refreshToken);
       return (await this.storeTokens(generation, tokens, stored.owner)) ? tokens.accessToken : null;

@@ -121,7 +121,7 @@ export default function SavingsScreen() {
           }
         }
         if (unfinished) {
-          setMessage(SavingsTopUp.withdrawAllMessage(unfinished));
+          setMessage(moved.length ? SavingsTopUp.withdrawMovingMessage(moved, moving) : SavingsTopUp.withdrawAllMessage(unfinished));
           return;
         }
         haptics.success();

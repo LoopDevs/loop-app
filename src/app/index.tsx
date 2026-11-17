@@ -67,6 +67,7 @@ export default function HomeScreen() {
   const [wallet, setWallet] = useState<SmartWallet | null>(null);
   const [blockedWallet, setBlockedWallet] = useState<SmartWallet | null>(null);
   const [profileCountry, setProfileCountry] = useState<string | undefined>(undefined);
+  const [profileUnread, setProfileUnread] = useState(false);
   const [sessionRead, setSessionRead] = useState(false);
   const { view, refresh } = useHoldings(wallet);
   const { busy, message, run, load } = useBusyAction();
@@ -85,7 +86,8 @@ export default function HomeScreen() {
   const readOwner = useSessionOwner();
   const signedOut = screen === 'signed-out';
   const signedOutCountry = marketResolved ? marketCountry : undefined;
-  const catalogCountry = !sessionRead ? undefined : signedOut ? signedOutCountry : profileCountry;
+  const signedInCountry = profileCountry ?? (profileUnread ? signedOutCountry : undefined);
+  const catalogCountry = !sessionRead ? undefined : signedOut ? signedOutCountry : signedInCountry;
   const catalog = useCatalog(catalogCountry, offersShown);
 
   const showWallet = useCallback((loaded: SmartWallet | null) => {
@@ -125,6 +127,7 @@ export default function HomeScreen() {
 
   const loadProfileCountry = useCallback(async () => {
     const profile = await ctx.me().catch(() => null);
+    setProfileUnread(profile === null);
     if (profile !== null) {
       setProfileCountry(profile.needsSetup() ? undefined : profile.country);
     }
@@ -140,6 +143,7 @@ export default function HomeScreen() {
         setWallet(null);
         setBlockedWallet(null);
         setProfileCountry(undefined);
+        setProfileUnread(false);
       }
       if (signedIn) {
         if ((changed || preWalletScreens.includes(screen)) && !walletLoadStarted.current) {
