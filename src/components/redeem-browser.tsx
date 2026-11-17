@@ -75,6 +75,12 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
       haptics.success();
       onSaved(saved);
     } catch (error) {
+      const stored = await ctx.giftCard(giftCard.id).catch(() => null);
+      if (stored && (stored.number || stored.pin)) {
+        haptics.success();
+        onSaved(stored);
+        return;
+      }
       errorReporting.reportError(error, 'Gift card code save');
       failedSaves.current += 1;
       saving.current = false;

@@ -287,15 +287,24 @@ export const pageLinesScript = `${typedFieldsScript}
     return out;
   }
   var timer = null;
+  var firstChange = 0;
+  var maxWait = 3000;
   function send() {
     timer = null;
+    firstChange = 0;
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({ lines: collect() }));
     } catch (error) {}
   }
   function schedule() {
+    var now = Date.now();
     if (timer) {
       clearTimeout(timer);
+    }
+    firstChange = firstChange || now;
+    if (now - firstChange >= maxWait) {
+      send();
+      return;
     }
     timer = setTimeout(send, 500);
   }
