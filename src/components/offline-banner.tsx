@@ -1,7 +1,7 @@
 import { useNetInfo } from '@react-native-community/netinfo';
 import { SymbolView } from 'expo-symbols';
 import { useEffect } from 'react';
-import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
@@ -18,28 +18,41 @@ export function OfflineBanner() {
       AccessibilityInfo.announceForAccessibility(offlineMessage);
     }
   }, [offline]);
-  if (!offline) {
-    return null;
-  }
   return (
-    <SafeAreaView edges={['top']} pointerEvents="none" style={styles.host}>
-      <View
-        style={[styles.banner, { backgroundColor: theme.inverse, shadowColor: theme.inverse }]}
-        accessibilityLiveRegion="polite">
-        <SymbolView
-          name={{ ios: 'wifi.slash', android: 'wifi_off', web: 'wifi_off' }}
-          size={18}
-          tintColor={theme.onInverseMuted}
-        />
-        <Text style={[styles.text, { color: theme.onInverse }]}maxFontSizeMultiplier={1.6}>
-          {offlineMessage}
-        </Text>
-      </View>
-    </SafeAreaView>
+    <>
+      {Platform.OS === 'web' && (
+        <View role="status" aria-live="polite" style={styles.announcer}>
+          {offline && <Text>{offlineMessage}</Text>}
+        </View>
+      )}
+      {offline && (
+        <SafeAreaView edges={['top']} pointerEvents="none" style={styles.host}>
+          <View
+            style={[styles.banner, { backgroundColor: theme.inverse, shadowColor: theme.inverse }]}
+            accessibilityLiveRegion="polite">
+            <SymbolView
+              name={{ ios: 'wifi.slash', android: 'wifi_off', web: 'wifi_off' }}
+              size={18}
+              tintColor={theme.onInverseMuted}
+            />
+            <Text style={[styles.text, { color: theme.onInverse }]} maxFontSizeMultiplier={1.6}>
+              {offlineMessage}
+            </Text>
+          </View>
+        </SafeAreaView>
+      )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  announcer: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    opacity: 0,
+  },
   host: {
     position: 'absolute',
     top: 0,
