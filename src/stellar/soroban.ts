@@ -17,15 +17,52 @@ import { TransferEvents, type LedgerRange, type TransferSearchResult } from './t
 
 const simulationSource = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
+export class LedgerProgress {
+  static readonly stalledAfterMs = 60_000;
+
+  private readonly now: () => number;
+  private ledger = 0;
+  private advancedAt = 0;
+
+  constructor(now: () => number) {
+    this.now = now;
+  }
+
+  static latestOf(answer: unknown): number | null {
+    if (!answer || typeof answer !== 'object') {
+      return null;
+    }
+    const { latestLedger, sequence } = answer as { latestLedger?: unknown; sequence?: unknown };
+    const latest = latestLedger ?? sequence;
+    return typeof latest === 'number' ? latest : null;
+  }
+
+  stalled(answer: unknown): boolean {
+    const latest = LedgerProgress.latestOf(answer);
+    if (latest === null) {
+      return false;
+    }
+    const now = this.now();
+    if (latest > this.ledger) {
+      this.ledger = latest;
+      this.advancedAt = now;
+      return false;
+    }
+    return now - this.advancedAt > LedgerProgress.stalledAfterMs;
+  }
+}
+
 export class Soroban {
   static readonly hedgeMs = 1000;
 
   private readonly servers: rpc.Server[];
+  private readonly progress: LedgerProgress[];
   private readonly hedgeMs: number;
   private preferred = 0;
 
-  constructor(servers: rpc.Server[], hedgeMs = Soroban.hedgeMs) {
+  constructor(servers: rpc.Server[], hedgeMs = Soroban.hedgeMs, now: () => number = Date.now) {
     this.servers = servers;
+    this.progress = servers.map(() => new LedgerProgress(now));
     this.hedgeMs = hedgeMs;
   }
 
@@ -39,6 +76,7 @@ export class Soroban {
       let started = 0;
       let failed = 0;
       let settled = false;
+      let stalled: { answer: T } | undefined;
       let hedge: ReturnType<typeof setTimeout> | undefined;
       const settle = (outcome: () => void) => {
         if (settled) {
@@ -55,23 +93,34 @@ export class Soroban {
         if (started < count) {
           hedge = setTimeout(start, this.hedgeMs);
         }
+        const unusable = (giveUp: () => void) => {
+          failed += 1;
+          if (failed === count) {
+            settle(giveUp);
+          } else if (started < count && !settled) {
+            start();
+          }
+        };
         request(this.servers[index]).then(
-          (result) =>
+          (result) => {
+            if (count > 1 && this.progress[index].stalled(result)) {
+              stalled ??= { answer: result };
+              const held = stalled;
+              unusable(() => resolve(held.answer));
+              return;
+            }
             settle(() => {
               this.preferred = index;
               resolve(result);
-            }),
+            });
+          },
           (error: unknown) => {
             if (!(error instanceof Error)) {
               settle(() => reject(error));
               return;
             }
-            failed += 1;
-            if (failed === count) {
-              settle(() => reject(error));
-            } else if (started < count && !settled) {
-              start();
-            }
+            const held = stalled;
+            unusable(() => (held ? resolve(held.answer) : reject(error)));
           },
         );
       };
