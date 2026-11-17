@@ -129,7 +129,6 @@ export class Savings {
   }
   static readonly depositCurrency: PaymentCurrency = 'XLM.USDC';
   static readonly oneCent = units.parse('0.01');
-  static readonly maxYearlyRatePercent = 5;
   static readonly riskShort = 'Its value can go down as well as up';
   static readonly riskNote =
     "Savings isn't a bank account and isn't covered by any deposit protection scheme. Its value can go down as well as up, so you could get back less than you put in. The rate is variable and can go up or down, and past returns are not a guide to future returns.";
@@ -140,7 +139,7 @@ export class Savings {
 
   static rateHeadline(currency?: string | null, locale?: string): string {
     const fixed = SavingsRate.fixedFor(currency);
-    return fixed ? fixed.headline(locale) : `Earn up to ${Savings.maxYearlyRatePercent}% a year, variable`;
+    return fixed ? fixed.headline(locale) : 'Earn interest at a variable rate';
   }
 
   static takes(currency: string | null | undefined): currency is PaymentCurrency {
