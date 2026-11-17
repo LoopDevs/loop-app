@@ -436,6 +436,31 @@ test('a lost answer with no order placed since fails and keeps the idempotency k
   assert.deepEqual(reported, []);
 });
 
+test('an order CTX answers with a server failure is recovered when it was placed', async () => {
+  await signIn('user-42');
+  const placed = { ...card({}), created: new Date().toISOString() };
+  respond = (request) => {
+    if (request.method === 'POST') {
+      return json({ error: 'ErrInternal' }, 502);
+    }
+    return request.url.startsWith(`${apiUrl}/gift-cards?`)
+      ? json({ result: [placed], pagination: { page: 1, pages: 1, perPage: 5, total: 1 } })
+      : json(placed);
+  };
+  const recovered = await ctx.orderGiftCard(order);
+  assert.equal(recovered.id, 'g1');
+  assert.deepEqual(reported, ['CTX 502 ErrInternal', 'CTX order recovered after a lost answer']);
+});
+
+test('an order CTX answers with a server failure fails with that answer when none was placed', async () => {
+  await signIn('user-42');
+  respond = (request) =>
+    request.method === 'POST'
+      ? json({ error: 'ErrInternal' }, 502)
+      : json({ result: [], pagination: { page: 1, pages: 0, perPage: 5, total: 0 } });
+  await assert.rejects(ctx.orderGiftCard(order), (error: unknown) => error instanceof CtxError && error.status === 502);
+});
+
 test('a refused order is not looked up', async () => {
   await signIn('user-42');
   respond = () => json({ error: 'ErrAmountTooLow' }, 400);
