@@ -131,6 +131,7 @@ export class Merchant {
   readonly redeemLocation?: MerchantRedeemLocation;
   readonly redeemType?: MerchantRedeemType;
   readonly info?: GiftCardInfo;
+  private readonly status?: string;
   private readonly discount: MerchantDiscount;
   private readonly company?: CompanyCashback;
 
@@ -149,6 +150,7 @@ export class Merchant {
     this.redeemLocation = json.redeemLocation || undefined;
     this.redeemType = json.redeemType || undefined;
     this.info = json.info;
+    this.status = json.status;
     this.discount = { userDiscount: json.userDiscount, link: json.link };
     this.company = company;
   }
@@ -267,6 +269,10 @@ export class Merchant {
       .replace(/^https?:\/\//i, '')
       .replace(/^www\./i, '')
       .replace(/\/+$/, '');
+  }
+
+  isAvailable(): boolean {
+    return this.status === undefined || this.status === 'enabled';
   }
 
   isSoldIn(country: string | undefined): boolean {

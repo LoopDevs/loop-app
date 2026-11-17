@@ -22,6 +22,7 @@ const euroCountries = [
 ] as const;
 
 const localCurrencies: Record<string, string> = {
+  BG: "EUR",
   US: "USD",
   GB: "GBP",
   CA: "CAD",

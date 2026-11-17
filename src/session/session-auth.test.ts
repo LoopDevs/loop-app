@@ -658,3 +658,125 @@ test('a 401 after another tab rotates the session retries with the token that ta
   assert.deepEqual(ctx.tokensFor('/me'), ['a1', 'a2', 'a4']);
   assert.equal(store.refreshToken, 'r4');
 });
+
+class HookedStore extends MemoryStore {
+  heldRead: Gate | null = null;
+  heldWrite: Gate | null = null;
+  afterExclusive: (() => void) | null = null;
+
+  async readSession(): Promise<StoredSession | null> {
+    const snapshot = await super.readSession();
+    const held = this.heldRead;
+    this.heldRead = null;
+    await held?.opened;
+    return snapshot;
+  }
+
+  async writeSession(session: StoredSession): Promise<void> {
+    const held = this.heldWrite;
+    this.heldWrite = null;
+    await held?.opened;
+    await super.writeSession(session);
+  }
+
+  async exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const result = await task();
+    const hook = this.afterExclusive;
+    this.afterExclusive = null;
+    hook?.();
+    return result;
+  }
+}
+
+test('a refresh token CTX rejects after a new sign-in leaves the new session in place', async () => {
+  const rotation = new Gate();
+  const ends: SessionEnd[] = [];
+  const ctx = new FakeCtx(async ({ path }) => {
+    if (path === '/refresh-token') {
+      await rotation.opened;
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new HookedStore('r1');
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  auth.onSessionEnd((end) => ends.push(end));
+
+  const request = auth.sessionRequest('GET', '/me');
+  await new Promise((resolve) => setImmediate(resolve));
+  await auth.startSession({ accessToken: 'a2', refreshToken: 'r2' });
+  ends.length = 0;
+  rotation.open();
+
+  await assert.rejects(request, /Sign in first/);
+  assert.equal(store.refreshToken, 'r2');
+  assert.deepEqual(ends, []);
+  assert.equal(await auth.accessToken(), 'a2');
+});
+
+test('a refresh that was waiting on the store when the session ended sends nothing', async () => {
+  const ctx = new FakeCtx(async () => ({ accessToken: 'a2', refreshToken: 'r2' }));
+  const store = new HookedStore('r1');
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  store.heldRead = new Gate();
+  const reading = store.heldRead;
+
+  const request = auth.sessionRequest('GET', '/me');
+  await new Promise((resolve) => setImmediate(resolve));
+  await auth.clearSession('signed-out');
+  reading.open();
+
+  await assert.rejects(request, /Sign in first/);
+  assert.equal(ctx.refreshes(), 0);
+});
+
+test('a request whose session ended while its token was replaced is not retried', async () => {
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'a2', refreshToken: 'r2' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new HookedStore(null);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+  store.afterExclusive = () => {
+    void auth.clearSession('signed-out');
+  };
+
+  await assert.rejects(auth.sessionRequest('GET', '/me'), (error) => error instanceof CtxError && error.status === 401);
+  assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
+});
+
+test("a stale refresh that finds another user's token cannot end the session that replaced it", async () => {
+  const ends: SessionEnd[] = [];
+  const ctx = new FakeCtx(async ({ path, token }) => {
+    if (path === '/refresh-token') {
+      return { accessToken: 'b2', refreshToken: 'rb2' };
+    }
+    if (token === 'a1') {
+      throw unauthorized();
+    }
+    return { ok: true };
+  });
+  const store = new HookedStore(null);
+  const auth = new SessionAuth(ctx.send, store, ownerOf);
+  await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
+  auth.onSessionEnd((end) => ends.push(end));
+  store.signedInElsewhere('rb', 'b');
+  store.heldWrite = new Gate();
+  const writing = store.heldWrite;
+
+  const request = auth.sessionRequest('GET', '/me');
+  await new Promise((resolve) => setImmediate(resolve));
+  await auth.startSession({ accessToken: 'a3', refreshToken: 'r3' });
+  ends.length = 0;
+  writing.open();
+
+  await assert.rejects(request);
+  assert.deepEqual(ends, []);
+  assert.equal(await auth.accessToken(), 'a3');
+});

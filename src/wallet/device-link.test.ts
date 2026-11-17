@@ -26,6 +26,7 @@ type Options = {
   passkey?: PasskeyHolder;
   ledgers?: number[];
   rpcDownAfterBuild?: boolean;
+  sponsorResult?: { hash: string; status: string; error?: string };
 };
 
 function harness(options: Options = {}) {
@@ -47,7 +48,7 @@ function harness(options: Options = {}) {
     },
     async sponsorTransaction(_intent, signed) {
       calls.sponsored.push(signed);
-      return { hash: 'abc', status: 'pending' };
+      return options.sponsorResult ?? { hash: 'abc', status: 'pending' };
     },
     async signWithPasskey(challenge) {
       calls.challenges.push(challenge);
@@ -127,4 +128,16 @@ test('the wait stops when it is aborted', async () => {
   controller.abort();
   await assert.rejects(link.add(wallet, passkeyPublicKey, controller.signal), /interrupted/);
   assert.equal(calls.sponsored.length, 1);
+});
+
+test('a refused sponsor answer rejects with its error and never waits for the device rule', async () => {
+  const { link, calls } = harness({ sponsorResult: { hash: 'abc', status: 'pending', error: 'sponsor is out of funds' } });
+  await assert.rejects(link.add(wallet, passkeyPublicKey), /sponsor is out of funds/);
+  assert.equal(calls.ruleReads, 0);
+});
+
+test('a failed sponsor status rejects without waiting for the device rule', async () => {
+  const { link, calls } = harness({ sponsorResult: { hash: 'abc', status: 'failed' } });
+  await assert.rejects(link.add(wallet, passkeyPublicKey), /Setting up this device failed/);
+  assert.equal(calls.ruleReads, 0);
 });

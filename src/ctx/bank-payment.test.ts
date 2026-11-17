@@ -215,3 +215,27 @@ test('only the identity refusal asks for the legal name', () => {
   assert.equal(BankPayment.needsLegalName('ErrBankLinkRequired'), false);
   assert.equal(BankPayment.needsLegalName(undefined), false);
 });
+
+test('look-alike hosts and links that hide the real host are refused', () => {
+  const lookAlikes = [
+    'https://evil-plaid.com/hl/abc',
+    'https://evilplaid.com/hl/abc',
+    'https://plaid.com.evil.example/hl/abc',
+    'https://secure.plaid.com.evil.example/hl/abc',
+    'https://plaid.com@evil.example/hl/abc',
+    'https://secure.plaid.com@evil.example/hl/abc',
+    'http://plaid.com/hl/abc',
+  ];
+  for (const paymentUrl of lookAlikes) {
+    assert.equal(BankPayment.openLink(bankOrder({ paymentUrl })), null, paymentUrl);
+    assert.equal(BankPayment.linkRefused(bankOrder({ paymentUrl })), true, paymentUrl);
+  }
+});
+
+test('an uppercase plaid host is offered and a trailing-dot host is refused', () => {
+  const upper = 'https://SECURE.PLAID.COM/hl/abc';
+  const dotted = 'https://secure.plaid.com./hl/abc';
+  assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: upper })), upper);
+  assert.equal(BankPayment.openLink(bankOrder({ paymentUrl: dotted })), null);
+  assert.equal(BankPayment.linkRefused(bankOrder({ paymentUrl: dotted })), true);
+});

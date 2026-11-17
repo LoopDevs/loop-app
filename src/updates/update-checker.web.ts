@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 
+import { Deadline } from '@/ctx/deadline';
 import { errorReporting } from '@/ops/error-reporting';
 
 import { criticalIndexOf, ReloadGate } from './critical-update';
@@ -39,7 +40,9 @@ export async function checkForUpdate(): Promise<void> {
   }
   checking = true;
   try {
-    const response = await fetch(versionUrl, { cache: 'no-store' });
+    const response = await Deadline.run(Deadline.refreshMs, (signal) =>
+      fetch(versionUrl, { cache: 'no-store', signal }),
+    );
     if (!response.ok) {
       return;
     }

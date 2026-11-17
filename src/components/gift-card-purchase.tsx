@@ -830,7 +830,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
                   </ThemedText>
                   {merchant.cashbackBasisPoints() > 0 && (
                     <ThemedText type="small" themeColor="success">
-                      {merchant.rateLabel()} cashback
+                      {merchant.rateLabel()}
                     </ThemedText>
                   )}
                 </View>
