@@ -4,6 +4,7 @@ export type SentPayment = {
   expiryLedger?: number;
   txId?: string;
   transfer?: SignedTransfer;
+  failed?: true;
   at: number;
 };
 
@@ -48,6 +49,13 @@ export class SentPayments {
     const record = await this.get(paymentId);
     if (record) {
       await this.write(paymentId, { ...record, txId });
+    }
+  }
+
+  async failed(paymentId: string, txId: string): Promise<void> {
+    const record = await this.get(paymentId);
+    if (record) {
+      await this.write(paymentId, { ...record, txId, failed: true });
     }
   }
 
@@ -105,7 +113,7 @@ export class SentPayments {
     if (!value || typeof value !== 'object') {
       return null;
     }
-    const { expiryLedger, txId, transfer, at } = value as Record<string, unknown>;
+    const { expiryLedger, txId, transfer, failed, at } = value as Record<string, unknown>;
     if (typeof at !== 'number' || (expiryLedger !== undefined && typeof expiryLedger !== 'number')) {
       return null;
     }
@@ -115,6 +123,9 @@ export class SentPayments {
     }
     if (typeof txId === 'string') {
       record.txId = txId;
+    }
+    if (failed === true) {
+      record.failed = true;
     }
     const parsedTransfer = SentPayments.parseTransfer(transfer);
     if (parsedTransfer) {

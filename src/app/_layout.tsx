@@ -22,7 +22,6 @@ import { useAppRefreshTriggers } from '@/hooks/use-app-refresh';
 import { MarketProvider } from '@/hooks/use-market';
 import { useAppSwitcherProtection } from '@/native/screen-privacy';
 import { errorReporting } from '@/ops/error-reporting';
-import { markLaunchFailed } from '@/updates/update-checker';
 import { useUpdateChecks } from '@/updates/use-update-checks';
 
 export const unstable_settings = {
@@ -52,7 +51,6 @@ export default function TabLayout() {
     <ThemeProvider value={NavigationTheme}>
       <StatusBar style="dark" />
       <ErrorBoundary
-        onError={markLaunchFailed}
         fallback={({ error, resetError }) => <CrashFallback error={error} onRetry={resetError} />}>
         <AppLockProvider>
           <ToastProvider>

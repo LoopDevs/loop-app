@@ -23,6 +23,14 @@ export class BankLink {
   static readonly returnPath = '/plaid/oauth';
   private static readonly returnPattern = /^(?:https:\/\/loopfinance\.io)?\/plaid\/oauth(?:[/?#]|$)/;
 
+  private static readonly orderReturnPattern =
+    /^(?:loop:\/\/|(?:https:\/\/loopfinance\.io)?\/)orders\/([A-Za-z0-9_-]+)\/?(?:[?#]|$)/;
+
+  static orderReturn(path: string): string | null {
+    const id = BankLink.orderReturnPattern.exec(path)?.[1];
+    return id ? `/wallet/${id}` : null;
+  }
+
   static isReturn(path: string): boolean {
     return BankLink.returnPattern.test(path);
   }
