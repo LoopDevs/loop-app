@@ -20,8 +20,8 @@ describe('LoopEnvironment.resolve', () => {
   });
 
   it('carries the CTX client id in both environments', () => {
-    assert.equal(LoopEnvironment.resolve('staging').ctxClientId, 'loopapp');
-    assert.equal(LoopEnvironment.resolve('production').ctxClientId, 'loopapp');
+    assert.equal(LoopEnvironment.resolve('staging').ctxClientId, 'loopandroid');
+    assert.equal(LoopEnvironment.resolve('production').ctxClientId, 'loopandroid');
   });
 
   it('rejects a missing value', () => {

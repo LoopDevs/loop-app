@@ -14,14 +14,14 @@ const definitions: Record<
 > = {
   staging: {
     ctxApiUrl: 'https://staging.spend.ctx.com',
-    ctxClientId: 'loopapp',
+    ctxClientId: 'loopandroid',
     stellarNetwork: 'testnet',
     passkeyLabelSuffix: ' (test)',
     googleIosClientId: '',
   },
   production: {
     ctxApiUrl: 'https://spend.ctx.com',
-    ctxClientId: 'loopapp',
+    ctxClientId: 'loopandroid',
     stellarNetwork: 'mainnet',
     passkeyLabelSuffix: '',
     googleIosClientId: '',

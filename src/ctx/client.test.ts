@@ -101,7 +101,7 @@ test('a status read goes to the CTX API with the client id and no session', asyn
   assert.equal(sent.length, 1);
   assert.equal(sent[0].url, `${apiUrl}/status`);
   assert.equal(sent[0].method, 'GET');
-  assert.equal(sent[0].headers['X-Client-Id'], 'loopapp');
+  assert.equal(sent[0].headers['X-Client-Id'], 'loopandroid');
   assert.equal(sent[0].headers.Authorization, undefined);
 });
 
