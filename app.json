@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "loop",
+    "scheme": "loopdiscount",
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "io.loopfinance.app",
@@ -82,7 +82,7 @@
       }
     },
     "android": {
-      "package": "io.loopfinance.app",
+      "package": "io.loopfinance.discount",
       "adaptiveIcon": {
         "backgroundColor": "#1C3FAE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
