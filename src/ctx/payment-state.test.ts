@@ -72,10 +72,10 @@ test('a closed payment is an expired price', () => {
   });
 });
 
-test('another bad request keeps the order payable with the detail', () => {
-  assert.deepEqual(rejectedPaymentState({ status: 400, message: 'insufficient balance' }), {
+test('another bad request keeps the order payable and shows none of the CTX text', () => {
+  assert.deepEqual(rejectedPaymentState({ status: 400, message: 'HostError: Error(Contract, #6) simulation dump' }), {
     kind: 'notSent',
-    detail: 'insufficient balance',
+    detail: '',
   });
 });
 
@@ -102,7 +102,7 @@ test('a rejected payment takes its rejection state wherever it failed', () => {
   });
   assert.deepEqual(sendFailureState(false, { status: 400, message: 'bad amount' }), {
     kind: 'notSent',
-    detail: 'bad amount',
+    detail: '',
   });
 });
 
@@ -179,7 +179,7 @@ test('a bad request with no message keeps the order payable with an empty detail
 test('only an exact closed-payment message is an expired price', () => {
   assert.deepEqual(rejectedPaymentState({ status: 400, message: 'Payment is no longer open' }), {
     kind: 'notSent',
-    detail: 'Payment is no longer open',
+    detail: '',
   });
   assert.equal(rejectedPaymentState({ status: 409, message: 'payment is no longer open' }), null);
 });

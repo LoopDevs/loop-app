@@ -130,7 +130,7 @@ export function rejectedPaymentState(rejection: PayRejection): PaymentState | nu
   if (rejection.message === paymentClosedMessage) {
     return { kind: 'priceExpired' };
   }
-  return { kind: 'notSent', detail: rejection.message ?? '' };
+  return { kind: 'notSent', detail: '' };
 }
 
 export function sendFailureState(sent: boolean, rejection?: PayRejection): PaymentState | null {
