@@ -79,3 +79,30 @@ test('a malformed stored withdrawal reads as none', async () => {
   assert.equal(await pending.get('GW', 'XLM.USDC'), undefined);
   assert.equal(await pending.get('GX', 'XLM.USDC'), undefined);
 });
+
+test('each stored value that is not a hash and an expiry ledger reads as none', async () => {
+  const stored = [
+    '',
+    'null',
+    '7',
+    '"abc"',
+    '[]',
+    '{}',
+    '{"hash":"abc"}',
+    '{"expiryLedger":500}',
+    '{"hash":"abc","expiryLedger":"500"}',
+    '{"hash":null,"expiryLedger":500}',
+    '{"hash":5,"expiryLedger":500}',
+  ];
+  for (const value of stored) {
+    const storage = memoryStorage();
+    storage.values.set(PendingWithdrawals.keyOf('GW', 'XLM.USDC'), value);
+    assert.equal(await new PendingWithdrawals(storage).get('GW', 'XLM.USDC'), undefined, value);
+  }
+});
+
+test('a stored withdrawal keeps only its hash and expiry ledger', async () => {
+  const storage = memoryStorage();
+  storage.values.set(PendingWithdrawals.keyOf('GW', 'XLM.USDC'), '{"hash":"abc","expiryLedger":500,"extra":1}');
+  assert.deepEqual(await new PendingWithdrawals(storage).get('GW', 'XLM.USDC'), withdrawal);
+});

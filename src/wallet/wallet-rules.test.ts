@@ -62,3 +62,47 @@ test('the device rule is checked for the new key', () => {
   assert.equal(WalletRules.holdsDeviceKey(deviceRule, deviceKey), true);
   assert.equal(WalletRules.holdsDeviceKey(deviceRule, otherDeviceKey), false);
 });
+
+test('a rule with no signer or more than one signer is refused', () => {
+  const none = { ...rule(1, network.ed25519Verifier, deviceKey), signers: [] };
+  assert.throws(() => WalletRules.holdsDeviceKey(none, deviceKey), /rule 1 is not a single permanent signer/);
+  const two = {
+    ...rule(1, network.ed25519Verifier, deviceKey),
+    signers: [
+      ['External', network.ed25519Verifier, deviceKey],
+      ['External', network.ed25519Verifier, otherDeviceKey],
+    ] as ContextRule['signers'],
+  };
+  assert.throws(() => WalletRules.holdsDeviceKey(two, deviceKey), /rule 1 is not a single permanent signer/);
+});
+
+test('a rule that expires is refused and one with no expiry is accepted', () => {
+  const expiring = { ...rule(1, network.ed25519Verifier, deviceKey), valid_until: 5_000_000 };
+  assert.throws(() => WalletRules.holdsDeviceKey(expiring, deviceKey), /rule 1 is not a single permanent signer/);
+  const expiringAtZero = { ...rule(1, network.ed25519Verifier, deviceKey), valid_until: 0 };
+  assert.throws(() => WalletRules.holdsDeviceKey(expiringAtZero, deviceKey), /not a single permanent signer/);
+  const permanent = { ...rule(1, network.ed25519Verifier, deviceKey), valid_until: null };
+  assert.equal(WalletRules.holdsDeviceKey(permanent, deviceKey), true);
+});
+
+test('a rule whose signer is not an external key is refused', () => {
+  const delegated = {
+    ...rule(1, network.ed25519Verifier, deviceKey),
+    signers: [['Delegated', network.ed25519Verifier, deviceKey]] as ContextRule['signers'],
+  };
+  assert.throws(() => WalletRules.holdsDeviceKey(delegated, deviceKey), /rule 1 uses an unexpected verifier/);
+});
+
+test('a rule whose signer uses another verifier is refused for the device and the passkey', () => {
+  const otherVerifier = rule(1, network.webauthnVerifier, deviceKey);
+  assert.throws(() => WalletRules.holdsDeviceKey(otherVerifier, deviceKey), /rule 1 uses an unexpected verifier/);
+  const passkeyOnDeviceVerifier = reading({ passkeyRule: rule(0, network.ed25519Verifier, passkeyKey) });
+  assert.throws(
+    () => WalletRules.check(passkeyOnDeviceVerifier, passkeyKey, null),
+    /rule 0 uses an unexpected verifier/,
+  );
+});
+
+test('a wallet whose passkey rule has no known passkey key accepts the key it holds', () => {
+  assert.deepEqual(WalletRules.check(reading(), undefined, null).passkeyPublicKey, passkeyKey);
+});
