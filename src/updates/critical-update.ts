@@ -74,29 +74,3 @@ export class ReloadGate {
     });
   }
 }
-
-type LaunchRecoveryOptions = {
-  launchedAt: number;
-  now: () => number;
-  runsUpdate: () => boolean;
-  fatal: (error: Error) => void;
-};
-
-export class LaunchRecovery {
-  static readonly windowMs = 10_000;
-
-  private readonly options: LaunchRecoveryOptions;
-
-  constructor(options: LaunchRecoveryOptions) {
-    this.options = options;
-  }
-
-  markFailed(error: unknown): boolean {
-    const { launchedAt, now, runsUpdate, fatal } = this.options;
-    if (!runsUpdate() || now() - launchedAt >= LaunchRecovery.windowMs) {
-      return false;
-    }
-    fatal(error instanceof Error ? error : new Error(String(error)));
-    return true;
-  }
-}

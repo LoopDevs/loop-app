@@ -4,15 +4,9 @@ import * as Updates from 'expo-updates';
 import { loopEnvironment } from '@/environment';
 import { errorReporting } from '@/ops/error-reporting';
 
-import { LaunchRecovery, ReloadGate, reloadsNow } from './critical-update';
+import { ReloadGate, reloadsNow } from './critical-update';
 
 const gate = new ReloadGate();
-const launchRecovery = new LaunchRecovery({
-  launchedAt: Date.now(),
-  now: Date.now,
-  runsUpdate: () => runningUpdateId() !== null,
-  fatal: (error) => ErrorUtils.getGlobalHandler()(error, true),
-});
 let checking = false;
 let reportedDisabled = false;
 
@@ -25,10 +19,6 @@ export function runningUpdateId(): string | null {
     return null;
   }
   return Updates.updateId.slice(0, 8);
-}
-
-export function markLaunchFailed(error: unknown): boolean {
-  return launchRecovery.markFailed(error);
 }
 
 export async function checkForUpdate(): Promise<void> {

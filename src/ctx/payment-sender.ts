@@ -24,7 +24,7 @@ export type SendOutcome = {
   paidElsewhere?: boolean;
 };
 
-type PaymentRecords = Pick<SentPayments, 'get' | 'sending' | 'sent' | 'alreadySubmitted' | 'forget'>;
+type PaymentRecords = Pick<SentPayments, 'get' | 'sending' | 'sent' | 'failed' | 'alreadySubmitted' | 'forget'>;
 
 export class PaymentSender {
   private readonly records: PaymentRecords;
@@ -65,8 +65,12 @@ export class PaymentSender {
       await this.records.sending(paymentId, { expiryLedger, transfer: signed.transfer });
       sent = true;
       const result = await signed.sponsor();
+      if (result.error) {
+        await this.records.failed(paymentId, result.hash);
+        return { kind: 'failed' };
+      }
       await this.records.sent(paymentId, result.hash);
-      return result.error ? { kind: 'failed' } : { kind: 'confirming', txId: result.hash, expiryLedger };
+      return { kind: 'confirming', txId: result.hash, expiryLedger };
     } catch (error) {
       const rejection = this.rejectionOf(error);
       if (rejection && isAlreadySubmitted(rejection)) {

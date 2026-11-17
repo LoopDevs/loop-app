@@ -130,6 +130,7 @@ test('a sponsor error is a failed payment', async () => {
     signed(async () => ({ hash: 'tx-1', error: 'tx_failed' })),
   );
   assert.deepEqual(outcome.state, { kind: 'failed' });
+  assert.deepEqual(await sender(records).recorded('pay-1'), { kind: 'failed' });
 });
 
 test('an unknown outcome after the sponsor call stays confirming and recorded', async () => {

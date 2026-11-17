@@ -349,6 +349,27 @@ test('an order whose answer is lost is recovered from the unpaid orders placed s
   assert.deepEqual(reported, ['CTX order recovered after a lost answer']);
 });
 
+test('a lost answer adopts the newest placed order the caller accepts', async () => {
+  await signIn('user-42');
+  const now = Date.now();
+  const older = { ...card({}), id: 'g-old', created: new Date(now - 60_000).toISOString() };
+  const cancelled = { ...card({}), id: 'g-cancelled', created: new Date(now).toISOString() };
+  const fetched: string[] = [];
+  respond = (request) => {
+    if (request.method === 'POST') {
+      throw new TypeError('Network request failed');
+    }
+    if (request.url.startsWith(`${apiUrl}/gift-cards?`)) {
+      return json({ result: [older, cancelled], pagination: { page: 1, pages: 1, perPage: 5, total: 2 } });
+    }
+    fetched.push(request.url);
+    return json(older);
+  };
+  const recovered = await ctx.orderGiftCard(order, async (placed) => placed.id !== 'g-cancelled');
+  assert.equal(recovered.id, 'g-old');
+  assert.deepEqual(fetched, [`${apiUrl}/gift-cards/g-old`]);
+});
+
 test('a lost answer with no order placed since fails and keeps the idempotency key for the retry', async () => {
   await signIn('user-42');
   respond = (request) => {

@@ -2,4 +2,4 @@
 /wallet/cashback /wallet/cashback 200
 /shop/* /shop/[slug] 200
 /wallet/* /wallet/[id] 200
-/orders/* /orders/[id] 200
+/orders/:id /wallet/:id 302

@@ -449,12 +449,16 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
     const holdings = view?.holdings ?? null;
     return {
       createOrder: async () => {
-        const created = await ctx.orderGiftCard({
-          merchantId: merchant.id,
-          fiatAmount: cardAmount,
-          fiatCurrency: merchant.currency,
-          cryptoCurrency: payWith,
-        });
+        const created = await ctx.orderGiftCard(
+          {
+            merchantId: merchant.id,
+            fiatAmount: cardAmount,
+            fiatCurrency: merchant.currency,
+            cryptoCurrency: payWith,
+          },
+          async (placed) =>
+            !(await dismissedOrders.dismissed(placed)) && !(await sentPayments.get(placed.paymentId)),
+        );
         buyTimer.current?.mark('order created');
         setOrder(created);
         setSpent((held) => orderPrice(created) ?? held);
@@ -569,11 +573,14 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
 
   const createBankOrder = async (cardAmount: string): Promise<GiftCard | null> => {
     try {
-      return await ctx.orderGiftCard({
-        merchantId: merchant.id,
-        fiatAmount: cardAmount,
-        fiatCurrency: merchant.currency,
-      });
+      return await ctx.orderGiftCard(
+        {
+          merchantId: merchant.id,
+          fiatAmount: cardAmount,
+          fiatCurrency: merchant.currency,
+        },
+        async (placed) => !(await dismissedOrders.dismissed(placed)),
+      );
     } catch (error) {
       rollBack();
       haptics.error();

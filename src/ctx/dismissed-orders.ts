@@ -53,6 +53,10 @@ export class DismissedOrders {
     await this.storage.setItem(DismissedOrders.key, JSON.stringify(this.ids)).catch(() => undefined);
   }
 
+  async dismissed(order: Pick<GiftCard, 'id'>): Promise<boolean> {
+    return (await this.load()).has(order.id);
+  }
+
   async activeOrder(merchantId?: string): Promise<GiftCard | null> {
     const ids = await this.load();
     return ctx.activeGiftCard(merchantId, (order) => DismissedOrders.hidden(order, ids));
