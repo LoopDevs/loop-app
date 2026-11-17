@@ -180,6 +180,19 @@ export class EdgeCache {
   static readonly catalog: CacheWindow = { freshMs: 60_000, staleMs: 60 * 60_000 };
   static readonly image: CacheWindow = { freshMs: 24 * 60 * 60_000, staleMs: EdgeCache.keepSeconds * 1000 };
   static readonly browserCacheControl = 'public, max-age=30, stale-while-revalidate=600';
+  static readonly unstoredHeader = 'x-catalog-unstored';
+  static readonly unstoredState = 'BYPASS';
+  static readonly upstreamTimeoutMs = 10_000;
+
+  static unstored(response: Response): Response {
+    const headers = new Headers(response.headers);
+    headers.set(EdgeCache.unstoredHeader, '1');
+    return new Response(response.body, { status: response.status, headers });
+  }
+
+  static upstreamDeadline(): AbortSignal {
+    return AbortSignal.timeout(EdgeCache.upstreamTimeoutMs);
+  }
 
   private readonly cache: Cache;
   private readonly waitUntil: (promise: Promise<unknown>) => void;
@@ -211,8 +224,16 @@ export class EdgeCache {
     const cached = await this.cache.match(key);
     const storedAt = Number(cached?.headers.get(storedAtHeader));
     const now = Date.now();
-    if (!cached || !this.isServable(storedAt, now)) {
+    if (!cached) {
       return EdgeCache.toClient(await this.store(key, load), 'MISS');
+    }
+    if (!this.isServable(storedAt, now)) {
+      const reloaded = await this.store(key, load).catch((error: unknown) => {
+        console.error('edge reload failed', error);
+        return null;
+      });
+      const upstreamFailed = reloaded === null || reloaded.status >= 500;
+      return upstreamFailed ? EdgeCache.toClient(cached, 'STALE') : EdgeCache.toClient(reloaded, 'MISS');
     }
     if (this.isFresh(storedAt, now)) {
       return EdgeCache.toClient(cached, 'HIT');
@@ -236,6 +257,10 @@ export class EdgeCache {
         [storedAtHeader]: String(Date.now()),
       },
     });
+    if (loaded.headers.has(EdgeCache.unstoredHeader)) {
+      stored.headers.set(EdgeCache.unstoredHeader, '1');
+      return stored;
+    }
     await this.cache.put(key, stored.clone());
     return stored;
   }
@@ -247,7 +272,7 @@ export class EdgeCache {
     const headers = new Headers({
       'content-type': response.headers.get('content-type') ?? 'application/octet-stream',
       'cache-control': EdgeCache.browserCacheControl,
-      'x-catalog-cache': state,
+      'x-catalog-cache': response.headers.has(EdgeCache.unstoredHeader) ? EdgeCache.unstoredState : state,
     });
     const storedAt = Number(response.headers.get(storedAtHeader));
     if (storedAt) {
@@ -270,6 +295,7 @@ export async function serveMerchants({ request, env, waitUntil }: EdgeContext): 
   return edge.serve(query.cacheKey(url.origin), async () => {
     const upstream = await fetch(query.upstreamUrl(env.CTX_API_URL), {
       headers: { accept: 'application/json', 'x-client-id': env.CTX_CLIENT_ID },
+      signal: EdgeCache.upstreamDeadline(),
     });
     if (!upstream.ok) {
       return upstream;
@@ -299,8 +325,13 @@ async function loadImage({ request, waitUntil }: EdgeContext): Promise<Response>
   const edge = new EdgeCache(EdgeCache.default(), waitUntil, EdgeCache.image);
   const key = image.cacheKey(url.origin, format);
   const response = await edge.serve(key, async () => {
-    const resized = await fetch(image.src, image.fetchInit(format) as RequestInit);
-    const loaded = resized.ok ? resized : await fetch(image.src);
+    const resized = await fetch(image.src, {
+      ...(image.fetchInit(format) as RequestInit),
+      signal: EdgeCache.upstreamDeadline(),
+    });
+    const loaded = resized.ok
+      ? resized
+      : EdgeCache.unstored(await fetch(image.src, { signal: EdgeCache.upstreamDeadline() }));
     if (!loaded.ok) {
       return new Response(null, { status: loaded.status });
     }
@@ -313,7 +344,9 @@ async function loadImage({ request, waitUntil }: EdgeContext): Promise<Response>
     waitUntil(edge.evict(key));
     return new Response(null, { status: 415 });
   }
-  response.headers.set('cache-control', 'public, max-age=604800, stale-while-revalidate=2592000');
+  if (response.headers.get('x-catalog-cache') !== EdgeCache.unstoredState) {
+    response.headers.set('cache-control', 'public, max-age=604800, stale-while-revalidate=2592000');
+  }
   response.headers.set('vary', 'Accept');
   return response;
 }

@@ -177,6 +177,41 @@ test('an entry past the stale window is reloaded before it is served', async () 
   assert.equal(background.length, 0);
 });
 
+test('an entry past the stale window is served when the reload fails or the upstream answers with a server error', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 200_000 });
+  const window = { freshMs: 60_000, staleMs: 120_000 };
+  const failing = new EdgeCache(fakeCache(cachedAt(70_000)), () => undefined, window);
+  const thrown = await failing.serve('https://loop.test/expired', async () => {
+    throw new Error('timeout');
+  });
+  assert.equal(thrown.headers.get('x-catalog-cache'), 'STALE');
+  assert.equal(await thrown.text(), 'old');
+  const erroring = new EdgeCache(fakeCache(cachedAt(70_000)), () => undefined, window);
+  const answered = await erroring.serve('https://loop.test/expired', async () => new Response(null, { status: 503 }));
+  assert.equal(await answered.text(), 'old');
+  const refusing = new EdgeCache(fakeCache(cachedAt(70_000)), () => undefined, window);
+  const refused = await refusing.serve('https://loop.test/expired', async () => new Response(null, { status: 404 }));
+  assert.equal(refused.status, 404);
+});
+
+test('an image that could not be resized is served without being stored and with the short browser cache', async () => {
+  const log: CacheLog = { puts: [], deletes: [] };
+  globalThis.caches = { default: fakeCache(undefined, log) } as unknown as CacheStorage;
+  let fetches = 0;
+  globalThis.fetch = (async () => {
+    fetches += 1;
+    return fetches === 1
+      ? new Response(null, { status: 500 })
+      : new Response('png', { headers: { 'content-type': 'image/png' } });
+  }) as typeof fetch;
+  const request = new Request(`https://loop.test/api/catalog/image?src=${encodeURIComponent(s3)}&w=256`);
+  const response = await serveImage({ request, env, waitUntil: () => undefined });
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'png');
+  assert.equal(response.headers.get('cache-control'), EdgeCache.browserCacheControl);
+  assert.equal(log.puts.length, 0);
+});
+
 test('concurrent cold requests each load and get their own response', async () => {
   let loads = 0;
   let release: () => void = () => undefined;
