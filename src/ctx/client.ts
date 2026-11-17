@@ -462,7 +462,7 @@ class CtxClient {
         await this.auth.sessionRequest('POST', '/gift-cards', body, true, { 'Idempotency-Key': idempotencyKey }),
       );
     } catch (error) {
-      if (error instanceof CtxError && error.status < 500) {
+      if (error instanceof CtxError) {
         throw error;
       }
       const placed = await this.placedOrder(idempotencyKey, adoptable).catch(() => null);
