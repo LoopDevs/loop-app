@@ -7,12 +7,17 @@ import { ContactSupportButton, MessageScreen } from '@/components/message-screen
 import { PageLayout } from '@/hooks/page-layout';
 import { errorReporting } from '@/ops/error-reporting';
 import { StaleBuild } from '@/ops/stale-build';
+import { reloadWhenIdle } from '@/updates/update-checker';
+
+function reloadPage(): void {
+  reloadWhenIdle(() => window.location.reload());
+}
 
 export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   const staleBuild = Platform.OS === 'web' && StaleBuild.caused(error);
   useEffect(() => {
     if (staleBuild) {
-      StaleBuild.reloadOnce();
+      StaleBuild.reloadOnce(reloadPage);
     }
   }, [staleBuild]);
   useEffect(() => {
@@ -20,7 +25,7 @@ export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () 
       PageLayout.reveal();
     }
   }, []);
-  const retry = staleBuild ? () => window.location.reload() : onRetry;
+  const retry = staleBuild ? reloadPage : onRetry;
   return (
     <MessageScreen
       title="Something went wrong"
