@@ -158,7 +158,13 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const [authenticated, setAuthenticated] = useState(false);
-  const close = authenticated ? onSignedIn : onClose;
+  const [working, setWorking] = useState(false);
+  const finish = authenticated ? onSignedIn : onClose;
+  const close = () => {
+    if (!working) {
+      finish();
+    }
+  };
   const entering = reduceMotion
     ? undefined
     : (wide ? FadeInDown : SlideInDown).duration(Motion.transition).easing(Motion.easeOut);
@@ -189,6 +195,7 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
             <Wordmark height={20} />
             <PressScale
               onPress={close}
+              disabled={working}
               accessibilityRole="button"
               accessibilityLabel="Close"
               style={[styles.close, { backgroundColor: theme.backgroundSubtle }]}>
@@ -196,7 +203,12 @@ function SignInSheet({ reason, onClose, onSignedIn }: SheetProps) {
             </PressScale>
           </View>
           <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
-            <SignInForm reason={reason} onAuthenticated={() => setAuthenticated(true)} onSignedIn={onSignedIn} />
+            <SignInForm
+              reason={reason}
+              onAuthenticated={() => setAuthenticated(true)}
+              onSignedIn={onSignedIn}
+              onWorking={setWorking}
+            />
           </ScrollView>
         </Animated.View>
       </KeyboardAvoid>
@@ -244,9 +256,10 @@ type SignInFormProps = {
   reason: string;
   onAuthenticated: () => void;
   onSignedIn: () => void;
+  onWorking?: (working: boolean) => void;
 };
 
-function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
+function SignInForm({ reason, onAuthenticated, onSignedIn, onWorking }: SignInFormProps) {
   const [step, setStep] = useState<SignInStep>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -258,6 +271,10 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const { profile, setProfile, applyCountryChoice } = useProfile();
   const { busy, message, setMessage, run } = useBusyAction();
   const toast = useToast();
+
+  useEffect(() => {
+    onWorking?.(busy);
+  }, [busy, onWorking]);
 
   useEffect(() => {
     if (codeSentAt === null) {
