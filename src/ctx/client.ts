@@ -97,6 +97,7 @@ export type MerchantJson = {
   info?: GiftCardInfo;
   userDiscount: number;
   link?: MerchantLinkJson;
+  status?: string;
 };
 
 export type MerchantQuery = {

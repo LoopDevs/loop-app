@@ -336,3 +336,10 @@ test('the spoken name carries the rate only when one is shown', () => {
   const unrated = new Merchant({ ...json, userDiscount: 0 });
   assert.equal(unrated.spokenName('en-US'), unrated.name);
 });
+
+test('a merchant is available unless CTX reports a status other than enabled', () => {
+  assert.equal(new Merchant(json).isAvailable(), true);
+  assert.equal(new Merchant({ ...json, status: 'enabled' }).isAvailable(), true);
+  assert.equal(new Merchant({ ...json, status: 'disabled' }).isAvailable(), false);
+  assert.equal(new Merchant({ ...json, status: 'suspended' }).isAvailable(), false);
+});

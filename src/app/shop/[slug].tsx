@@ -114,8 +114,14 @@ export default function MerchantScreen() {
 
   const rail = BankPayment.rail(merchant.currency);
   const payCopy = rail ? `Pay from your ${rail.bankLabel}.` : 'Pay from your Loop balance.';
-  const buyCard =
-    profile && !merchant.isSoldIn(profile.country) ? (
+  const buyCard = !merchant.isAvailable() ? (
+    <View style={cardStyle}>
+      <ThemedText type="heading">Not available right now</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {merchant.name} gift cards can’t be bought at the moment. Check back later.
+      </ThemedText>
+    </View>
+  ) : profile && !merchant.isSoldIn(profile.country) ? (
       <View style={cardStyle}>
         <ThemedText type="heading">Not sold in your country</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
