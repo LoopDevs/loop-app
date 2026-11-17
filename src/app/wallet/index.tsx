@@ -130,7 +130,7 @@ export default function WalletScreen() {
               .map((giftCard) => giftCard.paymentId),
           );
           pageCount = pagination.pages;
-          if (shownResult.length > 0 || next >= pageCount) {
+          if (result.length === 0 || shownResult.length > 0 || !(next < pageCount)) {
             break;
           }
           next += 1;
