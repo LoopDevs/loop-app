@@ -97,11 +97,13 @@ function FooterColumns() {
           <View key={column.title} style={styles.column} accessibilityRole="list">
             <ThemedText type="smallBold">{column.title}</ThemedText>
             {column.links.map((link) => (
-              <Link key={link.path} href={link.path} style={styles.link}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {link.label}
-                </ThemedText>
-              </Link>
+              <View key={link.path} accessibilityRole="listitem">
+                <Link href={link.path} style={styles.link}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {link.label}
+                  </ThemedText>
+                </Link>
+              </View>
             ))}
           </View>
         ))}

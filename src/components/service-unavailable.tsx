@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 
 import { Button } from '@/components/ui/form';
 import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
@@ -14,6 +14,7 @@ import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
 
 const stillUnavailableMessage = 'Still unavailable. Try again later.';
+const recheckMs = 30_000;
 
 type Props = {
   state: BlockingServiceState;
@@ -35,6 +36,19 @@ export function ServiceUnavailable({ state, onRecovered }: Props) {
     [run, setMessage, state, onRecovered],
   );
   useAppRefresh(tryAgain);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      hasRecovered(state, recoveryChecks)
+        .then((recovered) => {
+          if (recovered) {
+            onRecovered();
+          }
+        })
+        .catch(() => undefined);
+    }, recheckMs);
+    return () => clearInterval(timer);
+  }, [state, onRecovered]);
 
   return (
     <MessageScreen title={serviceStateMessages[state]} message={message}>
