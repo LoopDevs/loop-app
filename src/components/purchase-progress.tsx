@@ -25,7 +25,6 @@ import { giftCardStatusLabel, outcomeText, processingNote } from '@/ctx/gift-car
 import { CashbackRate, type Merchant } from '@/ctx/merchant';
 import type { PaymentState } from '@/ctx/payment-state';
 import { useTheme } from '@/hooks/use-theme';
-import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 
 const cashbackType = {
