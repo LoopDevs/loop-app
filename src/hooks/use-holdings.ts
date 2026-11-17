@@ -22,15 +22,23 @@ export type HoldingsView = {
   problem: string;
 };
 
+type LoadedHoldings = { address: string; view: HoldingsView };
+
+let lastLoaded: LoadedHoldings | null = null;
+
 export function useHoldings(wallet: SmartWallet | null) {
-  const [loaded, setLoaded] = useState<{ address: string; view: HoldingsView } | null>(null);
+  const [loaded, setLoadedState] = useState<LoadedHoldings | null>(lastLoaded);
+  const setLoaded = useCallback((next: LoadedHoldings | null) => {
+    lastLoaded = next;
+    setLoadedState(next);
+  }, []);
   const latestRequest = useRef(0);
   const view = wallet && loaded?.address === wallet.address ? loaded.view : null;
 
   const refresh = useCallback(async () => {
     const request = ++latestRequest.current;
     if (!wallet) {
-      setLoaded(null);
+      setLoadedState(null);
       return;
     }
     const [balances, fetchedAccount, profile, rates] = await Promise.all([
@@ -71,7 +79,7 @@ export function useHoldings(wallet: SmartWallet | null) {
             : '',
       },
     });
-  }, [wallet]);
+  }, [wallet, setLoaded]);
 
   return { view, refresh };
 }

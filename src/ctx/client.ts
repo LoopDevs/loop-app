@@ -260,6 +260,7 @@ class CtxClient {
   );
   private serviceStateListener: ServiceStateListener | null = null;
   private readonly companyCashback = new CompanyCashback();
+  private lastProfile: Profile | null = null;
   private readonly orderKeys = new OrderKeys(
     () => bytesToHex(randomBytes(16)),
     () => Date.now(),
@@ -356,7 +357,12 @@ class CtxClient {
   async me(): Promise<Profile> {
     const me = await this.auth.sessionRequest<MeJson>('GET', '/me');
     this.companyCashback.learn(me.company);
-    return Profile.fromMe(me);
+    this.lastProfile = Profile.fromMe(me);
+    return this.lastProfile;
+  }
+
+  rememberedProfile(userId: string): Profile | null {
+    return this.lastProfile?.id === userId ? this.lastProfile : null;
   }
 
   updateUser(update: UserUpdate): Promise<UserJson> {

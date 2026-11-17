@@ -38,7 +38,13 @@ export function useWallet() {
         setWallet(null);
         setState('loading');
       }
-      const next = await SmartWallet.load();
+      const remembered = SmartWallet.remembered(userId);
+      if (remembered) {
+        setWallet(remembered);
+        setState('ready');
+      }
+      const checked = await SmartWallet.load();
+      const next = checked?.sameAs(remembered) ? remembered : checked;
       loaded.current = next;
       setWallet(next);
       setState(next ? 'ready' : 'setup');

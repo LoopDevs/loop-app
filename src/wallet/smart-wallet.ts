@@ -114,11 +114,27 @@ export class SmartWallet {
     return end.owner === null ? deviceSigner.forgetAllExcept(null) : deviceSigner.forget(end.owner);
   }
 
+  private static lastLoaded: SmartWallet | null = null;
+
+  static remembered(userId: string): SmartWallet | null {
+    return SmartWallet.lastLoaded?.userId === userId ? SmartWallet.lastLoaded : null;
+  }
+
   static async load(): Promise<SmartWallet | null> {
+    try {
+      SmartWallet.lastLoaded = await SmartWallet.loadChecked();
+    } catch (error) {
+      SmartWallet.lastLoaded = null;
+      throw error;
+    }
+    return SmartWallet.lastLoaded;
+  }
+
+  private static async loadChecked(): Promise<SmartWallet | null> {
     const userId = await ctx.userId();
     await SmartWallet.creation.settled(userId);
     if ((await ctx.userId()) !== userId) {
-      return SmartWallet.load();
+      return SmartWallet.loadChecked();
     }
     const pin = SmartWallet.pinFor(userId);
     const [links, pinned] = await Promise.all([ctx.wallets(), pin.read()]);
