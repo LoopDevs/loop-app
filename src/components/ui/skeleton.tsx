@@ -55,7 +55,7 @@ export function Skeleton({ width, height, aspectRatio, color }: SkeletonProps) {
 
 export function OrderRowsSkeleton() {
   return (
-    <View style={styles.stack} accessible accessibilityLabel="Loading orders">
+    <View style={styles.stack} accessible accessibilityLabel="Loading orders" aria-busy>
       {Array.from({ length: orderRowCount }, (_, index) => (
         <Skeleton key={index} width="100%" height={72} />
       ))}
@@ -67,7 +67,7 @@ export function MerchantGridSkeleton({ columns, rows = merchantSkeletonRows }: {
   const layout = usePageLayout();
   const count = columns ?? layout.columns;
   return (
-    <View style={styles.grid} accessible accessibilityLabel="Loading gift cards">
+    <View style={styles.grid} accessible accessibilityLabel="Loading gift cards" aria-busy>
       {Array.from({ length: count * rows }, (_, index) => (
         <View key={index} style={[styles.gridCell, { width: `${100 / count}%` }]}>
           <Skeleton width="100%" height={merchantTileHeight} />
@@ -79,7 +79,7 @@ export function MerchantGridSkeleton({ columns, rows = merchantSkeletonRows }: {
 
 export function OrderDetailSkeleton() {
   return (
-    <View style={styles.stack} accessible accessibilityLabel="Loading">
+    <View style={styles.stack} accessible accessibilityLabel="Loading" aria-busy>
       <Skeleton width="100%" aspectRatio={coverAspect} />
       <Skeleton width="60%" height={24} />
       <Skeleton width="35%" height={16} />

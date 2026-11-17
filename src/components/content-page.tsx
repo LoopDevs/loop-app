@@ -57,7 +57,7 @@ export function ContentPage({ title, lead, updated, draft = false, sections }: C
       intro={draft && <Notice tone="neutral" message={draftMessage} />}>
       {sections.map((section) => (
         <View key={section.heading} style={styles.section}>
-          <ThemedText type="heading" accessibilityRole="header">
+          <ThemedText type="heading" accessibilityRole="header" aria-level={2}>
             {section.heading}
           </ThemedText>
           {section.blocks.map((block, index) => (
@@ -92,6 +92,7 @@ export function SitePage({ title, lead, detail, width = 'content', intro, childr
             <Text
               style={[styles.title, wide && styles.titleWide, { color: theme.text }]}
               accessibilityRole="header"
+              aria-level={1}
               maxFontSizeMultiplier={1.4}>
               {title}
             </Text>
@@ -118,7 +119,7 @@ export function SiteSection({ title, intro, children }: { title: string; intro?:
   return (
     <View style={[styles.siteSection, wide && styles.siteSectionWide]}>
       <View style={[styles.siteSectionHeading, wide && styles.siteSectionHeadingWide]}>
-        <ThemedText type="heading" accessibilityRole="header">
+        <ThemedText type="heading" accessibilityRole="header" aria-level={2}>
           {title}
         </ThemedText>
         {intro ? (
@@ -145,7 +146,7 @@ export function SupportPanel({ title, line, actionLabel, onAction }: SupportPane
   return (
     <View style={[styles.panel, wide && styles.panelWide, { backgroundColor: theme.inverse }]}>
       <View style={styles.panelText}>
-        <Text style={[styles.panelTitle, { color: theme.onInverse }]} accessibilityRole="header">
+        <Text style={[styles.panelTitle, { color: theme.onInverse }]} accessibilityRole="header" aria-level={2}>
           {title}
         </Text>
         <Text style={[styles.panelLine, { color: theme.onInverseMuted }]}>{line}</Text>

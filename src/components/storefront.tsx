@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
   type TextInputKeyPressEvent,
+  type ViewProps,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -337,6 +338,7 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
         onKeyPress={moveHighlight}
         onFocusChange={setFocused}
         expanded={open}
+        activeOption={open && highlight >= 0 ? SearchOptions.optionId(highlight) : undefined}
         large={large}
       />
       {open && (
@@ -382,11 +384,22 @@ type SuggestionsProps = {
   onPick: (merchant: Merchant) => void;
 };
 
+class SearchOptions {
+  static readonly listId = 'search-options';
+  static readonly listRole = { role: 'listbox' } as unknown as Pick<ViewProps, 'role'>;
+
+  static optionId(index: number): string {
+    return `search-option-${index}`;
+  }
+}
+
 function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: SuggestionsProps) {
   const theme = useTheme();
   return (
     <Animated.View
       entering={FadeIn.duration(Motion.feedback)}
+      id={SearchOptions.listId}
+      {...(Platform.OS === 'web' ? SearchOptions.listRole : {})}
       style={[styles.suggestions, Elevation.raised, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       {merchants.map((merchant, index) => (
         <Pressable
@@ -395,7 +408,10 @@ function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: Sugges
             ? { onPressIn: () => onPick(merchant), delayPressIn: 0 }
             : { onPress: () => onPick(merchant) })}
           onHoverIn={() => onHighlight(index)}
-          accessibilityRole="button"
+          id={SearchOptions.optionId(index)}
+          {...(Platform.OS === 'web'
+            ? { role: 'option' as const, 'aria-selected': index === highlight }
+            : { accessibilityRole: 'button' as const })}
           accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
           style={[styles.suggestion, index === highlight && { backgroundColor: theme.backgroundSelected }]}>
           <View
@@ -427,6 +443,7 @@ type SearchBarProps = {
   onKeyPress?: (event: TextInputKeyPressEvent) => void;
   onFocusChange?: (focused: boolean) => void;
   expanded?: boolean;
+  activeOption?: string;
   large?: boolean;
   placeholder?: string;
 };
@@ -438,6 +455,7 @@ function SearchBar({
   onKeyPress,
   onFocusChange,
   expanded = false,
+  activeOption,
   large = false,
   placeholder = 'Search gift cards',
 }: SearchBarProps) {
@@ -466,8 +484,10 @@ function SearchBar({
         onChangeText={onChangeText}
         onSubmitEditing={onSubmit}
         onKeyPress={onKeyPress}
-        role="searchbox"
+        role={Platform.OS === 'web' ? 'combobox' : 'searchbox'}
         aria-expanded={expanded}
+        aria-controls={expanded ? SearchOptions.listId : undefined}
+        aria-activedescendant={activeOption}
         placeholder={placeholder}
         accessibilityLabel={placeholder}
         placeholderTextColor={theme.textSecondary}

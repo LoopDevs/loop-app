@@ -107,6 +107,7 @@ export function ListRow({
     return <View style={styles.row}>{content}</View>;
   }
   const link = webLink(href);
+  const checked = accessibilityRole === 'radio' ? Boolean(selected) : undefined;
   return (
     <Pressable
       {...link}
@@ -118,8 +119,10 @@ export function ListRow({
       }}
       disabled={disabled}
       accessibilityRole={accessibilityRole}
-      accessibilityLabel={detail ? `${label}, ${detail}` : label}
-      accessibilityState={{ disabled, checked: accessibilityRole === 'radio' ? Boolean(selected) : undefined }}
+      accessibilityLabel={[label, detail, value].filter(Boolean).join(', ')}
+      accessibilityState={{ disabled, checked }}
+      aria-disabled={disabled}
+      aria-checked={checked}
       style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
         styles.row,
         (pressed || (hovered && !disabled)) && { backgroundColor: theme.backgroundSelected },
