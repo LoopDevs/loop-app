@@ -5,12 +5,12 @@ export default function AffiliatesScreen() {
   return (
     <ContentPage
       title="Affiliates and partners"
-      lead="Earn with Loop by sending shoppers or brands our way."
+      lead="Loop has no referral or affiliate programme yet. If you'd like to work with us, get in touch."
       sections={[
         {
           heading: 'For creators and publishers',
           blocks: [
-            'Share Loop with your audience and earn a commission when the people you refer buy gift cards. You get a personal link, simple reporting and regular payouts.',
+            'We don’t pay commission or offer referral links yet. If you have an audience that would like Loop, tell us about it below.',
           ],
         },
         {
