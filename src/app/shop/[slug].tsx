@@ -209,11 +209,13 @@ export default function MerchantScreen() {
                 merchant={merchant}
                 wide={wide}
                 favourite={favourites.has(merchant.id)}
-                onFavourite={() =>
-                  signedIn
-                    ? toggleFavourite(merchant.id)
-                    : openSignIn(`Sign in to save ${merchant.name} to your favourites.`)
-                }
+                onFavourite={() => {
+                  if (signedIn) {
+                    void toggleFavourite(merchant.id);
+                  } else if (signedIn === false) {
+                    openSignIn(`Sign in to save ${merchant.name} to your favourites.`);
+                  }
+                }}
                 onTitleBottom={(bottom) => titleFrom.set(heroTop + bottom)}
               />
             }

@@ -8,7 +8,6 @@ import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { ThemedText } from '@/components/ui/themed-text';
 import { loopLinks } from '@/constants/loop-links';
 import { Spacing } from '@/constants/theme';
-import { ctx } from '@/ctx/client';
 import type { Profile } from '@/ctx/profile';
 import { useBusyAction } from '@/hooks/use-busy-action';
 import { FavouriteIds } from '@/session/favourite-ids';
@@ -43,7 +42,7 @@ export function AccountDeletion({ profile, onCancel, onDeleted }: AccountDeletio
 
   const signOutAfterRequest = () =>
     run(async () => {
-      await AsyncStorage.removeItem(FavouriteIds.storageKey(await ctx.userId()));
+      await AsyncStorage.removeItem(FavouriteIds.storageKey(profile.id)).catch(() => undefined);
       await onDeleted();
     });
 
