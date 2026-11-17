@@ -10,7 +10,8 @@ test('a pay request names the destination, amount and dollar asset', () => {
   const uri = new PayRequest(destination, '25').uri();
   assert.equal(
     uri,
-    `web+stellar:pay?destination=${destination}&amount=25&asset_code=USDC&asset_issuer=${network.usdcIssuer}`,
+    `web+stellar:pay?destination=${destination}&amount=25&asset_code=USDC&asset_issuer=${network.usdcIssuer}` +
+      `&network_passphrase=${new URLSearchParams({ p: network.passphrase }).toString().slice(2)}`,
   );
 });
 
