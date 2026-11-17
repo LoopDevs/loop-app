@@ -422,9 +422,9 @@ type SignedOutShopProps = {
 };
 
 function SignedOutShop({ search, onSearch, onOpen }: SignedOutShopProps) {
-  const { country } = useMarket();
-  const { wide } = usePageLayout();
-  const catalog = useCatalog(country, stripSize);
+  const { country, resolved } = useMarket();
+  const { wide, columns } = usePageLayout();
+  const catalog = useCatalog(resolved ? country : undefined, stripSize);
   const loadMoreRef = useRef<(() => void) | null>(null);
   const loadMore = useCallback(() => loadMoreRef.current?.(), []);
   const { scrollRef, onScroll, scrim } = useScrimScroll(loadMore);
@@ -440,13 +440,17 @@ function SignedOutShop({ search, onSearch, onOpen }: SignedOutShopProps) {
         <PageHeader title="Shop" width="page" accessory={wide ? null : <CountryMenu />} />
         <PageWidth style={styles.storeBody}>
           {search.trim() === '' && <TopCashback catalog={catalog} onOpen={onOpen} />}
-          <MerchantCatalog
-            country={country}
-            search={search}
-            onSearch={onSearch}
-            onOpen={onOpen}
-            loadMoreRef={loadMoreRef}
-          />
+          {resolved ? (
+            <MerchantCatalog
+              country={country}
+              search={search}
+              onSearch={onSearch}
+              onOpen={onOpen}
+              loadMoreRef={loadMoreRef}
+            />
+          ) : (
+            <MerchantGridSkeleton columns={columns} />
+          )}
         </PageWidth>
         <SiteFooter />
       </Animated.ScrollView>
