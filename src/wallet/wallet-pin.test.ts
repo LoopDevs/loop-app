@@ -132,7 +132,7 @@ test('a wallet with an unreadable pin is pinned again only after the passkey con
   storage.values.set(pin.key, '{bad');
   const discarded = await pin.read();
   const linked = { thisDevice: 'linked' as const, passkeyPublicKey: holder.publicKey };
-  assert.equal(await pin.admits(discarded, 'CMINE', linked, refuseLookup), false);
+  assert.equal(await pin.admission(discarded, 'CMINE', linked, refuseLookup), 'unpinned');
   await pin.confirmThisDevice(discarded, 'CMINE', linked, refuseAddDevice, holder.sign);
   assert.equal((await pin.read())?.address, 'CMINE');
 });
@@ -233,11 +233,11 @@ test('a wallet is admitted on load only when this device is linked and the walle
   const holder = passkeyHolder();
   const linked = { thisDevice: 'linked' as const, passkeyPublicKey: holder.publicKey };
   const unlinked = { thisDevice: 'unlinked' as const, passkeyPublicKey: holder.publicKey };
-  assert.equal(await pin.admits(pinned, 'CMINE', unlinked, refuseLookup), false);
-  assert.equal(await pin.admits(null, 'CMINE', unlinked, refuseLookup), false);
-  assert.equal(await pin.admits(null, 'CMINE', linked, refuseLookup), false);
+  assert.equal(await pin.admission(pinned, 'CMINE', unlinked, refuseLookup), 'unlinked');
+  assert.equal(await pin.admission(null, 'CMINE', unlinked, refuseLookup), 'unlinked');
+  assert.equal(await pin.admission(null, 'CMINE', linked, refuseLookup), 'unpinned');
   assert.equal(await pin.read(), null);
-  assert.equal(await pin.admits(pinned, 'CMINE', linked, refuseLookup), true);
+  assert.equal(await pin.admission(pinned, 'CMINE', linked, refuseLookup), 'admitted');
 });
 
 test('a wallet made here is admitted on load and pinned only when the factory agrees', async () => {
@@ -245,9 +245,9 @@ test('a wallet made here is admitted on load and pinned only when the factory ag
   const pin = pinFor(storage, 'user-1');
   const created = await pin.passkeyForSetup(setupPasskeys().create, cancelled);
   const linked = { thisDevice: 'linked' as const, passkeyPublicKey: created.publicKey };
-  assert.equal(await pin.admits(null, 'CMINE', linked, factoryMaking('COTHER').addressOf), false);
+  assert.equal(await pin.admission(null, 'CMINE', linked, factoryMaking('COTHER').addressOf), 'unpinned');
   assert.equal(await pin.read(), null);
-  assert.equal(await pin.admits(null, 'CMINE', linked, factoryMaking('CMINE').addressOf), true);
+  assert.equal(await pin.admission(null, 'CMINE', linked, factoryMaking('CMINE').addressOf), 'admitted');
   assert.equal((await pin.read())?.address, 'CMINE');
 });
 

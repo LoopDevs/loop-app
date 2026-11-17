@@ -59,11 +59,15 @@ export class WalletBlocked extends Error {
   }
 }
 
-export class UnlinkedDevice extends WalletBlocked {
+export class DeviceSetupNeeded extends WalletBlocked {
   constructor(wallet: SmartWallet) {
     super(wallet, 'Loop is not set up on this device yet. Open Home to set it up.');
   }
 }
+
+export class UnlinkedDevice extends DeviceSetupNeeded {}
+
+export class UnpinnedWallet extends DeviceSetupNeeded {}
 
 export class UnconfirmedIdentity extends WalletBlocked {
   constructor(wallet: SmartWallet) {
@@ -125,8 +129,14 @@ export class SmartWallet {
     const wallet = new SmartWallet(link.id, link.address, userId);
     const checked = await wallet.verify();
     const held = WalletPin.current(pinned, wallet.address, checked.passkeyPublicKey);
-    if (!(await pin.admits(held, wallet.address, checked, (credentialId) => wallet.walletAddressOf(credentialId)))) {
+    const admission = await pin.admission(held, wallet.address, checked, (credentialId) =>
+      wallet.walletAddressOf(credentialId),
+    );
+    if (admission === 'unlinked') {
       throw new UnlinkedDevice(wallet);
+    }
+    if (admission === 'unpinned') {
+      throw new UnpinnedWallet(wallet);
     }
     if (Platform.OS === 'web' && !SmartWallet.confirmed.has(wallet.confirmedKey())) {
       throw new UnconfirmedIdentity(wallet);

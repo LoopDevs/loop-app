@@ -14,6 +14,10 @@ export function holdCriticalReload<T>(task: () => Promise<T>): Promise<T> {
   return gate.hold(task);
 }
 
+export function reloadWhenIdle(reload: () => void | Promise<void>): void {
+  gate.request(reload);
+}
+
 export function runningUpdateId(): string | null {
   return null;
 }

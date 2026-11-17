@@ -22,6 +22,8 @@ type SignWithPasskey = (challenge: Uint8Array) => Promise<PasskeyAssertion>;
 
 export type AddressOf = (credentialId: Uint8Array) => Promise<string>;
 
+export type DeviceAdmission = 'admitted' | 'unlinked' | 'unpinned';
+
 export class WalletPin {
   readonly key: string;
   readonly pendingKey: string;
@@ -101,16 +103,19 @@ export class WalletPin {
     return created;
   }
 
-  async admits(
+  async admission(
     pinned: PinnedWallet | null,
     address: string,
     checked: WalletCheck,
     addressOf: AddressOf,
-  ): Promise<boolean> {
+  ): Promise<DeviceAdmission> {
     if (checked.thisDevice === 'unlinked') {
-      return false;
+      return 'unlinked';
     }
-    return pinned !== null || (await this.pinCreatedHere(address, checked.passkeyPublicKey, addressOf));
+    if (pinned !== null || (await this.pinCreatedHere(address, checked.passkeyPublicKey, addressOf))) {
+      return 'admitted';
+    }
+    return 'unpinned';
   }
 
   async confirmThisDevice(
