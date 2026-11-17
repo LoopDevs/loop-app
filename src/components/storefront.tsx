@@ -353,12 +353,14 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
   );
 }
 
+const noMerchants: Merchant[] = [];
+
 function useSearchResults(country: string, text: string): Merchant[] {
   const name = text.trim();
   const query = useMemo(() => ({ country, name, perPage: suggestionScanSize }), [country, name]);
   const searchable = name.length >= 2;
   const cached = searchable ? cachedMerchantPage(query) : null;
-  const [loaded, setLoaded] = useState<Merchant[]>([]);
+  const [loaded, setLoaded] = useState<{ query: object; result: Merchant[] } | null>(null);
   useEffect(() => {
     if (!searchable || cached) {
       return;
@@ -366,7 +368,7 @@ function useSearchResults(country: string, text: string): Merchant[] {
     let current = true;
     const timer = setTimeout(() => {
       loadMerchantPage(query)
-        .then((page) => current && setLoaded(page.result))
+        .then((page) => current && setLoaded({ query, result: page.result }))
         .catch(() => undefined);
     }, suggestionDelayMs);
     return () => {
@@ -374,7 +376,10 @@ function useSearchResults(country: string, text: string): Merchant[] {
       clearTimeout(timer);
     };
   }, [query, searchable, cached]);
-  return cached ? cached.result : loaded;
+  if (cached) {
+    return cached.result;
+  }
+  return loaded?.query === query ? loaded.result : noMerchants;
 }
 
 type SuggestionsProps = {
@@ -644,10 +649,16 @@ export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef
         } else if (next === 1) {
           setPage(0);
         }
-        const { result, pagination } = await loadMerchantPage(merchantQuery);
-        if (request !== latestRequest.current) {
+        const loaded = await loadMerchantPage(merchantQuery).catch((error: unknown) => {
+          if (request !== latestRequest.current) {
+            return null;
+          }
+          throw error;
+        });
+        if (loaded === null || request !== latestRequest.current) {
           return;
         }
+        const { result, pagination } = loaded;
         setMerchants((shown) => MerchantPaging.merge(shown, result, next));
         setPage(next);
         setPages(pagination.pages);
