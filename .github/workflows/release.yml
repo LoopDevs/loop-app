@@ -114,6 +114,10 @@ jobs:
           fi
           key_path="$RUNNER_TEMP/expo-updates-private-key.pem"
           (umask 077 && printf '%s\n' "$EXPO_UPDATES_PRIVATE_KEY" > "$key_path")
+          if [ "$(openssl pkey -in "$key_path" -pubout 2>/dev/null)" != "$(openssl x509 -in certs/certificate.pem -pubkey -noout)" ]; then
+            echo "::error::EXPO_UPDATES_PRIVATE_KEY does not pair with certs/certificate.pem, so installed builds would reject this update."
+            exit 1
+          fi
           npx --yes "$EAS_CLI" update \
             --channel "$CHANNEL" \
             --environment "$CHANNEL" \
