@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { pageLinesScript, parseCardDetails, readPageLines, RedeemPage } from './redeem-scrape.ts';
+import { pageLinesScript, parseCardDetails, readPageLines, readPageTouched, RedeemPage } from './redeem-scrape.ts';
 
 type FakeNode = Record<string, unknown>;
 
@@ -28,8 +28,8 @@ function field(
 function pageLines(nodes: FakeNode[], typedInto: FakeNode[] = []): string[] {
   const sent: string[] = [];
   const document = {
-    addEventListener: (_name: string, listener: (event: { isTrusted: boolean; target: FakeNode }) => void) => {
-      for (const target of typedInto) {
+    addEventListener: (name: string, listener: (event: { isTrusted: boolean; target: FakeNode }) => void) => {
+      for (const target of name === 'input' ? typedInto : []) {
         listener({ isTrusted: true, target });
       }
     },
@@ -188,15 +188,30 @@ test('a field the user typed into is never read, even once the page locks it', (
   assert.deepEqual(pageLines([text('Card number'), typedCard, shownCode], [typedCard]), ['Card number', 'ABCD1234EFGH5678']);
 });
 
-test('card details are accepted only from the redeem link host and the page it first lands on', () => {
+test('a locked field holding a value the user typed elsewhere is never read', () => {
+  const typedCard = field('4111 1111 1111 1111');
+  const lockedCopy = field('4111111111111111', { readOnly: true });
+  assert.deepEqual(pageLines([text('Card number'), lockedCopy], [typedCard]), ['Card number']);
+});
+
+test('card details are accepted from the redeem link host and hosts reached before the user touches the page', () => {
   const page = new RedeemPage('https://spend.ctx.com/r/abc');
   assert.equal(page.trusts('https://spend.ctx.com/r/abc?x=1'), true);
   assert.equal(page.trusts('https://supplier.example/card'), false);
+  page.land('https://spend.ctx.com/r/abc');
   page.land('https://supplier.example/card');
   assert.equal(page.trusts('https://supplier.example/card/view'), true);
+  page.settle();
   page.land('https://elsewhere.example/');
   assert.equal(page.trusts('https://elsewhere.example/'), false);
+  assert.equal(page.trusts('https://supplier.example/card'), true);
   assert.equal(page.trusts('http://supplier.example/card'), false);
   assert.equal(page.trusts('about:blank'), false);
   assert.equal(page.trusts('not a url'), false);
+});
+
+test('a touch message is told apart from page lines', () => {
+  assert.equal(readPageTouched('{"touched":true}'), true);
+  assert.equal(readPageTouched('{"lines":["a"]}'), false);
+  assert.equal(readPageTouched('nope'), false);
 });

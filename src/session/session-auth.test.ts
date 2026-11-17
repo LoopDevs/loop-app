@@ -751,10 +751,12 @@ test('a request whose session ended while its token was replaced is not retried'
   assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
 });
 
-test("a stale refresh that finds another user's token cannot end the session that replaced it", async () => {
+test("a stale refresh that yields another user's token cannot end the session that replaced it", async () => {
   const ends: SessionEnd[] = [];
+  const answering = new Gate();
   const ctx = new FakeCtx(async ({ path, token }) => {
     if (path === '/refresh-token') {
+      await answering.opened;
       return { accessToken: 'b2', refreshToken: 'rb2' };
     }
     if (token === 'a1') {
@@ -766,14 +768,15 @@ test("a stale refresh that finds another user's token cannot end the session tha
   const auth = new SessionAuth(ctx.send, store, ownerOf);
   await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
   auth.onSessionEnd((end) => ends.push(end));
-  store.signedInElsewhere('rb', 'b');
 
   const refused = assert.rejects(auth.sessionRequest('GET', '/me'));
   await new Promise((resolve) => setImmediate(resolve));
   await auth.startSession({ accessToken: 'a3', refreshToken: 'r3' });
-  ends.length = 0;
+  answering.open();
+  await new Promise((resolve) => setImmediate(resolve));
 
   await refused;
   assert.deepEqual(ends, []);
   assert.equal(await auth.accessToken(), 'a3');
+  assert.equal(store.refreshToken, 'r3');
 });

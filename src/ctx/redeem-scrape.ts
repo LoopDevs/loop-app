@@ -47,6 +47,14 @@ export function readPageLines(data: string): string[] {
   }
 }
 
+export function readPageTouched(data: string): boolean {
+  try {
+    return (JSON.parse(data) as { touched?: unknown }).touched === true;
+  } catch {
+    return false;
+  }
+}
+
 function labelKind(label: string): 'pin' | 'number' | null {
   if (pinLabel.test(label)) {
     return 'pin';
@@ -163,18 +171,20 @@ function digitCount(value: string): number {
 
 export class RedeemPage {
   private readonly trusted = new Set<string>();
-  private landed = false;
+  private settled = false;
 
   constructor(startUrl: string) {
     this.trust(startUrl);
   }
 
   land(url: string): void {
-    if (this.landed) {
-      return;
+    if (!this.settled) {
+      this.trust(url);
     }
-    this.landed = true;
-    this.trust(url);
+  }
+
+  settle(): void {
+    this.settled = true;
   }
 
   trusts(url: string): boolean {
@@ -199,7 +209,44 @@ export class RedeemPage {
   }
 }
 
-export const pageLinesScript = `
+export const typedFieldsScript = `
+(function () {
+  if (window.__loopTyped) {
+    return;
+  }
+  var typed = { fields: new WeakSet(), values: {}, touched: false };
+  window.__loopTyped = typed;
+  document.addEventListener(
+    'input',
+    function (event) {
+      var target = event.target;
+      if (!event.isTrusted || !target) {
+        return;
+      }
+      typed.fields.add(target);
+      var value = String(target.value || '').replace(/\\s+/g, '');
+      if (value.length >= 4) {
+        typed.values[value] = 1;
+      }
+    },
+    true
+  );
+  function touched(event) {
+    if (!event.isTrusted || typed.touched) {
+      return;
+    }
+    typed.touched = true;
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ touched: true }));
+    } catch (error) {}
+  }
+  document.addEventListener('pointerdown', touched, true);
+  document.addEventListener('keydown', touched, true);
+})();
+true;
+`;
+
+export const pageLinesScript = `${typedFieldsScript}
 (function () {
   if (window.__loopPageLines) {
     return;
@@ -208,16 +255,7 @@ export const pageLinesScript = `
   var limit = 2000;
   var skipped = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1 };
   var skippedInputs = { hidden: 1, password: 1, submit: 1, button: 1, checkbox: 1, radio: 1 };
-  var typed = new WeakSet();
-  document.addEventListener(
-    'input',
-    function (event) {
-      if (event.isTrusted && event.target) {
-        typed.add(event.target);
-      }
-    },
-    true
-  );
+  var typed = window.__loopTyped;
   function collect() {
     var out = [];
     var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null);
@@ -232,7 +270,8 @@ export const pageLinesScript = `
         text = node.textContent;
       } else if ((node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') && (node.readOnly || node.disabled)) {
         if (
-          typed.has(node) ||
+          typed.fields.has(node) ||
+          typed.values[String(node.value || '').replace(/\\s+/g, '')] ||
           skippedInputs[(node.getAttribute('type') || 'text').toLowerCase()] ||
           /^cc-/i.test(node.getAttribute('autocomplete') || '')
         ) {
