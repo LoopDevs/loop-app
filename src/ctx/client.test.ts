@@ -253,6 +253,28 @@ test('a new sign-in ends the previous session at CTX only once the new tokens ex
   assert.equal(await ctx.userId(), 'user-77');
 });
 
+test('ending the previous session refreshes its expired token and retries', async () => {
+  await signIn('user-42');
+  const refreshed = `${accessToken('user-42')}.refreshed`;
+  respond = (request) => {
+    if (request.url.endsWith('/verify-email')) {
+      return json({ accessToken: accessToken('user-77'), refreshToken: 'refresh-2' });
+    }
+    if (request.url.endsWith('/refresh-token')) {
+      return json({ accessToken: refreshed, refreshToken: 'refresh-1b' });
+    }
+    return request.headers.Authorization === `Bearer ${refreshed}` ? json({}) : json({ error: 'ErrTokenInvalid' }, 401);
+  };
+  await ctx.verifyCode('b@example.com', '654321');
+  assert.deepEqual(
+    sent.map((request) => request.url.replace(apiUrl, '')),
+    ['/verify-email', '/logout', '/refresh-token', '/logout'],
+  );
+  assert.equal(sent[3].headers.Authorization, `Bearer ${refreshed}`);
+  respond = () => json({});
+  assert.equal(await ctx.userId(), 'user-77');
+});
+
 test('a refused code leaves the current session signed in', async () => {
   await signIn('user-42');
   respond = () => json({ error: 'ErrVerificationCodeInvalid' }, 400);

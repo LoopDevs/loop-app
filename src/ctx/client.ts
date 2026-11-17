@@ -310,13 +310,7 @@ class CtxClient {
   }
 
   private async switchSession(tokens: TokenPair): Promise<void> {
-    const previous = await this.auth.accessToken().catch(() => null);
-    if (previous !== null && previous !== tokens.accessToken) {
-      await this.send('POST', '/logout', undefined, {
-        headers: { Authorization: `Bearer ${previous}` },
-        reportServiceState: false,
-      }).catch(() => undefined);
-    }
+    await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
     await this.auth.startSession(tokens);
   }
 
