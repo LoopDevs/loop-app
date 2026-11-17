@@ -36,7 +36,7 @@ import {
   outcomeText,
   pollDelayMs,
   processingNote,
-  settledStatuses,
+  followsOrder,
   wasCharged,
 } from '@/ctx/gift-card-status';
 import { CashbackRate } from '@/ctx/merchant';
@@ -110,7 +110,7 @@ export default function GiftCardScreen() {
         setGiftCard(loaded);
         setRefreshing(false);
         let charged = BankPayment.charged(loaded);
-        while (active && !settledStatuses.includes(loaded.status)) {
+        while (active && followsOrder(loaded, polls)) {
           stopWatching ??= ctx.watchOrder(id, wake).catch(() => () => undefined);
           await wake.wait(Math.max(wake.interval(), pollDelayMs(polls)));
           polls += 1;
