@@ -80,10 +80,24 @@ export function cachedMerchant(idOrSlug: string): Merchant | null {
   return loadedMerchants.get(idOrSlug) ?? null;
 }
 
-export async function loadMerchant(idOrSlug: string): Promise<Merchant> {
-  const merchant = await ctx.merchant(idOrSlug);
-  rememberMerchants([merchant]);
-  return merchant;
+const merchantRequests = new Map<string, Promise<Merchant>>();
+
+export function loadMerchant(idOrSlug: string): Promise<Merchant> {
+  const running = merchantRequests.get(idOrSlug);
+  if (running) {
+    return running;
+  }
+  const request = ctx
+    .merchant(idOrSlug)
+    .then((merchant) => {
+      rememberMerchants([merchant]);
+      return merchant;
+    })
+    .finally(() => {
+      merchantRequests.delete(idOrSlug);
+    });
+  merchantRequests.set(idOrSlug, request);
+  return request;
 }
 
 function pageKey(query: MerchantQuery): string {
