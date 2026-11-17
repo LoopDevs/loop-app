@@ -165,8 +165,8 @@ test('the pound vault has a fixed rate and its own headline', () => {
   }
   assert.equal(SavingsRate.fixedFor('XLM.GBPLOOP'), null);
   assert.equal(SavingsRate.fixedFor('XLM.USDC'), null);
-  assert.equal(Savings.rateHeadline('XLM.USDC'), 'Earn up to 5% a year, variable');
-  assert.equal(Savings.rateHeadline(null), 'Earn up to 5% a year, variable');
+  assert.equal(Savings.rateHeadline('XLM.USDC'), 'Earn interest at a variable rate');
+  assert.equal(Savings.rateHeadline(null), 'Earn interest at a variable rate');
 });
 
 test('the projected value grows from the daily step at the yearly rate', () => {

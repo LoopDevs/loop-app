@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 
 import { QuestionList, SiteSection, SitePage, SupportPanel, type ContentQuestion } from '@/components/content-page';
 import { loopLinks } from '@/constants/loop-links';
+import { Savings } from '@/wallet/savings';
 
 type Topic = {
   title: string;
@@ -54,6 +55,25 @@ const topics: readonly Topic[] = [
       {
         question: 'Does my cashback expire?',
         answer: 'No. Your cashback stays in your balance until you use it.',
+      },
+    ],
+  },
+  {
+    title: 'Savings',
+    intro: 'How Savings works, what it earns and how to take money out.',
+    questions: [
+      {
+        question: 'How does Savings work?',
+        answer:
+          'Cashback can go into Savings, where it earns interest. Pound savings earn a rate shown in the app, which Loop adds every day. Other currencies earn a variable rate.',
+      },
+      {
+        question: 'Is my money safe in Savings?',
+        answer: Savings.riskNote,
+      },
+      {
+        question: 'Can I take my money out?',
+        answer: 'Yes. Move your savings back to your balance whenever you like.',
       },
     ],
   },

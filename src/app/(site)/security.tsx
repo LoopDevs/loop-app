@@ -24,23 +24,23 @@ const protections: readonly Protection[] = [
   },
   {
     icon: { ios: 'faceid', android: 'fingerprint', web: 'fingerprint' },
-    title: 'You confirm every payment',
-    body: "Payments need your confirmation on your own device, using your phone's face, fingerprint or screen lock.",
+    title: 'Payments are approved on your side',
+    body: 'Payments from your phone are signed by a key kept on that device. Bank payments are approved in your own banking app.',
   },
   {
     icon: { ios: 'lock', android: 'lock', web: 'lock' },
     title: 'Lock the app',
-    body: 'You can lock the app so it asks for your face, fingerprint or screen lock each time it opens.',
+    body: 'In the phone app you can turn on a lock. It asks for your face, fingerprint or screen lock when you come back after being away for a few minutes.',
   },
   {
     icon: { ios: 'lock.shield', android: 'verified_user', web: 'verified_user' },
-    title: 'Encrypted details',
-    body: 'Your details travel over encrypted connections and are stored encrypted.',
+    title: 'Encrypted connections',
+    body: 'Your details travel over encrypted connections. On your phone, your sign-in is kept in the device’s secure storage.',
   },
   {
     icon: { ios: 'eye', android: 'visibility', web: 'visibility' },
-    title: 'Watching for unusual activity',
-    body: 'We watch for unusual activity and may pause an account to protect it while we check.',
+    title: 'Pausing an account',
+    body: 'If we suspect fraud or abuse, we may pause an account to protect it while we check.',
   },
 ];
 
@@ -62,7 +62,7 @@ export default function SecurityScreen() {
       title="Security"
       lead="How we keep your account and your money safe, and what you can do too."
       width="page">
-      <SiteSection title="How we protect your account" intro="Built in for every Loop account, with nothing to switch on.">
+      <SiteSection title="How we protect your account" intro="Built into Loop, plus an optional lock in the phone app.">
         <Protections />
       </SiteSection>
       <SiteSection title="What you can do" intro="A few habits that keep your account yours.">
