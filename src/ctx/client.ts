@@ -582,7 +582,7 @@ class CtxClient {
   async buildTransaction(walletId: string, intent: SmartWalletIntent): Promise<BuiltTransaction> {
     return this.checked(
       CtxResponse.builtTransaction,
-      await this.userRequest('POST', `/wallets/${walletId}/stellar/transaction`, intent),
+      await this.userRequest('POST', `/wallets/${encodeURIComponent(walletId)}/stellar/transaction`, intent),
     );
   }
 
@@ -593,7 +593,7 @@ class CtxClient {
   ): Promise<SponsoredResult> {
     return this.checked(
       CtxResponse.sponsored,
-      await this.userRequest('POST', `/wallets/${walletId}/stellar/sponsor`, { ...intent, ...signed }),
+      await this.userRequest('POST', `/wallets/${encodeURIComponent(walletId)}/stellar/sponsor`, { ...intent, ...signed }),
     );
   }
 
@@ -624,7 +624,7 @@ class CtxClient {
   }
 
   private requestAs<T>(userId: string, method: string, path: string, body?: unknown): Promise<T> {
-    return this.auth.sessionRequest<T>(method, `/users/${userId}${path}`, body);
+    return this.auth.sessionRequest<T>(method, `/users/${encodeURIComponent(userId)}${path}`, body);
   }
 
   private async signInRequest<T>(method: SignInMethod, path: string, body: unknown): Promise<T> {
@@ -683,7 +683,19 @@ class CtxClient {
       }
       throw error;
     }
-    return (text ? JSON.parse(text) : {}) as T;
+    return CtxClient.parsed<T>(text);
+  }
+
+  private static parsed<T>(text: string): T {
+    if (!text) {
+      return {} as T;
+    }
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      errorReporting.reportMessage('CTX answered with a body that is not JSON');
+      throw new UnexpectedResponse('CTX answered with a body that is not JSON');
+    }
   }
 }
 
