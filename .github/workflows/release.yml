@@ -117,6 +117,22 @@ jobs:
             --private-key-path "$key_path" \
             --non-interactive
 
+      - name: Check every update bundle carries its Sentry debug ID
+        if: inputs.kind == 'update'
+        run: |
+          maps=$(find dist -name '*.hbc.map')
+          if [ -z "$maps" ]; then
+            echo "::error::The update export has no source maps."
+            exit 1
+          fi
+          for map in $maps; do
+            debug_id=$(jq -r '.debugId // .debug_id // empty' "$map")
+            if [ -z "$debug_id" ] || ! grep -qa "$debug_id" "${map%.map}"; then
+              echo "::error::$map has no Sentry debug ID matching its bundle."
+              exit 1
+            fi
+          done
+
       - name: Upload the update source maps to Sentry
         if: inputs.kind == 'update' && inputs.channel == 'production'
         env:
