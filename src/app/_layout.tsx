@@ -6,7 +6,7 @@ import { ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { AppLockProvider } from '@/components/app-lock';
 import AppTabs from '@/components/app-tabs';
@@ -57,7 +57,7 @@ export default function TabLayout() {
             <MarketProvider>
               <SignInProvider>
                 <View
-                  style={styles.fill}
+                  style={[styles.fill, Platform.OS === 'web' && blocked !== null && styles.unreachable]}
                   aria-hidden={blocked !== null}
                   accessibilityElementsHidden={blocked !== null}
                   importantForAccessibility={blocked ? 'no-hide-descendants' : 'auto'}>
@@ -80,4 +80,5 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  unreachable: { display: 'none' },
 });

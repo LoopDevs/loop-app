@@ -238,6 +238,55 @@ test('after signing in, account reads go to the user id inside the access token 
   assert.equal(await ctx.userId(), 'user-42');
 });
 
+test('a new sign-in ends the previous session at CTX only once the new tokens exist', async () => {
+  await signIn('user-42');
+  respond = (request) =>
+    request.url.endsWith('/verify-email')
+      ? json({ accessToken: accessToken('user-77'), refreshToken: 'refresh-2' })
+      : json({});
+  await ctx.verifyCode('b@example.com', '654321');
+  assert.deepEqual(
+    sent.map((request) => request.url.replace(apiUrl, '')),
+    ['/verify-email', '/logout'],
+  );
+  assert.equal(sent[1].headers.Authorization, `Bearer ${accessToken('user-42')}`);
+  assert.equal(await ctx.userId(), 'user-77');
+});
+
+test('ending the previous session refreshes its expired token and retries', async () => {
+  await signIn('user-42');
+  const refreshed = `${accessToken('user-42')}.refreshed`;
+  respond = (request) => {
+    if (request.url.endsWith('/verify-email')) {
+      return json({ accessToken: accessToken('user-77'), refreshToken: 'refresh-2' });
+    }
+    if (request.url.endsWith('/refresh-token')) {
+      return json({ accessToken: refreshed, refreshToken: 'refresh-1b' });
+    }
+    return request.headers.Authorization === `Bearer ${refreshed}` ? json({}) : json({ error: 'ErrTokenInvalid' }, 401);
+  };
+  await ctx.verifyCode('b@example.com', '654321');
+  assert.deepEqual(
+    sent.map((request) => request.url.replace(apiUrl, '')),
+    ['/verify-email', '/logout', '/refresh-token', '/logout'],
+  );
+  assert.equal(sent[3].headers.Authorization, `Bearer ${refreshed}`);
+  respond = () => json({});
+  assert.equal(await ctx.userId(), 'user-77');
+});
+
+test('a refused code leaves the current session signed in', async () => {
+  await signIn('user-42');
+  respond = () => json({ error: 'ErrVerificationCodeInvalid' }, 400);
+  await assert.rejects(ctx.verifyCode('b@example.com', '000000'), CtxError);
+  assert.deepEqual(
+    sent.map((request) => request.url.replace(apiUrl, '')),
+    ['/verify-email'],
+  );
+  respond = () => json({});
+  assert.equal(await ctx.userId(), 'user-42');
+});
+
 test('signing out clears the session even when the logout call fails', async () => {
   await signIn('user-42');
   respond = () => json({ error: 'ErrInternal' }, 500);
@@ -428,6 +477,23 @@ test('the active order is the newest in-progress card that is not skipped', asyn
   assert.equal(await ctx.activeGiftCard('m1', () => true), null);
 });
 
+test('the active order is found on a later page when the first page holds only skipped orders', async () => {
+  await signIn('user-42');
+  respond = (request) => {
+    if (request.url.endsWith('/gift-cards/g9')) {
+      return json({ ...card({}), id: 'g9' });
+    }
+    const page = Number(new URL(request.url).searchParams.get('page') ?? '1');
+    const result = page === 2 ? [{ ...card({}), id: 'g9' }] : [card({})];
+    return json({ result, pagination: { page, pages: 2, perPage: 5, total: 6 } });
+  };
+  const active = await ctx.activeGiftCard('m1', (candidate) => candidate.id === 'g1');
+  assert.equal(active?.id, 'g9');
+  sent = [];
+  assert.equal(await ctx.activeGiftCard('m1', () => true), null);
+  assert.equal(sent.length, 2);
+});
+
 test('an account watch opens a socket with the session headers and relays account events', async () => {
   await signIn('user-42');
   await ctx.status();
@@ -584,4 +650,91 @@ test('a successful answer that is not JSON is rejected with the server-failed me
   respond = () => new Response('<html>gateway</html>', { status: 200 });
   await assert.rejects(ctx.wallets(), { name: 'UnexpectedResponse', message: CtxError.serverFailedMessage });
   assert.deepEqual(reported, ['CTX answered with a body that is not JSON']);
+});
+
+const bankOrder: GiftCardOrderIn = {
+  merchantId: 'm1',
+  fiatAmount: '25',
+  fiatCurrency: 'GBP',
+};
+
+function bankCard(id: string, created: string, paymentUrlExpiration: string) {
+  return {
+    ...card({}),
+    id,
+    created,
+    paymentMethod: 'plaid-uk-eu',
+    paymentCryptoCurrency: undefined,
+    plaidLinkToken: `link-${id}`,
+    paymentUrlExpiration,
+  };
+}
+
+const cardList = (cards: object[]) =>
+  json({ result: cards, pagination: { page: 1, pages: 1, perPage: 10, total: cards.length } });
+
+test('a bank order reuses the newest open order for the same request that can still be approved', async () => {
+  await signIn('user-42');
+  const soon = new Date(Date.now() + 600_000).toISOString();
+  const past = new Date(Date.now() - 600_000).toISOString();
+  const cards = [
+    bankCard('g-older', '2026-10-27T10:00:00Z', soon),
+    { ...bankCard('g-crypto', '2026-10-27T14:00:00Z', soon), paymentMethod: 'crypto' },
+    { ...bankCard('g-other-amount', '2026-10-27T13:00:00Z', soon), cardFiatAmount: '50.00' },
+    bankCard('g-open', '2026-10-27T11:00:00Z', soon),
+    bankCard('g-expired', '2026-10-27T12:00:00Z', past),
+  ];
+  respond = (request) =>
+    request.url.startsWith(`${apiUrl}/gift-cards?`)
+      ? cardList(cards)
+      : json(cards.find((candidate) => request.url.endsWith(`/${candidate.id}`)));
+  const reused = await ctx.orderGiftCard(bankOrder);
+  assert.equal(reused.id, 'g-open');
+  assert.deepEqual(
+    sent.map((request) => new URL(request.url).pathname.split('/').pop()),
+    ['gift-cards', 'g-expired', 'g-open'],
+  );
+});
+
+test('an open bank order made for another platform is not reused', async () => {
+  await signIn('user-42');
+  const soon = new Date(Date.now() + 600_000).toISOString();
+  const webOrder = { ...bankCard('g-web', '2026-10-27T11:00:00Z', soon), plaidLinkToken: undefined, paymentUrl: 'https://secure.plaid.com/pay/1' };
+  const created = bankCard('g-new', '2026-10-27T12:00:00Z', soon);
+  respond = (request) => {
+    if (request.method === 'POST') {
+      return json(created);
+    }
+    return request.url.startsWith(`${apiUrl}/gift-cards?`) ? cardList([webOrder]) : json(webOrder);
+  };
+  assert.equal((await ctx.orderGiftCard(bankOrder)).id, 'g-new');
+});
+
+test('a bank order is not created when the open orders cannot be read', async () => {
+  await signIn('user-42');
+  respond = (request) => (request.method === 'POST' ? json(bankCard('g-new', '2026-10-27T12:00:00Z', '')) : new Response('{}', { status: 500 }));
+  await assert.rejects(ctx.orderGiftCard(bankOrder));
+  assert.equal(
+    sent.some((request) => request.method === 'POST'),
+    false,
+  );
+});
+
+test('a bank order is created when no open order matches, and always when another bank is chosen', async () => {
+  await signIn('user-42');
+  const soon = new Date(Date.now() + 600_000).toISOString();
+  const created = bankCard('g-new', '2026-10-27T12:00:00Z', soon);
+  respond = (request) => (request.method === 'POST' ? json(created) : cardList([]));
+  assert.equal((await ctx.orderGiftCard(bankOrder)).id, 'g-new');
+  assert.deepEqual(
+    sent.map((request) => request.method),
+    ['GET', 'POST'],
+  );
+  sent = [];
+  respond = (request) => (request.method === 'POST' ? json(created) : cardList([created]));
+  assert.equal((await ctx.orderGiftCard({ ...bankOrder, chooseBank: true })).id, 'g-new');
+  assert.deepEqual(
+    sent.map((request) => request.method),
+    ['POST'],
+  );
 });

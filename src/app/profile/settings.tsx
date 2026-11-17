@@ -31,6 +31,7 @@ import {
   Spacing,
 } from "@/constants/theme";
 import { ctx } from "@/ctx/client";
+import { Market } from "@/ctx/market";
 import { type CountryChoice, Profile } from "@/ctx/profile";
 import { useAppRefresh } from "@/hooks/use-app-refresh";
 import { useBusyAction } from "@/hooks/use-busy-action";
@@ -239,7 +240,7 @@ export default function SettingsScreen() {
       >
         <ListRow
           label="Country"
-          value={profile.country ?? "Choose"}
+          value={profile.country ? Market.countryName(profile.country) : "Choose"}
           onPress={() => setChangingCountry(true)}
           disabled={busy}
         />

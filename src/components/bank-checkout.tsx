@@ -237,7 +237,6 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
         return;
       }
       if (outcome?.kind === 'approved') {
-        haptics.success();
         rememberBank(outcome.institution);
         showCard(giftCard);
         return;

@@ -33,6 +33,11 @@ export function useWallet() {
         await refresh();
         return;
       }
+      if (changed) {
+        loaded.current = null;
+        setWallet(null);
+        setState('loading');
+      }
       const next = await SmartWallet.load();
       loaded.current = next;
       setWallet(next);

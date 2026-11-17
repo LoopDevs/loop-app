@@ -143,3 +143,18 @@ test('every top-level native route is a tab or a rewritten link', async () => {
   const unreachable = routes.filter((route) => !rewritten.has(route) && !tabs.includes(`name="${route}"`));
   assert.deepEqual(unreachable, []);
 });
+
+test('an empty message from Link counts as no message', () => {
+  assert.deepEqual(
+    BankLink.left({
+      metadata,
+      error: {
+        errorCode: 'INSTITUTION_DOWN' as never,
+        errorType: 'INSTITUTION_ERROR' as never,
+        errorMessage: 'institution down',
+        displayMessage: '  ',
+      },
+    }),
+    { kind: 'left', errorCode: 'INSTITUTION_DOWN', displayMessage: null },
+  );
+});

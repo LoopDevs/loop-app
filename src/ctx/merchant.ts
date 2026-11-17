@@ -55,7 +55,8 @@ export class CashbackRate {
 
   static ofMerchant({ userDiscount, link }: MerchantDiscount, company?: CompanyCashback): CashbackRate {
     const override = link?.userDiscountOverride ? link.userDiscountBasisPoints : undefined;
-    return new CashbackRate(override ?? company?.effective(userDiscount) ?? userDiscount);
+    const companyDefault = link ? company?.effective(userDiscount) : undefined;
+    return new CashbackRate(override ?? companyDefault ?? userDiscount);
   }
 
   static quotedFor(order: QuotedOrder, locale?: string): string | null {

@@ -328,7 +328,7 @@ test('a 401 that denies the call rather than the token is thrown without a rotat
   assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
 });
 
-test("a refresh that yields another user's tokens ends this session, keeps the store for that user and stays signed out", async () => {
+test("a refresh that finds another user's stored token ends this session, never sends that token and stays signed out", async () => {
   const ctx = new FakeCtx(async ({ path, token }) => {
     if (path === '/refresh-token') {
       return { accessToken: 'b2', refreshToken: 'b-r2' };
@@ -350,14 +350,14 @@ test("a refresh that yields another user's tokens ends this session, keeps the s
   await assert.rejects(auth.sessionRequest('GET', '/me'), (error) => error instanceof CtxError && error.status === 401);
 
   assert.equal(ended, 1);
-  assert.equal(store.refreshToken, 'b-r2');
+  assert.equal(store.refreshToken, 'b-r1');
   assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
 
   await assert.rejects(auth.sessionRequest('GET', '/me'), /Sign in first/);
 
-  assert.equal(ctx.refreshes(), 1);
+  assert.equal(ctx.refreshes(), 0);
   assert.equal(await auth.hasSession(), false);
-  assert.equal(store.refreshToken, 'b-r2');
+  assert.equal(store.refreshToken, 'b-r1');
   assert.equal(ended, 1);
 
   await auth.startSession({ accessToken: 'b3', refreshToken: 'b-r3' });
@@ -751,10 +751,12 @@ test('a request whose session ended while its token was replaced is not retried'
   assert.deepEqual(ctx.tokensFor('/me'), ['a1']);
 });
 
-test("a stale refresh that finds another user's token cannot end the session that replaced it", async () => {
+test("a stale refresh that yields another user's token cannot end the session that replaced it", async () => {
   const ends: SessionEnd[] = [];
+  const answering = new Gate();
   const ctx = new FakeCtx(async ({ path, token }) => {
     if (path === '/refresh-token') {
+      await answering.opened;
       return { accessToken: 'b2', refreshToken: 'rb2' };
     }
     if (token === 'a1') {
@@ -766,17 +768,15 @@ test("a stale refresh that finds another user's token cannot end the session tha
   const auth = new SessionAuth(ctx.send, store, ownerOf);
   await auth.startSession({ accessToken: 'a1', refreshToken: 'r1' });
   auth.onSessionEnd((end) => ends.push(end));
-  store.signedInElsewhere('rb', 'b');
-  store.heldWrite = new Gate();
-  const writing = store.heldWrite;
 
-  const request = auth.sessionRequest('GET', '/me');
+  const refused = assert.rejects(auth.sessionRequest('GET', '/me'));
   await new Promise((resolve) => setImmediate(resolve));
   await auth.startSession({ accessToken: 'a3', refreshToken: 'r3' });
-  ends.length = 0;
-  writing.open();
+  answering.open();
+  await new Promise((resolve) => setImmediate(resolve));
 
-  await assert.rejects(request);
+  await refused;
   assert.deepEqual(ends, []);
   assert.equal(await auth.accessToken(), 'a3');
+  assert.equal(store.refreshToken, 'r3');
 });

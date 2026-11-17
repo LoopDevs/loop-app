@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
+import { BankPayment } from '@/ctx/bank-payment';
 import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
 import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { signInReportMessage } from '@/ctx/sign-in-report';
@@ -271,6 +272,8 @@ class CtxClient {
     private readonly appVersion: string,
   ) {}
 
+  private static readonly activeOrderPages = 4;
+
   static runningAppVersion(): string {
     const version = Constants.expoConfig?.version ?? 'unknown';
     const updateId = runningUpdateId();
@@ -305,13 +308,18 @@ class CtxClient {
 
   verifyCode(email: string, code: string): Promise<void> {
     return holdCriticalReload(async () => {
-      await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+      await this.switchSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
     });
+  }
+
+  private async switchSession(tokens: TokenPair): Promise<void> {
+    await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
+    await this.auth.startSession(tokens);
   }
 
   signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
     return holdCriticalReload(async () => {
-      await this.auth.startSession(
+      await this.switchSession(
         await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
       );
     });
@@ -401,6 +409,10 @@ class CtxClient {
     order: GiftCardOrderIn,
     adoptable: (placed: GiftCard) => Promise<boolean> = async () => true,
   ): Promise<GiftCard> {
+    const open = await this.openBankOrder(order);
+    if (open) {
+      return open;
+    }
     const body: GiftCardOrderBody = { ...order, rewardType: 'cashback', ...this.orderPlatform() };
     const idempotencyKey = this.orderKeys.keyFor(order);
     const card = await this.sentOrder(body, idempotencyKey, adoptable);
@@ -410,6 +422,24 @@ class CtxClient {
     }
     this.orderKeys.settle(idempotencyKey);
     return card;
+  }
+
+  private async openBankOrder(order: GiftCardOrderIn): Promise<GiftCard | null> {
+    if (order.cryptoCurrency !== undefined || order.chooseBank) {
+      return null;
+    }
+    const request = new OrderRequest(order);
+    const { result } = await this.giftCards({ merchantId: order.merchantId, status: ['unpaid'], perPage: 10 });
+    const newestFirst = result
+      .filter((card) => request.matches(card) && BankPayment.isBank(card))
+      .sort((a, b) => Date.parse(b.created) - Date.parse(a.created));
+    for (const card of newestFirst) {
+      const open = await this.giftCard(card.id);
+      if (BankPayment.approvableOn(open, Date.now(), Platform.OS !== 'web')) {
+        return open;
+      }
+    }
+    return null;
   }
 
   private orderPlatform(): Pick<GiftCardOrderBody, 'platform'> {
@@ -562,9 +592,17 @@ class CtxClient {
   }
 
   async activeGiftCard(merchantId?: string, skip?: (order: GiftCard) => boolean): Promise<GiftCard | null> {
-    const { result } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], perPage: 5 });
-    const newest = result.find((order) => !skip?.(order));
-    return newest ? this.giftCard(newest.id) : null;
+    for (let page = 1; page <= CtxClient.activeOrderPages; page += 1) {
+      const { result, pagination } = await this.giftCards({ merchantId, status: ['unpaid', 'paid'], page, perPage: 5 });
+      const newest = result.find((order) => !skip?.(order));
+      if (newest) {
+        return this.giftCard(newest.id);
+      }
+      if (page >= pagination.pages) {
+        break;
+      }
+    }
+    return null;
   }
 
   async wallets(): Promise<WalletLink[]> {

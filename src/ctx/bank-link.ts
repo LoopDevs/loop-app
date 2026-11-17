@@ -125,7 +125,7 @@ export class BankLink {
     return {
       kind: 'left',
       errorCode: exit.error?.errorCode ?? null,
-      displayMessage: exit.error?.displayMessage ?? null,
+      displayMessage: exit.error?.displayMessage?.trim() || null,
     };
   }
 }

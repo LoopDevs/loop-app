@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
   type TextInputKeyPressEvent,
+  type ViewProps,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -337,6 +338,7 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
         onKeyPress={moveHighlight}
         onFocusChange={setFocused}
         expanded={open}
+        activeOption={open && highlight >= 0 ? SearchOptions.optionId(highlight) : undefined}
         large={large}
       />
       {open && (
@@ -351,12 +353,14 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
   );
 }
 
+const noMerchants: Merchant[] = [];
+
 function useSearchResults(country: string, text: string): Merchant[] {
   const name = text.trim();
   const query = useMemo(() => ({ country, name, perPage: suggestionScanSize }), [country, name]);
   const searchable = name.length >= 2;
   const cached = searchable ? cachedMerchantPage(query) : null;
-  const [loaded, setLoaded] = useState<Merchant[]>([]);
+  const [loaded, setLoaded] = useState<{ query: object; result: Merchant[] } | null>(null);
   useEffect(() => {
     if (!searchable || cached) {
       return;
@@ -364,7 +368,7 @@ function useSearchResults(country: string, text: string): Merchant[] {
     let current = true;
     const timer = setTimeout(() => {
       loadMerchantPage(query)
-        .then((page) => current && setLoaded(page.result))
+        .then((page) => current && setLoaded({ query, result: page.result }))
         .catch(() => undefined);
     }, suggestionDelayMs);
     return () => {
@@ -372,7 +376,10 @@ function useSearchResults(country: string, text: string): Merchant[] {
       clearTimeout(timer);
     };
   }, [query, searchable, cached]);
-  return cached ? cached.result : loaded;
+  if (cached) {
+    return cached.result;
+  }
+  return loaded?.query === query ? loaded.result : noMerchants;
 }
 
 type SuggestionsProps = {
@@ -382,11 +389,22 @@ type SuggestionsProps = {
   onPick: (merchant: Merchant) => void;
 };
 
+class SearchOptions {
+  static readonly listId = 'search-options';
+  static readonly listRole = { role: 'listbox' } as unknown as Pick<ViewProps, 'role'>;
+
+  static optionId(index: number): string {
+    return `search-option-${index}`;
+  }
+}
+
 function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: SuggestionsProps) {
   const theme = useTheme();
   return (
     <Animated.View
       entering={FadeIn.duration(Motion.feedback)}
+      id={SearchOptions.listId}
+      {...(Platform.OS === 'web' ? SearchOptions.listRole : {})}
       style={[styles.suggestions, Elevation.raised, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       {merchants.map((merchant, index) => (
         <Pressable
@@ -395,7 +413,10 @@ function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: Sugges
             ? { onPressIn: () => onPick(merchant), delayPressIn: 0 }
             : { onPress: () => onPick(merchant) })}
           onHoverIn={() => onHighlight(index)}
-          accessibilityRole="button"
+          id={SearchOptions.optionId(index)}
+          {...(Platform.OS === 'web'
+            ? { role: 'option' as const, 'aria-selected': index === highlight }
+            : { accessibilityRole: 'button' as const })}
           accessibilityLabel={`${merchant.name}, ${merchant.rateLabel()}`}
           style={[styles.suggestion, index === highlight && { backgroundColor: theme.backgroundSelected }]}>
           <View
@@ -427,6 +448,7 @@ type SearchBarProps = {
   onKeyPress?: (event: TextInputKeyPressEvent) => void;
   onFocusChange?: (focused: boolean) => void;
   expanded?: boolean;
+  activeOption?: string;
   large?: boolean;
   placeholder?: string;
 };
@@ -438,6 +460,7 @@ function SearchBar({
   onKeyPress,
   onFocusChange,
   expanded = false,
+  activeOption,
   large = false,
   placeholder = 'Search gift cards',
 }: SearchBarProps) {
@@ -466,8 +489,10 @@ function SearchBar({
         onChangeText={onChangeText}
         onSubmitEditing={onSubmit}
         onKeyPress={onKeyPress}
-        role="searchbox"
+        role={Platform.OS === 'web' ? 'combobox' : 'searchbox'}
         aria-expanded={expanded}
+        aria-controls={expanded ? SearchOptions.listId : undefined}
+        aria-activedescendant={activeOption}
         placeholder={placeholder}
         accessibilityLabel={placeholder}
         placeholderTextColor={theme.textSecondary}
@@ -624,10 +649,16 @@ export function MerchantCatalog({ country, search, onSearch, onOpen, loadMoreRef
         } else if (next === 1) {
           setPage(0);
         }
-        const { result, pagination } = await loadMerchantPage(merchantQuery);
-        if (request !== latestRequest.current) {
+        const loaded = await loadMerchantPage(merchantQuery).catch((error: unknown) => {
+          if (request !== latestRequest.current) {
+            return null;
+          }
+          throw error;
+        });
+        if (loaded === null || request !== latestRequest.current) {
           return;
         }
+        const { result, pagination } = loaded;
         setMerchants((shown) => MerchantPaging.merge(shown, result, next));
         setPage(next);
         setPages(pagination.pages);
