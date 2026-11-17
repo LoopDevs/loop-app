@@ -214,6 +214,16 @@ test('denomination values are read from the merchant JSON', () => {
   assert.deepEqual(new Merchant({ ...json, denominationValues: null }).denominationValues, []);
 });
 
+test('amounts start at the smallest bank payment', () => {
+  const range = new Merchant({ ...json, currency: 'GBP', denominationValues: ['0.01', '1000.00'] });
+  assert.deepEqual(range.denominationValues, ['1', '1000.00']);
+  assert.equal(range.rangeLabel('en-GB'), '£1 – £1,000');
+  assert.notEqual(range.amountProblem('0.99', 'en-GB'), null);
+  assert.equal(range.amountProblem('1'), null);
+  const fixed = new Merchant({ ...json, denominationType: 'fixed', denominationValues: ['0.50', '1', '5'] });
+  assert.deepEqual(fixed.denominationValues, ['1', '5']);
+});
+
 test('a range merchant shows its range in whole units when it can', () => {
   assert.equal(new Merchant(json).rangeLabel('en-US'), '$5 – $500');
   assert.equal(new Merchant({ ...json, denominationValues: ['2.50', '50'] }).rangeLabel('en-US'), '$2.50 – $50');
