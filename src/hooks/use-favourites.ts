@@ -64,14 +64,12 @@ export function useFavourites() {
         return;
       }
       const key = FavouriteIds.storageKey(userId);
-      if (loadedFor.current !== userId) {
-        const stored = await AsyncStorage.getItem(key).catch(() => undefined);
-        if (stored === undefined) {
-          return;
-        }
-        loadedFor.current = userId;
-        replace(FavouriteIds.parse(stored));
+      const stored = await AsyncStorage.getItem(key).catch(() => undefined);
+      if (stored === undefined) {
+        return;
       }
+      loadedFor.current = userId;
+      replace(FavouriteIds.parse(stored));
       const done = wanted ? 'Added to favourites' : 'Removed from favourites';
       if (latest.current.has(merchantId) === wanted) {
         toast(done);

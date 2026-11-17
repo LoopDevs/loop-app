@@ -274,6 +274,10 @@ class CtxClient {
 
   private static readonly activeOrderPages = 4;
 
+  forgetCompany(): void {
+    this.companyCashback.learn(undefined);
+  }
+
   static runningAppVersion(): string {
     const version = Constants.expoConfig?.version ?? 'unknown';
     const updateId = runningUpdateId();
@@ -746,6 +750,7 @@ export const ctx = new CtxClient(
 );
 
 ctx.onSessionEnd((end) => {
+  ctx.forgetCompany();
   if (end.reason === 'refused') {
     errorReporting.reportMessage('A refreshed CTX session was refused for its owner');
   }

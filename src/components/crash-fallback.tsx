@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { Button } from '@/components/ui/form';
 import { ContactSupportButton, MessageScreen } from '@/components/message-screen';
+import { PageLayout } from '@/hooks/page-layout';
 import { errorReporting } from '@/ops/error-reporting';
 import { StaleBuild } from '@/ops/stale-build';
 
@@ -14,6 +15,11 @@ export function CrashFallback({ error, onRetry }: { error: unknown; onRetry: () 
       StaleBuild.reloadOnce();
     }
   }, [staleBuild]);
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      PageLayout.reveal();
+    }
+  }, []);
   const retry = staleBuild ? () => window.location.reload() : onRetry;
   return (
     <MessageScreen

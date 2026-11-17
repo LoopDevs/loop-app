@@ -52,7 +52,8 @@ export type Catalog = {
   total: number;
 };
 
-const catalogRequests = new Map<string, Promise<Catalog>>();
+const catalogKeepMs = 5 * 60_000;
+const catalogRequests = new Map<string, { request: Promise<Catalog>; startedAt: number }>();
 const loadedCatalogs = new Map<string, Catalog>();
 const loadedMerchants = new Map<string, Merchant>();
 const loadedPages = new Map<string, MerchantPage>();
@@ -116,8 +117,8 @@ function catalogKey(country: string, size: number): string {
 export function loadCatalog(country: string, size: number): Promise<Catalog> {
   const key = catalogKey(country, size);
   const pending = catalogRequests.get(key);
-  if (pending) {
-    return pending;
+  if (pending && Date.now() - pending.startedAt < catalogKeepMs) {
+    return pending.request;
   }
   const request = loadMerchantPage({ country, order: '-discount,name', perPage: size })
     .then(({ result, pagination }) => {
@@ -132,7 +133,7 @@ export function loadCatalog(country: string, size: number): Promise<Catalog> {
       catalogRequests.delete(key);
       return { top: [], total: 0 };
     });
-  catalogRequests.set(key, request);
+  catalogRequests.set(key, { request, startedAt: Date.now() });
   return request;
 }
 
