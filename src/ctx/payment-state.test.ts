@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   canPay,
   chainOutcome,
+  isAlreadySubmitted,
   landingClosed,
   landingGraceLedgers,
   rateLimitedMessage,
@@ -155,4 +156,30 @@ test('a transfer to a muxed payee lands only with the signed muxed id', () => {
   assert.equal(transferLanded([25n], signed), false);
   assert.equal(transferMuxedId({ amount: 25n, to_muxed_id: 7n }), 7n);
   assert.equal(transferMuxedId(25n), null);
+});
+
+test('a conflict is an already submitted payment only for the matching error name', () => {
+  assert.equal(isAlreadySubmitted({ status: 409, errorName: 'ErrPaymentAlreadySubmitted' }), true);
+  assert.equal(isAlreadySubmitted({ status: 409 }), false);
+  assert.equal(isAlreadySubmitted({ status: 409, errorName: 'ErrOther' }), false);
+  assert.equal(isAlreadySubmitted({ status: 400, errorName: 'ErrPaymentAlreadySubmitted' }), false);
+  assert.equal(isAlreadySubmitted({ status: 500, errorName: 'ErrPaymentAlreadySubmitted' }), false);
+});
+
+test('an already submitted payment is confirming even when this phone never sent it', () => {
+  const rejection = { status: 409, errorName: 'ErrPaymentAlreadySubmitted', txId: 'abc' };
+  assert.deepEqual(sendFailureState(false, rejection), { kind: 'confirming', txId: 'abc' });
+  assert.deepEqual(sendFailureState(true, rejection), { kind: 'confirming', txId: 'abc' });
+});
+
+test('a bad request with no message keeps the order payable with an empty detail', () => {
+  assert.deepEqual(rejectedPaymentState({ status: 400 }), { kind: 'notSent', detail: '' });
+});
+
+test('only an exact closed-payment message is an expired price', () => {
+  assert.deepEqual(rejectedPaymentState({ status: 400, message: 'Payment is no longer open' }), {
+    kind: 'notSent',
+    detail: 'Payment is no longer open',
+  });
+  assert.equal(rejectedPaymentState({ status: 409, message: 'payment is no longer open' }), null);
 });

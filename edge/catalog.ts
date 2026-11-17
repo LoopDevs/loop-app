@@ -176,7 +176,6 @@ export class EdgeCache {
   static readonly catalog: CacheWindow = { freshMs: 60_000, staleMs: 60 * 60_000 };
   static readonly image: CacheWindow = { freshMs: 24 * 60 * 60_000, staleMs: EdgeCache.keepSeconds * 1000 };
   static readonly browserCacheControl = 'public, max-age=30, stale-while-revalidate=600';
-  private static readonly refreshing = new Map<string, Promise<Response>>();
 
   private readonly cache: Cache;
   private readonly waitUntil: (promise: Promise<unknown>) => void;
@@ -209,23 +208,13 @@ export class EdgeCache {
     const storedAt = Number(cached?.headers.get(storedAtHeader));
     const now = Date.now();
     if (!cached || !this.isServable(storedAt, now)) {
-      return EdgeCache.toClient(await this.refresh(key, load), 'MISS');
+      return EdgeCache.toClient(await this.store(key, load), 'MISS');
     }
     if (this.isFresh(storedAt, now)) {
       return EdgeCache.toClient(cached, 'HIT');
     }
-    this.waitUntil(this.refresh(key, load).catch(() => undefined));
+    this.waitUntil(this.store(key, load).catch(() => undefined));
     return EdgeCache.toClient(cached, 'STALE');
-  }
-
-  private refresh(key: string, load: () => Promise<Response>): Promise<Response> {
-    const pending = EdgeCache.refreshing.get(key);
-    if (pending) {
-      return pending.then((response) => response.clone());
-    }
-    const request = this.store(key, load).finally(() => EdgeCache.refreshing.delete(key));
-    EdgeCache.refreshing.set(key, request);
-    return request.then((response) => response.clone());
   }
 
   private async store(key: string, load: () => Promise<Response>): Promise<Response> {

@@ -380,3 +380,15 @@ test('a send with no transaction hash shows as confirming without celebrating', 
   );
   assert.equal(view.kind === 'show' && view.celebrate, false);
 });
+
+test('a running buy can be awaited by a screen that did not start it', async () => {
+  const shop = new FakeShop();
+  const buy = new OneTapBuy();
+  await buy.settled();
+  const running = buy.start(shop, quote);
+  assert.equal(buy.busy, true);
+  await buy.settled();
+  assert.equal(buy.busy, false);
+  assert.equal((await running).kind, 'payment');
+  assert.deepEqual(shop.sponsored, ['payment-1']);
+});

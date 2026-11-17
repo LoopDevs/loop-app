@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import type { GiftCardOrderIn } from './client.ts';
 import { OrderKeys, OrderRequest } from './order-request.ts';
 
 const request = new OrderRequest({
@@ -128,4 +129,34 @@ test('a card on another payment rail was not placed by the request', () => {
   const byBank = new OrderRequest({ merchantId: 'm-1', fiatAmount: '25', fiatCurrency: 'USD' }, askedAt);
   assert.equal(byBank.placed(bankCard), true);
   assert.equal(byBank.placed(placedCard), false);
+});
+
+const changedFields: [string, Partial<GiftCardOrderIn>][] = [
+  ['merchantId', { merchantId: 'm-2' }],
+  ['fiatAmount', { fiatAmount: '26' }],
+  ['fiatCurrency', { fiatCurrency: 'CAD' }],
+  ['cryptoCurrency', { cryptoCurrency: 'XLM' }],
+  ['chooseBank', { chooseBank: true }],
+];
+
+for (const [field, change] of changedFields) {
+  test(`a request differing only in ${field} is not the same request`, () => {
+    assert.equal(request.sameAs({ ...request.asked }), true);
+    assert.equal(request.sameAs({ ...request.asked, ...change }), false);
+  });
+
+  test(`a request differing only in ${field} gets a new idempotency key`, () => {
+    const keys = counted();
+    assert.equal(keys.keyFor(request.asked), 'key-1');
+    assert.equal(keys.keyFor({ ...request.asked, ...change }), 'key-2');
+  });
+}
+
+test('a request is not the same when its crypto currency is dropped', () => {
+  const { cryptoCurrency: _dropped, ...bank } = request.asked;
+  assert.equal(request.sameAs(bank), false);
+});
+
+test('the key lifetime is thirty minutes', () => {
+  assert.equal(OrderKeys.pendingForMs, 30 * 60_000);
 });

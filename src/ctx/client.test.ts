@@ -475,3 +475,106 @@ test('signing out closes an open account socket', async () => {
   assert.equal(sockets[0].closed, true);
   assert.equal(sockets.length, 1);
 });
+
+const walletJson = { id: 'w-1', chain: 'stellar', address: 'CWALLET', sponsored: true, status: 'active' };
+const intent = { intent: 'vault_withdraw', currency: 'XLM.USDC', shares: '40' } as const;
+const builtJson = { transaction: 'AAAA', digest: 'ab12', contextRuleIds: [1, 2], expiryLedger: 900 };
+
+test('the wallet list is read from the user wallets path and each link is parsed', async () => {
+  await signIn('user-42');
+  respond = () => json({ result: [walletJson] });
+  assert.deepEqual(await ctx.wallets(), [walletJson]);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].method, 'GET');
+  assert.equal(sent[0].url, `${apiUrl}/users/user-42/wallets`);
+  assert.equal(sent[0].body, undefined);
+});
+
+test('a wallet list with no result reads as empty and a non-list result is rejected', async () => {
+  await signIn('user-42');
+  respond = () => json({ result: null });
+  assert.deepEqual(await ctx.wallets(), []);
+  respond = () => json({ result: 'wallets' });
+  await assert.rejects(ctx.wallets(), { name: 'UnexpectedResponse' });
+  assert.deepEqual(reported, ['CTX wallets response is not a list']);
+});
+
+test('a wallet deployment is posted for the given user with the passkey and device keys', async () => {
+  await signIn('user-42');
+  respond = () => json(walletJson);
+  const body = { credentialId: 'cred', passkeyPublicKey: 'pk', devicePublicKey: 'dk' };
+  assert.deepEqual(await ctx.deployWallet('user-7', body), walletJson);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].method, 'POST');
+  assert.equal(sent[0].url, `${apiUrl}/users/user-7/wallets/deploy`);
+  assert.deepEqual(sent[0].body, body);
+});
+
+test('a wallet deployment answer without a boolean sponsored flag is rejected and reported', async () => {
+  await signIn('user-42');
+  respond = () => json({ ...walletJson, sponsored: 'yes' });
+  const body = { credentialId: 'cred', passkeyPublicKey: 'pk', devicePublicKey: 'dk' };
+  await assert.rejects(ctx.deployWallet('user-42', body), { name: 'UnexpectedResponse' });
+  assert.deepEqual(reported, ['CTX wallet link response has an unexpected sponsored']);
+});
+
+test('a transaction is built by posting the intent to the wallet transaction path', async () => {
+  await signIn('user-42');
+  respond = () => json(builtJson);
+  assert.deepEqual(await ctx.buildTransaction('w-1', intent), builtJson);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].method, 'POST');
+  assert.equal(sent[0].url, `${apiUrl}/users/user-42/wallets/w-1/stellar/transaction`);
+  assert.deepEqual(sent[0].body, intent);
+});
+
+test('a built transaction with a malformed field is rejected and reported', async () => {
+  await signIn('user-42');
+  respond = () => json({ ...builtJson, contextRuleIds: [1, 'x'] });
+  await assert.rejects(ctx.buildTransaction('w-1', intent), { name: 'UnexpectedResponse' });
+  respond = () => json({ ...builtJson, expiryLedger: 9.5 });
+  await assert.rejects(ctx.buildTransaction('w-1', intent), { name: 'UnexpectedResponse' });
+  respond = () => json({ ...builtJson, digest: undefined });
+  await assert.rejects(ctx.buildTransaction('w-1', intent), { name: 'UnexpectedResponse' });
+  assert.deepEqual(reported, [
+    'CTX built transaction response has an unexpected contextRuleIds',
+    'CTX built transaction response has an unexpected expiryLedger',
+    'CTX built transaction response has an unexpected digest',
+  ]);
+});
+
+test('a device-signed transaction is sponsored with the intent and signature in one body', async () => {
+  await signIn('user-42');
+  respond = () => json({ hash: 'h1', status: 'PENDING' });
+  const signed = { transaction: 'AAAA', signature: 'sig', devicePublicKey: 'dk' };
+  assert.deepEqual(await ctx.sponsorTransaction('w-1', intent, signed), { hash: 'h1', status: 'PENDING' });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].method, 'POST');
+  assert.equal(sent[0].url, `${apiUrl}/users/user-42/wallets/w-1/stellar/sponsor`);
+  assert.deepEqual(sent[0].body, { ...intent, ...signed });
+});
+
+test('a passkey-signed transaction is sponsored with the passkey signature in the body', async () => {
+  await signIn('user-42');
+  respond = () => json({ hash: 'h2', status: 'FAILED', error: 'ErrSimulation' });
+  const passkey = { publicKey: 'pk', authenticatorData: 'ad', clientDataJson: 'cd', signature: 'sg' };
+  const result = await ctx.sponsorTransaction('w-1', { intent: 'pay', paymentId: 'p-1' }, { transaction: 'AAAA', passkey });
+  assert.deepEqual(result, { hash: 'h2', status: 'FAILED', error: 'ErrSimulation' });
+  assert.deepEqual(sent[0].body, { intent: 'pay', paymentId: 'p-1', transaction: 'AAAA', passkey });
+});
+
+test('a sponsor answer with a missing hash or a non-string error is rejected and reported', async () => {
+  await signIn('user-42');
+  const signed = { transaction: 'AAAA', signature: 'sig', devicePublicKey: 'dk' };
+  respond = () => json({ status: 'PENDING' });
+  await assert.rejects(ctx.sponsorTransaction('w-1', intent, signed), { name: 'UnexpectedResponse' });
+  respond = () => json({ hash: 'h1', status: 'PENDING', error: 5 });
+  await assert.rejects(ctx.sponsorTransaction('w-1', intent, signed), { name: 'UnexpectedResponse' });
+  respond = () => json([]);
+  await assert.rejects(ctx.sponsorTransaction('w-1', intent, signed), { name: 'UnexpectedResponse' });
+  assert.deepEqual(reported, [
+    'CTX sponsor response has an unexpected hash',
+    'CTX sponsor response has an unexpected error',
+    'CTX sponsor response is not an object',
+  ]);
+});

@@ -1,5 +1,6 @@
 import type { SmartWalletIntent } from '../ctx/client.ts';
 import { normalizeAmount } from '../ctx/amount-input.ts';
+import { landingClosed } from '../ctx/payment-state.ts';
 import { money } from '../money.ts';
 import { network, type PaymentCurrency } from '../stellar/network.ts';
 import { units } from '../stellar/units.ts';
@@ -29,6 +30,58 @@ export class UnansweredDeposit extends Error {
       throw error;
     }
     throw new UnansweredDeposit(error);
+  }
+}
+
+export type PendingDepositStorage = {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
+};
+
+export class PendingDeposit {
+  static readonly inFlightMessage = 'Your last deposit is still being confirmed. Try again in a minute.';
+
+  private readonly storage: PendingDepositStorage;
+  private readonly key: string;
+
+  constructor(storage: PendingDepositStorage, address: string) {
+    this.storage = storage;
+    this.key = `savings.pendingDeposit.${address}`;
+  }
+
+  begin(expiryLedger: number): Promise<void> {
+    return this.storage.setItem(this.key, String(expiryLedger));
+  }
+
+  end(): Promise<void> {
+    return this.storage.removeItem(this.key);
+  }
+
+  async requireNone(latestLedger: () => Promise<number>): Promise<void> {
+    const expiryLedger = Number(await this.storage.getItem(this.key));
+    if (!Number.isInteger(expiryLedger) || expiryLedger <= 0) {
+      return;
+    }
+    if (!landingClosed(await latestLedger(), expiryLedger)) {
+      throw new Error(PendingDeposit.inFlightMessage);
+    }
+    await this.end();
+  }
+
+  async sponsored<T>(expiryLedger: number, sponsor: () => Promise<T>): Promise<T> {
+    await this.begin(expiryLedger);
+    let result: T;
+    try {
+      result = await sponsor();
+    } catch (error) {
+      if (VaultCall.refusedBySponsor(error)) {
+        await this.end();
+      }
+      return UnansweredDeposit.rethrow(error);
+    }
+    await this.end();
+    return result;
   }
 }
 

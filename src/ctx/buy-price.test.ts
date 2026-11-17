@@ -66,3 +66,38 @@ test('an order with no payment amount is refused', () => {
 test('dollars show the price to the cent', () => {
   assert.equal(BuyPrice.dollars(units.parse('25.47')), '25.47');
 });
+
+test('a card price on a cent is shown as it is and a hair above or below rounds up to the cent', () => {
+  assert.equal(BuyPrice.shown('0.01', Rates.one), units.parse('0.01'));
+  assert.equal(BuyPrice.shown('0.0100001', Rates.one), units.parse('0.02'));
+  assert.equal(BuyPrice.shown('0.0099999', Rates.one), units.parse('0.01'));
+  assert.equal(BuyPrice.shown('1.0000001', Rates.one), units.parse('1.01'));
+});
+
+test('a card price below the smallest unit still rounds up to a unit before the cent', () => {
+  const half = units.parse('0.5');
+  assert.equal(BuyPrice.shown('0.0000001', half), units.parse('0.01'));
+  assert.equal(BuyPrice.shown('0.0000002', half), units.parse('0.01'));
+});
+
+test('the token amount is exact when the price divides it and a unit higher when it does not', () => {
+  assert.equal(BuyPrice.inTokens(units.parse('3'), units.parse('3')), units.parse('1'));
+  assert.equal(BuyPrice.inTokens(1n, units.parse('3')), 1n);
+  assert.equal(BuyPrice.inTokens(units.parse('1'), units.parse('0.5')), units.parse('2'));
+  assert.equal(BuyPrice.inTokens(units.parse('1'), units.parse('3')), units.parse('0.3333334'));
+  assert.equal(BuyPrice.inTokens(shown, -1n), null);
+});
+
+test('an order price is rounded up to the cent whether it is exact, a hair above or a hair below', () => {
+  assert.deepEqual(BuyPrice.check(order('25.0000000'), quote), { kind: 'pay', price: units.parse('25.00') });
+  assert.deepEqual(BuyPrice.check(order('25.0000001'), quote), { kind: 'pay', price: units.parse('25.01') });
+  assert.deepEqual(BuyPrice.check(order('24.9999999'), quote), { kind: 'pay', price: units.parse('25.00') });
+});
+
+test('an order priced in another unit of account rounds up to the next smallest unit before the cent', () => {
+  const half = { shown: units.parse('0.01'), currency: usdc, usdPrice: units.parse('0.5') };
+  assert.deepEqual(BuyPrice.check(order('0.0000001'), half), {
+    kind: 'pay',
+    price: units.parse('0.01'),
+  });
+});

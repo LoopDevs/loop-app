@@ -30,7 +30,7 @@ import { Holdings } from '@/wallet/holdings';
 import { passkey, type Passkey } from '@/wallet/passkey';
 import type { PasskeyAssertion } from '@/wallet/passkey-assertion';
 import { PaymentSearch, type OrderPayment } from '@/wallet/payment-search';
-import { Savings, UnansweredDeposit, type SavingsBalance } from '@/wallet/savings';
+import { PendingDeposit, Savings, type SavingsBalance } from '@/wallet/savings';
 import { SavingsTopUp, type SignedWithdrawal } from '@/wallet/savings-top-up';
 import { SponsoredCall } from '@/wallet/sponsored-call';
 import { VaultCall, type SentVaultCall } from '@/wallet/vault-call';
@@ -344,14 +344,16 @@ export class SmartWallet {
     if (!token) {
       throw new Error(`The wallet holds no ${currency} to save`);
     }
+    const pending = new PendingDeposit(AsyncStorage, this.address);
+    await pending.requireNone(() => soroban.latestLedger());
     const intent = Savings.depositIntent(currency, amount);
     const built = await ctx.buildTransaction(this.id, intent);
     const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId, SmartWallet.deviceRuleId]);
     call.requireDeposit({ from: this.address, vault: Savings.vault(currency), token, amount });
     const signed = await this.sign(call);
-    const result = await ctx
-      .sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed })
-      .catch((error: unknown) => UnansweredDeposit.rethrow(error));
+    const result = await pending.sponsored(built.expiryLedger, () =>
+      ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed }),
+    );
     return { ...result, expiryLedger: built.expiryLedger };
   }
 

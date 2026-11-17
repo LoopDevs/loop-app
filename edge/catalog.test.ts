@@ -171,6 +171,27 @@ test('an entry past the stale window is reloaded before it is served', async () 
   assert.equal(background.length, 0);
 });
 
+test('concurrent cold requests each load and get their own response', async () => {
+  let loads = 0;
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const edge = new EdgeCache(fakeCache(undefined), () => undefined, EdgeCache.catalog);
+  const load = async () => {
+    loads += 1;
+    await gate;
+    return new Response('new');
+  };
+  const pending = [edge.serve('https://loop.test/cold', load), edge.serve('https://loop.test/cold', load)];
+  release();
+  const [first, second] = await Promise.all(pending);
+  assert.equal(loads, 2);
+  assert.notEqual(first, second);
+  assert.equal(await first.text(), 'new');
+  assert.equal(await second.text(), 'new');
+});
+
 test('the resizer refuses non-image content and sandboxes what it serves', async () => {
   const log: CacheLog = { puts: [], deletes: [] };
   globalThis.caches = { default: fakeCache(undefined, log) } as unknown as CacheStorage;
