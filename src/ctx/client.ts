@@ -6,6 +6,7 @@ import { Account } from '@/ctx/account';
 import { CtxError } from '@/ctx/ctx-error';
 import { ctxReportMessage } from '@/ctx/ctx-report';
 import { BankPayment } from '@/ctx/bank-payment';
+import { BankWithdrawal, type BankWithdrawalIn } from '@/ctx/bank-withdrawal';
 import { CtxResponse, UnexpectedResponse } from '@/ctx/ctx-response';
 import { OrderKeys, OrderRequest } from '@/ctx/order-request';
 import { signInReportMessage } from '@/ctx/sign-in-report';
@@ -644,6 +645,33 @@ class CtxClient {
       CtxResponse.sponsored,
       await this.userRequest('POST', `/wallets/${encodeURIComponent(walletId)}/stellar/sponsor`, { ...intent, ...signed }),
     );
+  }
+
+  async requestBankWithdrawal(request: BankWithdrawalIn): Promise<BankWithdrawal> {
+    return new BankWithdrawal(
+      this.checked(CtxResponse.bankWithdrawal, await this.userRequest('POST', '/bank-withdrawals', request)),
+    );
+  }
+
+  async bankWithdrawal(id: string): Promise<BankWithdrawal> {
+    return new BankWithdrawal(
+      this.checked(
+        CtxResponse.bankWithdrawal,
+        await this.userRequest('GET', `/bank-withdrawals/${encodeURIComponent(id)}`),
+      ),
+    );
+  }
+
+  async latestBankWithdrawal(): Promise<BankWithdrawal | null> {
+    const { result } = await this.userRequest<{ result: unknown }>('GET', '/bank-withdrawals?perPage=1');
+    const [latest] = this.checked(
+      (withdrawals) =>
+        CtxResponse.listOf('bank withdrawals', withdrawals, CtxResponse.bankWithdrawal, (detail) =>
+          errorReporting.reportMessage(detail),
+        ),
+      result,
+    );
+    return latest ? new BankWithdrawal(latest) : null;
   }
 
   private checked<T>(read: (value: unknown) => T, value: unknown): T {
