@@ -10,7 +10,7 @@ export class StaleBuild {
     return lastReloadAt === null || now - lastReloadAt > staleBuildReloadCooldownMs;
   }
 
-  static reloadOnce(): void {
+  static reloadOnce(reload: () => void): void {
     const now = Date.now();
     try {
       const stored = window.sessionStorage.getItem(staleBuildReloadKey);
@@ -21,6 +21,6 @@ export class StaleBuild {
     } catch {
       return;
     }
-    window.location.reload();
+    reload();
   }
 }
