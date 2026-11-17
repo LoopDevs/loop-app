@@ -99,6 +99,16 @@ export class Profile {
     return loopLinks.supportMail('Delete my account', body);
   }
 
+  dataRequestMail(): string {
+    const body = [
+      'Please send me a copy of my Loop data.',
+      '',
+      `Account id: ${this.id}`,
+      `Account email: ${this.email ?? ''}`,
+    ].join('\n');
+    return loopLinks.supportMail('Data request', body);
+  }
+
   passkeyLabel(): string {
     return this.email?.trim() || 'Loop wallet';
   }
