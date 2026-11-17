@@ -355,9 +355,6 @@ function SignInForm({ reason, onAuthenticated, onSignedIn }: SignInFormProps) {
   const verifyCode = () =>
     run(async () => {
       if (!(await ctx.isSignedInAs(email))) {
-        if (await ctx.isSignedIn()) {
-          await ctx.signOut();
-        }
         await ctx.verifyCode(email.trim(), code.trim());
       }
       await continueToWallet();

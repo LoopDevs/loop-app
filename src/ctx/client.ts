@@ -305,13 +305,18 @@ class CtxClient {
 
   verifyCode(email: string, code: string): Promise<void> {
     return holdCriticalReload(async () => {
-      await this.auth.startSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
+      await this.switchSession(await this.send<TokenPair>('POST', '/verify-email', { email, code }));
     });
+  }
+
+  private async switchSession(tokens: TokenPair): Promise<void> {
+    await this.auth.sessionRequest('POST', '/logout', undefined, false).catch(() => undefined);
+    await this.auth.startSession(tokens);
   }
 
   signInWithOAuth(provider: SocialProvider, credential: SocialCredential): Promise<void> {
     return holdCriticalReload(async () => {
-      await this.auth.startSession(
+      await this.switchSession(
         await this.signInRequest<TokenPair>(provider, '/login/oauth', oauthLoginBody(provider, credential)),
       );
     });
