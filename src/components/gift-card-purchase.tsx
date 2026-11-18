@@ -897,9 +897,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
                 {!byBank && <SummaryRow label="Your balance" value={balanceText} />}
                 {walletBlocker && walletBlocker !== 'loading' && <InlineError text={WalletBlocker.message(walletBlocker)} />}
               </View>
-              {walletBlocker === 'noFunds' && (
-                <Button label="Go to Home to add money" variant="quiet" onPress={() => router.navigate('/')} />
-              )}
             </ScrollView>
             <View style={styles.footer}>
               {message !== '' && <Notice message={message} />}
@@ -990,7 +987,7 @@ class WalletBlocker {
   static message(block: Exclude<WalletBlock, 'loading'>): string {
     switch (block) {
       case 'noFunds':
-        return 'Your balance is empty. Add money to buy this card.';
+        return 'Your balance is empty.';
       case 'noRate':
         return "Prices aren't available right now. Try again in a moment.";
       case 'short':

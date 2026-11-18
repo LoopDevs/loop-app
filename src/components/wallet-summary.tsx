@@ -1,14 +1,11 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { AddMoney } from '@/components/add-money';
 import { Button } from '@/components/ui/form';
 import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ThemedText } from '@/components/ui/themed-text';
-import { Motion, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet, type WalletState } from '@/hooks/use-wallet';
 import { money } from '@/money';
@@ -21,7 +18,7 @@ function walletPrompt(state: WalletState, problem: string): WalletPrompt | null 
   if (state === 'setup') {
     return {
       heading: 'Finish setting up Loop',
-      body: 'Set up Face ID or your fingerprint on Home to add money and cash out.',
+      body: 'Set up Face ID or your fingerprint on Home to cash out.',
     };
   }
   if (state === 'blocked') {
@@ -33,18 +30,7 @@ function walletPrompt(state: WalletState, problem: string): WalletPrompt | null 
 export function WalletSummary() {
   const router = useRouter();
   const theme = useTheme();
-  const params = useLocalSearchParams<{ add?: string }>();
-  const { state, wallet, view, refresh, problem } = useWallet();
-  const [opened, setOpened] = useState(false);
-  const addRequested = params.add === '1';
-  const adding = opened || addRequested;
-
-  const closeAddMoney = () => {
-    setOpened(false);
-    if (addRequested) {
-      router.setParams({ add: undefined });
-    }
-  };
+  const { state, view, problem } = useWallet();
 
   if (state === 'signed-out' || state === 'failed') {
     return null;
@@ -92,26 +78,8 @@ export function WalletSummary() {
         <ThemedText type="small" themeColor="textSecondary">
           Ready to spend on gift cards
         </ThemedText>
-        <View style={styles.actions}>
-          <View style={styles.action}>
-            <Button
-              label="Add money"
-              variant="primary"
-              onPress={() => (adding ? closeAddMoney() : setOpened(true))}
-              disabled={!wallet}
-            />
-          </View>
-          <View style={styles.action}>
-            <Button label="Cash out to bank" onPress={() => router.push('/wallet/cash-out')} />
-          </View>
-        </View>
+        <Button label="Cash out to bank" onPress={() => router.push('/wallet/cash-out')} />
       </View>
-
-      {adding && wallet && (
-        <Animated.View entering={FadeInDown.duration(Motion.state)}>
-          <AddMoney wallet={wallet} view={view} refresh={refresh} onClose={closeAddMoney} />
-        </Animated.View>
-      )}
 
       <ListGroup title="Cashback">
         <ListRow
@@ -144,15 +112,5 @@ const styles = StyleSheet.create({
   },
   balance: {
     fontVariant: ['tabular-nums'],
-  },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-    paddingTop: Spacing.two,
-  },
-  action: {
-    flexGrow: 1,
-    flexBasis: 140,
   },
 });
