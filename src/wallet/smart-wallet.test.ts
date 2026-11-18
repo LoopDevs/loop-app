@@ -830,19 +830,3 @@ test('a failed device link leaves the pin unwritten', async () => {
   await assert.rejects(wallet.addThisDevice(), /cancelled/);
   assert.equal(await pinned(), null);
 });
-
-test('testnet funding calls friendbot for the wallet address and reports a refusal', async () => {
-  const wallet = (await SmartWallet.load()) as SmartWallet;
-  const realFetch = globalThis.fetch;
-  const urls: string[] = [];
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    urls.push(String(input));
-    return new Response('already funded', { status: 400 });
-  }) as typeof fetch;
-  try {
-    await assert.rejects(wallet.fundWithFriendbot(), /Friendbot 400: already funded/);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-  assert.deepEqual(urls, [`${network.friendbotUrl}/?addr=${address}`]);
-});

@@ -29,7 +29,6 @@ export const onlyPaymentCurrency: PaymentCurrency | null = null;
 export type StellarNetwork = {
   rpcUrls: string[];
   passphrase: string;
-  friendbotUrl: string | null;
   factory: string;
   accountWasmHash: string;
   webauthnVerifier: string;
@@ -44,7 +43,6 @@ export const networks: Record<StellarNetworkName, StellarNetwork> = {
   testnet: {
     rpcUrls: ['https://soroban-testnet.stellar.org', 'https://rpc.ankr.com/stellar_testnet_soroban'],
     passphrase: Networks.TESTNET,
-    friendbotUrl: 'https://friendbot.stellar.org',
     factory: 'CCNMXHVK6ODB6GY3Z3ZU5K3RFN5NJ6AQLTVGXUNWTCFVHLACIR2BLLHZ',
     accountWasmHash: 'face137d96aa66bdb43ac600b6b1c8d44f3aac5ed5a6f5f78ce07a25023fa925',
     webauthnVerifier: 'CA3VX2NQOUKS4DS6HUQMVW7RIXLXJFCOHBH3337S2BA5W2G7EVS7FGLO',
@@ -64,7 +62,6 @@ export const networks: Record<StellarNetworkName, StellarNetwork> = {
   mainnet: {
     rpcUrls: ['https://mainnet.sorobanrpc.com', 'https://soroban-rpc.mainnet.stellar.gateway.fm'],
     passphrase: Networks.PUBLIC,
-    friendbotUrl: null,
     factory: 'CCBDANQFVTH3AX3IN7KOWPHAGS44MRWBM6JTPEP3MJFY4MATSD4M2G5S',
     accountWasmHash: 'face137d96aa66bdb43ac600b6b1c8d44f3aac5ed5a6f5f78ce07a25023fa925',
     webauthnVerifier: 'CC23ZMWF6GYHDHD5MBAGJWAIWIHGCFS22D6F7A7O23EDXV7JYZNV2TFP',
