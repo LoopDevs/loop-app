@@ -244,7 +244,6 @@ export default function HomeScreen() {
   };
 
   const { scrollRef, onScroll, scrim } = useScrimScroll();
-  const addMoney = () => router.navigate({ pathname: '/wallet', params: { add: '1' } });
   const openShop = () => router.navigate('/shop');
   const searchShop = () => {
     const q = search.trim();
@@ -351,7 +350,6 @@ export default function HomeScreen() {
                 <View style={[styles.column, wide && styles.columnWide]}>
                   <BalanceCard view={view}>
                     <HomeActions
-                      onAddMoney={addMoney}
                       onShop={openShop}
                       onSavings={() => router.navigate('/savings')}
                       onCashOut={() => router.push('/wallet/cash-out')}
@@ -360,7 +358,7 @@ export default function HomeScreen() {
                   <SavingsNudge onPress={() => router.navigate('/savings')} />
                 </View>
                 <View style={[styles.column, wide && styles.columnWide]}>
-                  <NextStep view={view} topMerchant={topMerchant} onAddMoney={addMoney} onOpenMerchant={openMerchant} />
+                  <NextStep view={view} topMerchant={topMerchant} onOpenMerchant={openMerchant} />
                   <RecentGiftCards
                     refreshKey={giftCardsRefreshKey}
                     onOpenOrder={(id) => router.push(`/wallet/${id}`)}

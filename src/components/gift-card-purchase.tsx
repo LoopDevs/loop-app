@@ -36,21 +36,15 @@ import { isHiddenFromHistory, settledStatuses } from '@/ctx/gift-card-status';
 import type { Merchant } from '@/ctx/merchant';
 import { OneTapBuy, type BuyResult, type BuySteps, type SentRecord, type ShownOrder } from '@/ctx/one-tap-buy';
 import { paymentLock } from '@/ctx/payment-lock';
-import { PaymentSender, type SendOutcome } from '@/ctx/payment-sender';
-import {
-  canPay,
-  sentTransactionOutcome,
-  type PaymentState,
-  type PayRejection,
-  type SignedTransfer,
-} from '@/ctx/payment-state';
+import type { SendOutcome } from '@/ctx/payment-sender';
+import { canPay, sentTransactionOutcome, type PaymentState, type SignedTransfer } from '@/ctx/payment-state';
 import { PriceWindow } from '@/ctx/price-window';
 import type { Profile } from '@/ctx/profile';
 import { Rates } from '@/ctx/rates';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { useHoldings } from '@/hooks/use-holdings';
 import { usePageLayout } from '@/hooks/use-page-layout';
-import { sentPayments } from '@/hooks/use-sent-payment';
+import { paymentSender, pendingTopUps, sentPayments } from '@/hooks/use-sent-payment';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
@@ -61,7 +55,6 @@ import { units } from '@/stellar/units';
 import { holdCriticalReload } from '@/updates/update-checker';
 import type { Coverage, Holdings } from '@/wallet/holdings';
 import { PaymentSearch } from '@/wallet/payment-search';
-import { PendingWithdrawals } from '@/wallet/pending-withdrawals';
 import { Savings } from '@/wallet/savings';
 import type { TopUpOutcome } from '@/wallet/savings-top-up';
 import type { SmartWallet } from '@/wallet/smart-wallet';
@@ -117,20 +110,6 @@ async function signedTransfer(giftCard: GiftCard): Promise<SignedTransfer | null
   return recorded?.transfer ?? PaymentSearch.orderTransfer(giftCard)?.expected ?? null;
 }
 
-function payRejection(error: unknown): PayRejection | undefined {
-  if (!(error instanceof CtxError)) {
-    return undefined;
-  }
-  return {
-    status: error.status,
-    errorName: error.errorName(),
-    message: error.bodyField('message'),
-    txId: error.bodyField('txId'),
-  };
-}
-
-const paymentSender = new PaymentSender(sentPayments, payRejection, paymentLock);
-const pendingTopUps = new PendingWithdrawals(AsyncStorage);
 const inFlightPayments = new InFlightPayments();
 const oneTapBuy = new OneTapBuy();
 const noRates = new Rates(new Map());
@@ -403,11 +382,7 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
       refresh().catch((error: unknown) => setMessage(errorMessage(error)));
     }
     const unconfirmed = outcome.kind === 'stillMoving' || outcome.kind === 'covered' ? outcome.withdrawal : undefined;
-    if (unconfirmed) {
-      await pendingTopUps.set(wallet.address, currency, unconfirmed);
-    } else {
-      await pendingTopUps.delete(wallet.address, currency);
-    }
+    await pendingTopUps.keep(wallet.address, currency, unconfirmed);
     switch (outcome.kind) {
       case 'covered':
         return null;
@@ -897,9 +872,6 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
                 {!byBank && <SummaryRow label="Your balance" value={balanceText} />}
                 {walletBlocker && walletBlocker !== 'loading' && <InlineError text={WalletBlocker.message(walletBlocker)} />}
               </View>
-              {walletBlocker === 'noFunds' && (
-                <Button label="Go to Home to add money" variant="quiet" onPress={() => router.navigate('/')} />
-              )}
             </ScrollView>
             <View style={styles.footer}>
               {message !== '' && <Notice message={message} />}
@@ -990,7 +962,7 @@ class WalletBlocker {
   static message(block: Exclude<WalletBlock, 'loading'>): string {
     switch (block) {
       case 'noFunds':
-        return 'Your balance is empty. Add money to buy this card.';
+        return 'Your balance is empty.';
       case 'noRate':
         return "Prices aren't available right now. Try again in a moment.";
       case 'short':

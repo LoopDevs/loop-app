@@ -1,3 +1,4 @@
+import { bankWithdrawalStatuses, type BankWithdrawalJson } from './bank-withdrawal.ts';
 import type { AccountJson, BuiltTransaction, GiftCard, SponsoredResult, WalletLink } from './client.ts';
 import { CtxError } from './ctx-error.ts';
 import { Payout } from './payout.ts';
@@ -87,6 +88,14 @@ export class CtxResponse {
   static sponsored(value: unknown): SponsoredResult {
     new CtxResponse('sponsor', value).strings('hash', 'status').optionalStrings('error');
     return value as SponsoredResult;
+  }
+
+  static bankWithdrawal(value: unknown): BankWithdrawalJson {
+    new CtxResponse('bank withdrawal', value)
+      .strings('id', 'amount', 'currency', 'accountName', 'sortCode', 'accountNumberLast4', 'paymentId', 'created')
+      .oneOf('status', bankWithdrawalStatuses)
+      .optionalStrings('paymentUrlExpiration');
+    return value as BankWithdrawalJson;
   }
 
   static account(value: unknown, skipped: (detail: string) => void): AccountJson {

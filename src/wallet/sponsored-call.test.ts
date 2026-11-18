@@ -296,6 +296,23 @@ test('a payment in a different token is refused', () => {
   );
 });
 
+test('a transfer of the requested amount to the payee returns its amount and muxed id', () => {
+  const call = verified(transferArgs(25n, orderAddress));
+  assert.deepEqual(call.requirePayeeTransfer({ from: wallet, token: payToken, amount: 25n }), {
+    amount: 25n,
+    muxedId: 7n,
+  });
+});
+
+test('a payee transfer for a different amount, token, wallet or account is refused', () => {
+  const expected = { from: wallet, token: payToken, amount: 25n };
+  assert.throws(() => verified(transferArgs(26n, orderAddress)).requirePayeeTransfer(expected), /amount does not match/);
+  assert.throws(() => verified(transferArgs(25n, source)).requirePayeeTransfer(expected), /unexpected address/);
+  const call = verified(transferArgs(25n, orderAddress));
+  assert.throws(() => call.requirePayeeTransfer({ ...expected, from: otherWallet }), /unexpected address/);
+  assert.throws(() => call.requirePayeeTransfer({ ...expected, token: network.tokens[0] }), /is not a/);
+});
+
 function withdrawArgs(contract: string, shares: bigint, minimums: bigint[], owner: string): xdr.InvokeContractArgs {
   return new xdr.InvokeContractArgs({
     contractAddress: new Address(contract).toScAddress(),

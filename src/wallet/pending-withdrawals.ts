@@ -38,6 +38,10 @@ export class PendingWithdrawals {
     }
   }
 
+  keep(address: string, currency: PaymentCurrency, unconfirmed: PendingVaultCall | undefined): Promise<void> {
+    return unconfirmed ? this.set(address, currency, unconfirmed) : this.delete(address, currency);
+  }
+
   async delete(address: string, currency: PaymentCurrency): Promise<void> {
     const key = PendingWithdrawals.keyOf(address, currency);
     this.unsaved.delete(key);
