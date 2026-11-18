@@ -26,7 +26,6 @@ export class ContentSecurityPolicy {
         loopEnvironment.ctxApiUrl,
         env.EXPO_PUBLIC_CATALOG_URL,
         ...network.rpcUrls,
-        network.friendbotUrl,
         Rates.source,
         env.EXPO_PUBLIC_SENTRY_DSN,
       ],

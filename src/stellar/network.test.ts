@@ -25,7 +25,6 @@ for (const name of ['testnet', 'mainnet'] as const) {
 test('the mainnet table pins the public network, Circle dollars and the production payee', () => {
   const { mainnet } = networks;
   assert.equal(mainnet.passphrase, 'Public Global Stellar Network ; September 2015');
-  assert.equal(mainnet.friendbotUrl, null);
   assert.equal(mainnet.usdcIssuer, 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN');
   assert.equal(mainnet.payee, 'GDAEVJPLJZ25BWIHHZ3DW6I53LFH6CFBL7M4VJDKQDIMMSW5YDBRZYSX');
   assert.equal(mainnet.factory, 'CCBDANQFVTH3AX3IN7KOWPHAGS44MRWBM6JTPEP3MJFY4MATSD4M2G5S');
