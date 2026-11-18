@@ -10,6 +10,7 @@ import {
   type GiftCard,
   type SmartWalletIntent,
 } from '@/ctx/client';
+import type { BankWithdrawal } from '@/ctx/bank-withdrawal';
 import type { BuyTimer } from '@/ctx/buy-timer';
 import { Deadline } from '@/ctx/deadline';
 import { CtxError } from '@/ctx/ctx-error';
@@ -318,6 +319,27 @@ export class SmartWallet {
         timer?.mark('submitted');
         return result;
       },
+    };
+  }
+
+  async payWithdrawal(withdrawal: BankWithdrawal): Promise<SignedPayment> {
+    const token = network.tokens.find((candidate) => candidate.currency === withdrawal.currency);
+    if (!token) {
+      throw new Error('This wallet cannot pay the cash out');
+    }
+    const intent: SmartWalletIntent = { intent: 'pay', paymentId: withdrawal.paymentId };
+    const built = await ctx.buildTransaction(this.id, intent);
+    const call = await this.verifiedCall(built, [SmartWallet.deviceRuleId]);
+    const transfer = call.requirePayeeTransfer({
+      from: this.address,
+      token,
+      amount: withdrawal.tokenAmount(),
+    });
+    const signed = await this.sign(call);
+    return {
+      expiryLedger: built.expiryLedger,
+      transfer,
+      sponsor: () => ctx.sponsorTransaction(this.id, intent, { transaction: built.transaction, ...signed }),
     };
   }
 

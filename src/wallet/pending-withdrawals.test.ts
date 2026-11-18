@@ -36,6 +36,14 @@ test('a deleted withdrawal is gone after a restart', async () => {
   assert.equal(await new PendingWithdrawals(storage).get('GW', 'XLM.USDC'), undefined);
 });
 
+test('keeping an unconfirmed withdrawal saves it, and keeping none clears it', async () => {
+  const pending = new PendingWithdrawals(memoryStorage());
+  await pending.keep('GW', 'XLM.USDC', withdrawal);
+  assert.deepEqual(await pending.get('GW', 'XLM.USDC'), withdrawal);
+  await pending.keep('GW', 'XLM.USDC', undefined);
+  assert.equal(await pending.get('GW', 'XLM.USDC'), undefined);
+});
+
 test('a withdrawal saved by another tab replaces the one this tab read', async () => {
   const storage = memoryStorage();
   const thisTab = new PendingWithdrawals(storage);

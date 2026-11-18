@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
@@ -8,145 +8,322 @@ import { Button, Field } from '@/components/ui/form';
 import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { PageHeader } from '@/components/page-header';
-import { PreviewBadge } from '@/components/ui/preview-badge';
 import { SiteFooter } from '@/components/site-footer';
 import { StatusTracker } from '@/components/status-tracker';
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
 import { Layout, Motion, ScrollEndInset, Spacing } from '@/constants/theme';
-import { normalizeAmount } from '@/ctx/amount-input';
-import { Rates } from '@/ctx/rates';
+import { BankWithdrawal } from '@/ctx/bank-withdrawal';
+import { ctx, CtxError } from '@/ctx/client';
+import { paymentLock } from '@/ctx/payment-lock';
+import type { PriceWindow } from '@/ctx/price-window';
+import { useAccountChanges } from '@/hooks/use-account-changes';
+import { useAppRefresh } from '@/hooks/use-app-refresh';
+import { useBusyAction } from '@/hooks/use-busy-action';
+import { paymentSender, pendingTopUps, sentPayments } from '@/hooks/use-sent-payment';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
+import { haptics } from '@/native/haptics';
+import { errorReporting } from '@/ops/error-reporting';
 import { strings } from '@/strings';
+import { holdCriticalReload } from '@/updates/update-checker';
+import { CashOut } from '@/wallet/cash-out';
+import type { TopUpOutcome } from '@/wallet/savings-top-up';
+import { WalletBlocked, type SmartWallet } from '@/wallet/smart-wallet';
 
-type Step = 'bank' | 'amount' | 'review' | 'status';
+type Step = 'loading' | 'bank' | 'amount' | 'review' | 'status';
 
-const minimumAmount = 10;
-const maximumAmount = 1000;
-const cashOutSteps = [
-  { label: 'Requested', detail: 'We have your request.' },
-  { label: 'Reviewing', detail: 'We check every cash out to keep your money safe.' },
-  { label: 'Paid', detail: 'Usually within 1 working day.' },
-];
+const currency = BankWithdrawal.currency;
 
-function digits(input: string, length: number): string {
-  return input.replace(/\D/g, '').slice(0, length);
+async function topUpFromSavings(wallet: SmartWallet, amount: bigint, window: PriceWindow): Promise<TopUpOutcome> {
+  const outcome = await wallet
+    .savingsTopUp(currency)
+    .run(amount, window, await pendingTopUps.get(wallet.address, currency));
+  const unconfirmed = outcome.kind === 'stillMoving' || outcome.kind === 'covered' ? outcome.withdrawal : undefined;
+  await pendingTopUps.keep(wallet.address, currency, unconfirmed);
+  return outcome;
 }
 
-function shownSortCode(sortCode: string): string {
-  return sortCode.match(/.{1,2}/g)?.join('-') ?? '';
+async function canCover(wallet: SmartWallet, amount: bigint): Promise<boolean> {
+  const balances = await wallet.balances();
+  const inWallet = balances.tokens.find(({ token }) => token.currency === currency)?.amount ?? 0n;
+  return (
+    inWallet >= amount || (await wallet.savingsTopUp(currency).sharesCovering(amount - inWallet, balances)) !== null
+  );
+}
+
+function cashOutFrom(wallet: SmartWallet): CashOut {
+  return new CashOut({
+    canCover: (amount) => canCover(wallet, amount),
+    request: (request) => ctx.requestBankWithdrawal(request),
+    recorded: (paymentId) => paymentSender.recorded(paymentId),
+    forget: (paymentId) => sentPayments.forget(paymentId),
+    topUp: (amount, window) => topUpFromSavings(wallet, amount, window),
+    send: async (withdrawal) =>
+      (await paymentSender.send(withdrawal.paymentId, () => wallet.payWithdrawal(withdrawal))).state,
+    now: () => Date.now(),
+  });
 }
 
 export default function CashOutScreen() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('bank');
-  const [name, setName] = useState('');
+  const { state, wallet, view, refresh, reload, problem } = useWallet();
+  const { busy, message, setMessage, run, load } = useBusyAction();
+  const [step, setStep] = useState<Step>('loading');
+  const [withdrawal, setWithdrawal] = useState<BankWithdrawal | null>(null);
+  const [accountName, setAccountName] = useState('');
   const [sortCode, setSortCode] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [input, setInput] = useState('');
-  const { view } = useWallet();
-  const currency = view?.stable ?? Rates.usd;
 
-  const bankReady = name.trim().length > 1 && sortCode.length === 6 && accountNumber.length === 8;
-  const amount = normalizeAmount(input);
-  const amountNumber = amount === null ? 0 : Number(amount);
-  const amountReady = amountNumber >= minimumAmount && amountNumber <= maximumAmount;
-  const shownAmount = amount === null ? '' : money.ctx(amount, currency);
-  const range = `${money.ctx(String(minimumAmount), currency)} to ${money.ctx(String(maximumAmount), currency)}`;
+  const available = view?.holdings.spendable(currency) ?? 0n;
+  const smallest = money.ctx(BankWithdrawal.smallest, currency);
+  const largest = money.token(BankWithdrawal.largestFor(available), currency);
+  const canCashOut = BankWithdrawal.amountOf(BankWithdrawal.smallest, available) !== null;
+  const amount = BankWithdrawal.amountOf(input, available);
+  const fromSavings = amount !== null && view?.holdings.coverage(currency, amount).kind === 'savings';
+  const shownAmount = withdrawal
+    ? money.ctx(withdrawal.amount, withdrawal.currency)
+    : amount === null
+      ? ''
+      : money.token(amount, currency);
+  const progress = withdrawal?.progress(shownAmount) ?? null;
+
+  const showLatest = useCallback(async (hasOpen = false): Promise<Step> => {
+    const [latest, profile] = await Promise.all([ctx.latestBankWithdrawal(), ctx.me()]);
+    setAccountName(profile.legalName ?? '');
+    if (!latest || (latest.isSettled() && !hasOpen)) {
+      setWithdrawal(null);
+      setStep('bank');
+      return 'bank';
+    }
+    const sent = latest.isAwaitingPayment() ? await paymentSender.recorded(latest.paymentId) : null;
+    const unsent = latest.isAwaitingPayment() && sent?.kind !== 'confirming';
+    if (unsent && (latest.payWindow()?.isClosed(Date.now()) ?? true)) {
+      setWithdrawal(null);
+      setStep('bank');
+      return 'bank';
+    }
+    const shown = unsent ? 'review' : 'status';
+    setWithdrawal(latest);
+    setStep(shown);
+    return shown;
+  }, []);
+
+  useEffect(() => {
+    if (state === 'ready') {
+      load(async () => {
+        await showLatest();
+      });
+    }
+  }, [state, load, showLatest]);
+
+  const followedId = step === 'status' && withdrawal && !withdrawal.isFinal() ? withdrawal.id : null;
+  const follow = useCallback(() => {
+    if (!followedId) {
+      return;
+    }
+    ctx
+      .bankWithdrawal(followedId)
+      .then((followed) => {
+        setWithdrawal(followed);
+        return refresh();
+      })
+      .catch((error: unknown) => errorReporting.reportError(error, 'Cash out status'));
+  }, [followedId, refresh]);
+  useAccountChanges(follow, followedId !== null);
+  useAppRefresh(follow);
+
+  const settle = (task: (cashOut: CashOut) => ReturnType<CashOut['start']>) =>
+    run(async () => {
+      if (!wallet) {
+        return;
+      }
+      let result: Awaited<ReturnType<CashOut['start']>>;
+      try {
+        result = await holdCriticalReload(() =>
+          paymentLock.exclusive(`spend:${wallet.address}`, () => task(cashOutFrom(wallet))),
+        );
+      } catch (error) {
+        if (error instanceof WalletBlocked) {
+          reload();
+        }
+        const refusal = error instanceof CtxError ? CashOut.refusalMessage(error.errorName()) : null;
+        if (refusal === null) {
+          throw error;
+        }
+        haptics.error();
+        const open = error instanceof CtxError && error.errorName() === 'ErrBankWithdrawalOpen';
+        const shown = open ? await showLatest(true) : step;
+        if (shown !== 'review' || !open) {
+          setMessage(refusal);
+        }
+        return;
+      } finally {
+        refresh().catch((error: unknown) => errorReporting.reportError(error, 'Cash out refresh'));
+      }
+      if (result.kind === 'short') {
+        haptics.error();
+        setStep('amount');
+        setMessage(result.message);
+        return;
+      }
+      setWithdrawal(result.withdrawal);
+      if (result.kind === 'sent') {
+        haptics.success();
+        setStep('status');
+        return;
+      }
+      haptics.error();
+      setStep('review');
+      setMessage(result.message);
+    });
+
+  const confirm = () => {
+    if (withdrawal) {
+      return settle((cashOut) => cashOut.pay(withdrawal));
+    }
+    if (amount === null) {
+      return undefined;
+    }
+    const request = BankWithdrawal.request(amount, sortCode, accountNumber);
+    return settle((cashOut) => cashOut.start(request));
+  };
 
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
       <KeyboardAvoid>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <PageHeader title="Cash out to your bank" belowNavigationHeader accessory={<PreviewBadge />} />
-        <View style={styles.body}>
-          {step === 'bank' && (
-            <Animated.View key="bank" entering={FadeIn.duration(Motion.state)} style={styles.step}>
-              <ThemedText type="heading" accessibilityRole="header">
-                Where should we send it?
-              </ThemedText>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <PageHeader title="Cash out to your bank" belowNavigationHeader />
+          <View style={styles.body}>
+            {state !== 'ready' && state !== 'loading' && (
               <ThemedText type="small" themeColor="textSecondary">
-                A UK bank account in your name.
+                {problem || 'Sign in and finish setting up your account to cash out.'}
               </ThemedText>
-              <Field
-                label={strings.field.accountName}
-                value={name}
-                onChangeText={setName}
-                autoComplete="name"
-              />
-              <Field
-                label={strings.field.sortCode}
-                value={shownSortCode(sortCode)}
-                onChangeText={(text) => setSortCode(digits(text, 6))}
-                keyboardType="number-pad"
-              />
-              <Field
-                label={strings.field.accountNumber}
-                value={accountNumber}
-                onChangeText={(text) => setAccountNumber(digits(text, 8))}
-                keyboardType="number-pad"
-              />
-              <Button label="Continue" variant="primary" onPress={() => setStep('amount')} disabled={!bankReady} />
-            </Animated.View>
-          )}
+            )}
 
-          {step === 'amount' && (
-            <Animated.View key="amount" entering={FadeIn.duration(Motion.state)} style={styles.step}>
-              <ThemedText type="heading" accessibilityRole="header">
-                How much?
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {`You can cash out ${range} at a time.`}
-              </ThemedText>
-              <Field
-                label={money.amountLabel(currency)}
-                value={input}
-                onChangeText={setInput}
-                keyboardType="decimal-pad"
-              />
-              {input !== '' && !amountReady && (
-                <ThemedText type="small" themeColor="danger">
-                  {`Enter an amount from ${range}`}
+            {step === 'bank' && (
+              <Animated.View key="bank" entering={FadeIn.duration(Motion.state)} style={styles.step}>
+                <ThemedText type="heading" accessibilityRole="header">
+                  Where should we send it?
                 </ThemedText>
-              )}
-              <Button label="Review" variant="primary" onPress={() => setStep('review')} disabled={!amountReady} />
-              <Button label="Back" variant="quiet" onPress={() => setStep('bank')} />
-            </Animated.View>
-          )}
+                <ThemedText type="small" themeColor="textSecondary">
+                  {accountName
+                    ? `A UK bank account in the name ${accountName}.`
+                    : 'A UK bank account in your name.'}
+                </ThemedText>
+                <Field
+                  label={strings.field.sortCode}
+                  value={BankWithdrawal.shownSortCode(sortCode)}
+                  onChangeText={(text) => setSortCode(BankWithdrawal.digits(text, BankWithdrawal.sortCodeLength))}
+                  keyboardType="number-pad"
+                />
+                <Field
+                  label={strings.field.accountNumber}
+                  value={accountNumber}
+                  onChangeText={(text) =>
+                    setAccountNumber(BankWithdrawal.digits(text, BankWithdrawal.accountNumberLength))
+                  }
+                  keyboardType="number-pad"
+                />
+                <Button
+                  label="Continue"
+                  variant="primary"
+                  onPress={() => setStep('amount')}
+                  disabled={!BankWithdrawal.accountReady(sortCode, accountNumber)}
+                />
+              </Animated.View>
+            )}
 
-          {step === 'review' && (
-            <Animated.View key="review" entering={FadeIn.duration(Motion.state)} style={styles.step}>
-              <ThemedText type="heading" accessibilityRole="header">
-                Check and confirm
-              </ThemedText>
-              <ListGroup>
-                <ListRow label="Amount" value={shownAmount} trailing="none" />
-                <ListRow label="To" value={name.trim()} trailing="none" />
-                <ListRow label="Sort code" value={shownSortCode(sortCode)} trailing="none" />
-                <ListRow label="Account number" value={accountNumber} trailing="none" />
-              </ListGroup>
-              <Button label={`Cash out ${shownAmount}`} variant="primary" onPress={() => setStep('status')} />
-              <Button label="Back" variant="quiet" onPress={() => setStep('amount')} />
-            </Animated.View>
-          )}
+            {step === 'amount' && (
+              <Animated.View key="amount" entering={FadeIn.duration(Motion.state)} style={styles.step}>
+                <ThemedText type="heading" accessibilityRole="header">
+                  How much?
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {canCashOut
+                    ? `You can cash out ${smallest} to ${largest}.`
+                    : `You need at least ${smallest} to cash out.`}
+                </ThemedText>
+                <Field
+                  label={money.amountLabel(currency)}
+                  value={input}
+                  onChangeText={setInput}
+                  keyboardType="decimal-pad"
+                />
+                {canCashOut && input !== '' && amount === null && (
+                  <ThemedText type="small" themeColor="danger">
+                    {`Enter an amount from ${smallest} to ${largest}`}
+                  </ThemedText>
+                )}
+                <Button
+                  label="Review"
+                  variant="primary"
+                  onPress={() => {
+                    setMessage('');
+                    setStep('review');
+                  }}
+                  disabled={amount === null}
+                />
+                <Button label="Back" variant="quiet" onPress={() => setStep('bank')} />
+              </Animated.View>
+            )}
 
-          {step === 'status' && (
-            <Animated.View key="status" entering={FadeIn.duration(Motion.state)} style={styles.step}>
-              <ThemedText type="heading" accessibilityRole="header" accessibilityLiveRegion="polite">
-                {`${shownAmount} is on its way`}
+            {step === 'review' && (
+              <Animated.View key="review" entering={FadeIn.duration(Motion.state)} style={styles.step}>
+                <ThemedText type="heading" accessibilityRole="header">
+                  Check and confirm
+                </ThemedText>
+                <ListGroup>
+                  <ListRow label="Amount" value={shownAmount} trailing="none" />
+                  <ListRow label="To" value={withdrawal?.accountName ?? accountName} trailing="none" />
+                  <ListRow
+                    label="Sort code"
+                    value={BankWithdrawal.shownSortCode(withdrawal?.sortCode ?? sortCode)}
+                    trailing="none"
+                  />
+                  <ListRow
+                    label="Account number"
+                    value={withdrawal ? `Ending ${withdrawal.accountNumberLast4}` : accountNumber}
+                    trailing="none"
+                  />
+                </ListGroup>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {withdrawal
+                    ? 'To change these details, wait a few minutes for this request to run out.'
+                    : fromSavings
+                      ? 'This comes out of your savings. We check every cash out before paying it.'
+                      : 'We check every cash out before paying it.'}
+                </ThemedText>
+                <Button label={`Cash out ${shownAmount}`} variant="primary" onPress={confirm} busy={busy} />
+                {!withdrawal && (
+                  <Button label="Back" variant="quiet" onPress={() => setStep('amount')} disabled={busy} />
+                )}
+              </Animated.View>
+            )}
+
+            {step === 'status' && progress && (
+              <Animated.View key="status" entering={FadeIn.duration(Motion.state)} style={styles.step}>
+                <ThemedText type="heading" accessibilityRole="header" accessibilityLiveRegion="polite">
+                  {progress.headline}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {progress.detail}
+                </ThemedText>
+                {progress.step !== null && <StatusTracker steps={BankWithdrawal.steps} current={progress.step} />}
+                <Button label="Done" variant="primary" onPress={() => router.navigate('/wallet')} />
+              </Animated.View>
+            )}
+
+            {message !== '' && (
+              <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite" style={styles.message}>
+                {message}
               </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {`To ${name.trim()}, account ending ${accountNumber.slice(-4)}.`}
-              </ThemedText>
-              <StatusTracker steps={cashOutSteps} current={1} />
-              <Button label="Done" variant="primary" onPress={() => router.navigate('/wallet')} />
-            </Animated.View>
-          )}
-        </View>
-        <SiteFooter />
-      </ScrollView>
+            )}
+          </View>
+          <SiteFooter />
+        </ScrollView>
       </KeyboardAvoid>
     </ThemedView>
   );
@@ -169,5 +346,8 @@ const styles = StyleSheet.create({
   },
   step: {
     gap: Spacing.three,
+  },
+  message: {
+    marginTop: Spacing.three,
   },
 });

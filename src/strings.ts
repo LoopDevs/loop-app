@@ -4,7 +4,6 @@ export const strings = {
     code: 'Code',
     fullName: 'First and last name',
     searchCountries: 'Search countries or currencies',
-    accountName: 'Name on the account',
     sortCode: 'Sort code, 6 digits',
     accountNumber: 'Account number, 8 digits',
   },

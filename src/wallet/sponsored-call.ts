@@ -15,10 +15,13 @@ import type { BuiltTransaction } from '../ctx/client.ts';
 import type { SignedTransfer } from '../ctx/payment-state.ts';
 import { network, type Token } from '../stellar/network.ts';
 
-export type ExpectedPayment = {
+export type ExpectedPayeeTransfer = {
   from: string;
   token: Token;
   amount: bigint;
+};
+
+export type ExpectedPayment = ExpectedPayeeTransfer & {
   orderAddress: string | undefined;
 };
 
@@ -133,6 +136,25 @@ export class SponsoredCall {
   }
 
   requirePayment({ from, token, amount, orderAddress }: ExpectedPayment): SignedTransfer {
+    const { to, transferred } = this.payeeTransfer(from, token);
+    if (to !== orderAddress) {
+      throw new Error('The payment is for a different order');
+    }
+    if (transferred !== amount) {
+      throw new Error('The payment amount does not match the order');
+    }
+    return SponsoredCall.signedTransfer(to, amount);
+  }
+
+  requirePayeeTransfer({ from, token, amount }: ExpectedPayeeTransfer): SignedTransfer {
+    const { to, transferred } = this.payeeTransfer(from, token);
+    if (transferred !== amount) {
+      throw new Error('The payment amount does not match the request');
+    }
+    return SponsoredCall.signedTransfer(to, amount);
+  }
+
+  private payeeTransfer(from: string, token: Token): { to: string; transferred: bigint } {
     if (
       this.contract !== token.contract ||
       this.method !== 'transfer' ||
@@ -144,12 +166,10 @@ export class SponsoredCall {
     if (payer !== from || SponsoredCall.accountOf(to) !== network.payee) {
       throw new Error('The payment goes to an unexpected address');
     }
-    if (to !== orderAddress) {
-      throw new Error('The payment is for a different order');
-    }
-    if (transferred !== amount) {
-      throw new Error('The payment amount does not match the order');
-    }
+    return { to, transferred };
+  }
+
+  private static signedTransfer(to: string, amount: bigint): SignedTransfer {
     const muxedId = SponsoredCall.muxedIdOf(to);
     return muxedId === undefined ? { amount } : { amount, muxedId };
   }
