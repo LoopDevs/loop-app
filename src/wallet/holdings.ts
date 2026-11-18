@@ -163,16 +163,9 @@ export class Holdings {
     return Holdings.shown(sum);
   }
 
-  spendableIn(stable: string): bigint | null {
-    let sum = 0n;
-    for (const { token } of this.balances.tokens) {
-      const value = this.valueIn(this.spendable(token.currency), token.currency, stable);
-      if (value === null) {
-        return null;
-      }
-      sum += value;
-    }
-    return Holdings.shown(sum);
+  savedIn(stable: string): bigint | null {
+    const sum = this.sumIn(this.savingsHoldings(), stable);
+    return sum === null ? null : Holdings.shown(sum);
   }
 
   onTheWayIn(stable: string): bigint | null {
@@ -192,9 +185,10 @@ export class Holdings {
   }
 
   totalIn(stable: string): bigint | null {
-    const spendable = this.spendableIn(stable);
+    const inWallet = this.inWalletIn(stable);
+    const saved = this.savedIn(stable);
     const onTheWay = this.onTheWayIn(stable);
-    return spendable === null || onTheWay === null ? null : spendable + onTheWay;
+    return inWallet === null || saved === null || onTheWay === null ? null : inWallet + saved + onTheWay;
   }
 
   preferredCurrency(
