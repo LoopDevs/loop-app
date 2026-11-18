@@ -250,7 +250,7 @@ const stepNumbers: Record<SignInStep, number> = {
 };
 
 const stepCount = 5;
-const resendCooldownMs = 30_000;
+const resendCooldownMs = 60_000;
 
 type SignInFormProps = {
   reason: string;
