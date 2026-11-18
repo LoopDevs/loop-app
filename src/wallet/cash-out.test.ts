@@ -32,15 +32,19 @@ function withdrawal(json: Partial<BankWithdrawalJson> = {}): BankWithdrawal {
   });
 }
 
-type Calls = { topUps: bigint[]; sends: string[] };
+type Calls = { topUps: bigint[]; sends: string[]; forgotten: string[]; requests: number };
 
 function flow(
   steps: Partial<CashOutSteps> & { topUpOutcome?: TopUpOutcome; sent?: PaymentState } = {},
 ): { cashOut: CashOut; calls: Calls } {
-  const calls: Calls = { topUps: [], sends: [] };
+  const calls: Calls = { topUps: [], sends: [], forgotten: [], requests: 0 };
+  const request = steps.request ?? (async () => withdrawal());
   const cashOut = new CashOut({
-    request: async () => withdrawal(),
+    canCover: async () => true,
     recorded: async () => null,
+    forget: async (paymentId) => {
+      calls.forgotten.push(paymentId);
+    },
     topUp: async (amount) => {
       calls.topUps.push(amount);
       return steps.topUpOutcome ?? { kind: 'covered' };
@@ -51,6 +55,10 @@ function flow(
     },
     now: () => now,
     ...steps,
+    request: (asked) => {
+      calls.requests += 1;
+      return request(asked);
+    },
   });
   return { cashOut, calls };
 }
@@ -74,7 +82,7 @@ test('a withdrawal that differs from the request is not paid', async () => {
     const { cashOut, calls } = flow({ request: async () => withdrawal(different) });
     const result = await cashOut.start(request);
     assert.deepEqual(result.kind === 'stopped' && result.message, CashOut.differentRequestMessage);
-    assert.deepEqual(calls, { topUps: [], sends: [] });
+    assert.deepEqual([calls.topUps, calls.sends], [[], []]);
   }
 });
 
@@ -98,12 +106,22 @@ test('nothing is sent when savings does not cover the amount', async () => {
 test('a payment already recorded on this device is not topped up or sent again', async () => {
   const sent = flow({ recorded: async () => ({ kind: 'confirming', txId: 'tx1' }) });
   assert.equal((await sent.cashOut.pay(withdrawal())).kind, 'sent');
-  assert.deepEqual(sent.calls, { topUps: [], sends: [] });
+  assert.deepEqual([sent.calls.topUps, sent.calls.sends, sent.calls.forgotten], [[], [], []]);
+});
 
+test('a payment that failed on chain is forgotten and sent once more', async () => {
   const failed = flow({ recorded: async () => ({ kind: 'failed' }) });
-  const result = await failed.cashOut.pay(withdrawal());
-  assert.deepEqual(result.kind === 'stopped' && result.message, CashOut.failedMessage);
-  assert.deepEqual(failed.calls, { topUps: [], sends: [] });
+  assert.equal((await failed.cashOut.pay(withdrawal())).kind, 'sent');
+  assert.deepEqual(failed.calls.forgotten, ['p1']);
+  assert.deepEqual(failed.calls.sends, ['p1']);
+});
+
+test('no withdrawal is requested when the account cannot cover the amount', async () => {
+  const { cashOut, calls } = flow({ canCover: async () => false });
+  const result = await cashOut.start(request);
+  assert.deepEqual(result, { kind: 'short', message: CashOut.notEnoughMessage });
+  assert.equal(calls.requests, 0);
+  assert.deepEqual([calls.topUps, calls.sends], [[], []]);
 });
 
 test('a withdrawal past its pay window, or one CTX already received, moves no money', async () => {
@@ -112,12 +130,12 @@ test('a withdrawal past its pay window, or one CTX already received, moves no mo
   assert.deepEqual(closing.kind === 'stopped' && closing.message, CashOut.outOfTimeMessage);
   const undated = await late.cashOut.pay(withdrawal({ paymentUrlExpiration: undefined }));
   assert.equal(undated.kind, 'stopped');
-  assert.deepEqual(late.calls, { topUps: [], sends: [] });
+  assert.deepEqual([late.calls.topUps, late.calls.sends], [[], []]);
 
   const received = flow();
   assert.equal((await received.cashOut.pay(withdrawal({ status: 'in-review' }))).kind, 'sent');
   assert.equal((await received.cashOut.pay(withdrawal({ currency: 'XLM.USDC' }))).kind, 'stopped');
-  assert.deepEqual(received.calls, { topUps: [], sends: [] });
+  assert.deepEqual([received.calls.topUps, received.calls.sends], [[], []]);
 });
 
 test('a send that did not go out reports why', async () => {

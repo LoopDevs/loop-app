@@ -1,11 +1,14 @@
 import { BankWithdrawal, type BankWithdrawalIn } from '../ctx/bank-withdrawal.ts';
 import type { PaymentState } from '../ctx/payment-state.ts';
 import type { PriceWindow } from '../ctx/price-window.ts';
+import { units } from '../stellar/units.ts';
 import type { TopUpOutcome } from './savings-top-up.ts';
 
 export type CashOutSteps = {
   request(request: BankWithdrawalIn): Promise<BankWithdrawal>;
+  canCover(amount: bigint): Promise<boolean>;
   recorded(paymentId: string): Promise<PaymentState | null>;
+  forget(paymentId: string): Promise<void>;
   topUp(amount: bigint, window: PriceWindow): Promise<TopUpOutcome>;
   send(withdrawal: BankWithdrawal): Promise<PaymentState>;
   now(): number;
@@ -56,7 +59,10 @@ export class CashOut {
     }
   }
 
-  async start(request: BankWithdrawalIn): Promise<CashOutResult> {
+  async start(request: BankWithdrawalIn): Promise<CashOutResult | { kind: 'short'; message: string }> {
+    if (!(await this.steps.canCover(units.parse(request.amount)))) {
+      return { kind: 'short', message: CashOut.notEnoughMessage };
+    }
     const withdrawal = await this.steps.request(request);
     if (!withdrawal.answers(request)) {
       return { kind: 'stopped', withdrawal, message: CashOut.differentRequestMessage };
@@ -66,7 +72,9 @@ export class CashOut {
 
   async pay(withdrawal: BankWithdrawal): Promise<CashOutResult> {
     const recorded = await this.steps.recorded(withdrawal.paymentId);
-    if (recorded) {
+    if (recorded?.kind === 'failed') {
+      await this.steps.forget(withdrawal.paymentId);
+    } else if (recorded) {
       return CashOut.resultOf(withdrawal, recorded);
     }
     if (!withdrawal.isAwaitingPayment()) {

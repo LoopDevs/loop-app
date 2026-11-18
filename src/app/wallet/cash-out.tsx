@@ -20,14 +20,14 @@ import type { PriceWindow } from '@/ctx/price-window';
 import { useAccountChanges } from '@/hooks/use-account-changes';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { useBusyAction } from '@/hooks/use-busy-action';
-import { paymentSender, pendingTopUps } from '@/hooks/use-sent-payment';
+import { paymentSender, pendingTopUps, sentPayments } from '@/hooks/use-sent-payment';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
 import { strings } from '@/strings';
 import { holdCriticalReload } from '@/updates/update-checker';
-import { CashOut, type CashOutResult } from '@/wallet/cash-out';
+import { CashOut } from '@/wallet/cash-out';
 import type { TopUpOutcome } from '@/wallet/savings-top-up';
 import { WalletBlocked, type SmartWallet } from '@/wallet/smart-wallet';
 
@@ -44,10 +44,20 @@ async function topUpFromSavings(wallet: SmartWallet, amount: bigint, window: Pri
   return outcome;
 }
 
+async function canCover(wallet: SmartWallet, amount: bigint): Promise<boolean> {
+  const balances = await wallet.balances();
+  const inWallet = balances.tokens.find(({ token }) => token.currency === currency)?.amount ?? 0n;
+  return (
+    inWallet >= amount || (await wallet.savingsTopUp(currency).sharesCovering(amount - inWallet, balances)) !== null
+  );
+}
+
 function cashOutFrom(wallet: SmartWallet): CashOut {
   return new CashOut({
+    canCover: (amount) => canCover(wallet, amount),
     request: (request) => ctx.requestBankWithdrawal(request),
     recorded: (paymentId) => paymentSender.recorded(paymentId),
+    forget: (paymentId) => sentPayments.forget(paymentId),
     topUp: (amount, window) => topUpFromSavings(wallet, amount, window),
     send: async (withdrawal) =>
       (await paymentSender.send(withdrawal.paymentId, () => wallet.payWithdrawal(withdrawal))).state,
@@ -79,32 +89,36 @@ export default function CashOutScreen() {
       : money.token(amount, currency);
   const progress = withdrawal?.progress(shownAmount) ?? null;
 
-  const showLatest = useCallback(async (hasOpen = false) => {
+  const showLatest = useCallback(async (hasOpen = false): Promise<Step> => {
     const [latest, profile] = await Promise.all([ctx.latestBankWithdrawal(), ctx.me()]);
     setAccountName(profile.legalName ?? '');
     if (!latest || (latest.isSettled() && !hasOpen)) {
       setWithdrawal(null);
       setStep('bank');
-      return;
+      return 'bank';
     }
     const sent = latest.isAwaitingPayment() ? await paymentSender.recorded(latest.paymentId) : null;
     const unsent = latest.isAwaitingPayment() && sent?.kind !== 'confirming';
     if (unsent && (latest.payWindow()?.isClosed(Date.now()) ?? true)) {
       setWithdrawal(null);
       setStep('bank');
-      return;
+      return 'bank';
     }
+    const shown = unsent ? 'review' : 'status';
     setWithdrawal(latest);
-    setStep(unsent ? 'review' : 'status');
+    setStep(shown);
+    return shown;
   }, []);
 
   useEffect(() => {
     if (state === 'ready') {
-      load(() => showLatest());
+      load(async () => {
+        await showLatest();
+      });
     }
   }, [state, load, showLatest]);
 
-  const followedId = step === 'status' && withdrawal && !withdrawal.isSettled() ? withdrawal.id : null;
+  const followedId = step === 'status' && withdrawal && !withdrawal.isFinal() ? withdrawal.id : null;
   const follow = useCallback(() => {
     if (!followedId) {
       return;
@@ -120,12 +134,12 @@ export default function CashOutScreen() {
   useAccountChanges(follow, followedId !== null);
   useAppRefresh(follow);
 
-  const settle = (task: (cashOut: CashOut) => Promise<CashOutResult>) =>
+  const settle = (task: (cashOut: CashOut) => ReturnType<CashOut['start']>) =>
     run(async () => {
       if (!wallet) {
         return;
       }
-      let result: CashOutResult;
+      let result: Awaited<ReturnType<CashOut['start']>>;
       try {
         result = await holdCriticalReload(() =>
           paymentLock.exclusive(`spend:${wallet.address}`, () => task(cashOutFrom(wallet))),
@@ -139,11 +153,20 @@ export default function CashOutScreen() {
           throw error;
         }
         haptics.error();
-        await showLatest(true);
-        setMessage(refusal);
+        const open = error instanceof CtxError && error.errorName() === 'ErrBankWithdrawalOpen';
+        const shown = open ? await showLatest(true) : step;
+        if (shown !== 'review' || !open) {
+          setMessage(refusal);
+        }
         return;
       } finally {
         refresh().catch((error: unknown) => errorReporting.reportError(error, 'Cash out refresh'));
+      }
+      if (result.kind === 'short') {
+        haptics.error();
+        setStep('amount');
+        setMessage(result.message);
+        return;
       }
       setWithdrawal(result.withdrawal);
       if (result.kind === 'sent') {

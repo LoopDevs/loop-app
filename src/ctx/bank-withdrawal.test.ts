@@ -89,7 +89,9 @@ test('every status has progress wording, with tracker steps only on the paying p
   }
 });
 
-test('a withdrawal is settled once it is paid, returned or expired', () => {
+test('a withdrawal is settled once it is paid, returned or expired, and only paid or returned is final', () => {
   const settled = bankWithdrawalStatuses.filter((status) => new BankWithdrawal({ ...json, status }).isSettled());
   assert.deepEqual(settled, ['expired', 'paid', 'returned']);
+  const final = bankWithdrawalStatuses.filter((status) => new BankWithdrawal({ ...json, status }).isFinal());
+  assert.deepEqual(final, ['paid', 'returned']);
 });

@@ -136,8 +136,12 @@ export class BankWithdrawal {
     return this.status === 'awaiting-payment';
   }
 
+  isFinal(): boolean {
+    return this.status === 'paid' || this.status === 'returned';
+  }
+
   isSettled(): boolean {
-    return this.status === 'paid' || this.status === 'returned' || this.status === 'expired';
+    return this.isFinal() || this.status === 'expired';
   }
 
   payWindow(): PriceWindow | null {
