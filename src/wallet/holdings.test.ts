@@ -141,7 +141,7 @@ test('spendable never includes what is on the way', () => {
   const without = holdings({ 'XLM.USDC': '5' });
   const withCashback = holdings({ 'XLM.USDC': '5' }, { onTheWay });
   assert.equal(withCashback.spendable('XLM.USDC'), without.spendable('XLM.USDC'));
-  assert.equal(withCashback.spendableIn('USD'), without.spendableIn('USD'));
+  assert.equal(withCashback.inWalletIn('USD'), without.inWalletIn('USD'));
   assert.equal(withCashback.totalIn('USD'), units.parse('12'));
 });
 
@@ -150,7 +150,7 @@ test('the total is the sum of the shown spendable and on the way figures', () =>
     { 'XLM.EURC': '0.004' },
     { onTheWay: [{ currency: 'XLM.EURC', amount: units.parse('0.009') }] },
   );
-  const spendable = held.spendableIn('USD');
+  const spendable = held.inWalletIn('USD');
   const onTheWay = held.onTheWayIn('USD');
   assert.equal(spendable, 0n);
   assert.equal(onTheWay, units.parse('0.01'));
@@ -159,14 +159,14 @@ test('the total is the sum of the shown spendable and on the way figures', () =>
 
 test('a failed CTX read leaves spendable and hides on the way and the total', () => {
   const held = holdings({ 'XLM.USDC': '5' }, { onTheWay: null });
-  assert.equal(held.spendableIn('USD'), units.parse('5'));
+  assert.equal(held.inWalletIn('USD'), units.parse('5'));
   assert.equal(held.onTheWayIn('USD'), null);
   assert.equal(held.totalIn('USD'), null);
 });
 
 test('a token with no rate hides the converted spendable figure', () => {
   const held = holdings({ XLM: '10', 'XLM.USDC': '1' }, { rates: Rates.fromPrices({}) });
-  assert.equal(held.spendableIn('USD'), null);
+  assert.equal(held.inWalletIn('USD'), null);
   assert.equal(held.totalIn('USD'), null);
 });
 
@@ -321,10 +321,21 @@ test('nothing is preferred when no funded currency is accepted', () => {
   assert.equal(holdings({ 'XLM.USDC': '1' }).preferredCurrency(currencies, 'USD', new Set(currencies)), null);
 });
 
+test('the total counts savings at the value the savings rows show', () => {
+  const held = holdings(
+    { 'XLM.GBPLOOP': '2' },
+    { savings: { 'XLM.GBPLOOP': '50' }, onTheWay: [{ currency: 'XLM.GBPLOOP', amount: units.parse('1') }] },
+  );
+  const rows = held.savingsHoldings().reduce((sum, { amount }) => sum + amount, 0n);
+  assert.equal(rows, units.parse('50'));
+  assert.equal(held.savedIn('XLM.GBPLOOP'), rows);
+  assert.equal(held.totalIn('XLM.GBPLOOP'), units.parse('53'));
+});
+
 test('the wallet figure counts every token at its rate and leaves savings out', () => {
   const held = holdings({ 'XLM.GBPLOOP': '2', 'XLM.EURC': '10' }, { savings: { 'XLM.GBPLOOP': '50' } });
   const withoutSavings = holdings({ 'XLM.GBPLOOP': '2', 'XLM.EURC': '10' });
-  assert.equal(held.inWalletIn('XLM.GBPLOOP'), withoutSavings.spendableIn('XLM.GBPLOOP'));
+  assert.equal(held.inWalletIn('XLM.GBPLOOP'), withoutSavings.inWalletIn('XLM.GBPLOOP'));
   assert.equal(holdings({ 'XLM.EURC': '10' }).inWallet('XLM.GBPLOOP'), 0n);
   assert.notEqual(holdings({ 'XLM.EURC': '10' }).inWalletIn('XLM.GBPLOOP'), 0n);
 });
