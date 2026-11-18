@@ -125,7 +125,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
   const busyLabel = (opening: string) => {
     switch (phase?.step) {
       case 'opening':
-        return phase.bank && phase.viaPicker ? `Opening ${phase.bank}…` : opening;
+        return phase.bank && phase.viaPicker ? `Paying with ${phase.bank}…` : opening;
       case 'choosing':
         return 'Choose your bank…';
       case 'atBank':
@@ -457,7 +457,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
       <Button
         label={
           payingWithBank
-            ? busyLabel(`Opening ${bankName ?? 'your bank'}…`)
+            ? busyLabel(`Paying with ${bankName ?? 'your bank'}…`)
             : fiatAmount && amountProblem === null
               ? `Pay ${merchant.shortAmount(fiatAmount)} ${bankName ? `with ${bankName}` : 'by bank'}`
               : 'Pay by bank'

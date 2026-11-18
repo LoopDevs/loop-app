@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, TextInput, View, type FlatList } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View, type FlatList } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { CountryMenu } from '@/components/country-menu';
@@ -11,6 +11,7 @@ import { StatusBarScrim, useScrimScroll } from '@/components/home-panel';
 import { CategoryTiles, MerchantCard, MerchantCardStrip } from '@/components/merchant-card';
 import { PageHeader } from '@/components/page-header';
 import { PressScale } from '@/components/ui/press-scale';
+import { haptics } from '@/native/haptics';
 import { useOnSignIn } from '@/components/sign-in';
 import { SiteFooter } from '@/components/site-footer';
 import { MerchantGridSkeleton } from '@/components/ui/skeleton';
@@ -521,9 +522,24 @@ function SearchBar({ value, onChangeText }: { value: string; onChangeText: (text
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
-        clearButtonMode="while-editing"
         style={[styles.searchInput, { color: theme.text }]}
       />
+      {value !== '' && (
+        <Pressable
+          onPress={() => {
+            haptics.tap();
+            onChangeText('');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
+          hitSlop={12}>
+          <SymbolView
+            name={{ ios: 'xmark.circle.fill', android: 'cancel', web: 'cancel' }}
+            size={20}
+            tintColor={theme.textSecondary}
+          />
+        </Pressable>
+      )}
     </View>
   );
 }
