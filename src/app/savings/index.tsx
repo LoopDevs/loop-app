@@ -241,6 +241,10 @@ export default function SavingsScreen() {
             <Notice tone="neutral" message={problem} actionLabel="Go to Home" onAction={() => router.navigate('/')} />
           )}
 
+          {state === 'failed' && (
+            <Notice message={problem || "We couldn't load your savings."} actionLabel="Try again" onAction={reload} />
+          )}
+
           {state === 'ready' && (
             <SavingsCard
               view={view}

@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/ui/form';
+import { Button, Notice } from '@/components/ui/form';
 import { ListGroup, ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ThemedText } from '@/components/ui/themed-text';
@@ -30,10 +30,13 @@ function walletPrompt(state: WalletState, problem: string): WalletPrompt | null 
 export function WalletSummary() {
   const router = useRouter();
   const theme = useTheme();
-  const { state, view, problem } = useWallet();
+  const { state, view, problem, reload } = useWallet();
 
-  if (state === 'signed-out' || state === 'failed') {
+  if (state === 'signed-out') {
     return null;
+  }
+  if (state === 'failed') {
+    return <Notice message={problem || "We couldn't load your balance."} actionLabel="Try again" onAction={reload} />;
   }
 
   const prompt = walletPrompt(state, problem);

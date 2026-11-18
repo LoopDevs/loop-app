@@ -12,7 +12,6 @@ import {
 } from '@/ctx/client';
 import type { BankWithdrawal } from '@/ctx/bank-withdrawal';
 import type { BuyTimer } from '@/ctx/buy-timer';
-import { Deadline } from '@/ctx/deadline';
 import { CtxError } from '@/ctx/ctx-error';
 import type { SignedPayment } from '@/ctx/payment-sender';
 import type { SignedTransfer } from '@/ctx/payment-state';
@@ -280,17 +279,6 @@ export class SmartWallet {
       Promise.all(Savings.currencies.map((currency) => this.savingsBalance(currency))),
     ]);
     return { tokens, savings };
-  }
-
-  async fundWithFriendbot(): Promise<void> {
-    if (!network.friendbotUrl) {
-      throw new Error('Friendbot is only available on testnet');
-    }
-    const url = `${network.friendbotUrl}/?addr=${this.address}`;
-    const response = await Deadline.run(Deadline.requestMs, (signal) => fetch(url, { signal }));
-    if (!response.ok) {
-      throw new Error(`Friendbot ${response.status}: ${await response.text()}`);
-    }
   }
 
   async pay(giftCard: GiftCard, timer: BuyTimer | null = null): Promise<SignedPayment> {

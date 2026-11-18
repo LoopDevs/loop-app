@@ -107,7 +107,7 @@ function Balance({ view }: { view: HoldingsView | null }) {
   const stable = view?.stable;
   const total = view && stable ? view.holdings.totalIn(stable) : null;
   const formatted = total !== null && stable ? money.ctx(units.format(total, units.decimals), stable) : null;
-  const unavailable = view !== null && !stable;
+  const unavailable = view !== null && total === null;
   return (
     <View style={styles.balanceBlock}>
       <Text style={[styles.balanceLabel, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.4}>
