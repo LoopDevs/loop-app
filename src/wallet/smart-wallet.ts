@@ -343,13 +343,15 @@ export class SmartWallet {
     return (await soroban.transaction(hash)).status === 'SUCCESS';
   }
 
-  async withdraw(currency: PaymentCurrency, shares: bigint): Promise<SentVaultCall> {
-    const signed = await this.signWithdrawal(currency, shares).catch((error: unknown) =>
-      SmartWallet.rethrowReported(error, 'Savings withdrawal build'),
-    );
-    return SavingsTopUp.send(signed).catch((error: unknown) =>
-      SmartWallet.rethrowReported(error, 'Savings withdrawal send'),
-    );
+  withdraw(currency: PaymentCurrency, shares: bigint): Promise<SentVaultCall> {
+    return holdCriticalReload(async () => {
+      const signed = await this.signWithdrawal(currency, shares).catch((error: unknown) =>
+        SmartWallet.rethrowReported(error, 'Savings withdrawal build'),
+      );
+      return SavingsTopUp.send(signed).catch((error: unknown) =>
+        SmartWallet.rethrowReported(error, 'Savings withdrawal send'),
+      );
+    });
   }
 
   private static rethrowReported(error: unknown, step: string): never {

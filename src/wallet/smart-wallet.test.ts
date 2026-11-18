@@ -22,6 +22,7 @@ import { SmartWallet, UnconfirmedIdentity, UnlinkedDevice, UnpinnedWallet, type 
 import { SponsoredCall } from './sponsored-call.ts';
 import { WalletPin } from './wallet-pin.ts';
 import type { ContextRule } from './wallet-rules.ts';
+import { reloadWhenIdle } from '@/updates/update-checker';
 
 const userId = 'user-1';
 const address = network.factory;
@@ -744,6 +745,33 @@ test('a withdrawal asks CTX for the vault withdraw of exactly those shares and s
   assert.deepEqual(required, [250n]);
   assert.deepEqual(sent, { hash: 'tx-1', status: 'PENDING', expiryLedger: 1_040 });
   assert.equal(fakes.sponsored.length, 1);
+});
+
+test('a reload asked for while a withdrawal is being signed waits until it is sent', async () => {
+  const wallet = (await SmartWallet.load()) as SmartWallet;
+  fakePayment();
+  replace(SponsoredCall, 'verify', () => ({
+    digest: new Uint8Array([9]),
+    requireWithdrawal: () => Holdings.floorOf(1_000n),
+  }));
+  chain.shareValue = 1_000n;
+  let reloaded = false;
+  replace(ctx, 'buildTransaction', async () => {
+    reloadWhenIdle(() => {
+      reloaded = true;
+      throw new Error('reload unavailable');
+    });
+    return { transaction: 'xdr-2', digest: 'cd', contextRuleIds: [1], expiryLedger: 1_040 };
+  });
+  let reloadedAtSend: boolean | null = null;
+  replace(ctx, 'sponsorTransaction', async () => {
+    reloadedAtSend = reloaded;
+    return { hash: 'tx-1', status: 'PENDING' };
+  });
+  await wallet.withdraw('XLM.USDC', 250n);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(reloadedAtSend, false);
+  assert.equal(reloaded, true);
 });
 
 test('a withdrawal in another savings currency targets that vault and is valued by it', async () => {
