@@ -154,10 +154,6 @@ function accountState(view: HoldingsView | null): string {
   if (savings.length > 0) {
     return `${savings.map(({ currency, amount }) => money.token(amount, currency)).join(' and ')} in savings`;
   }
-  const total = stable ? holdings.totalIn(stable) : null;
-  if (total === 0n) {
-    return 'Add money to start buying gift cards';
-  }
   return 'Pay with Loop and earn cashback on every gift card';
 }
 

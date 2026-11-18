@@ -7,20 +7,14 @@ import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 
 type HomeActionsProps = {
-  onAddMoney: () => void;
   onShop: () => void;
   onSavings: () => void;
   onCashOut: () => void;
 };
 
-export function HomeActions({ onAddMoney, onShop, onSavings, onCashOut }: HomeActionsProps) {
+export function HomeActions({ onShop, onSavings, onCashOut }: HomeActionsProps) {
   return (
     <View style={styles.row}>
-      <Action
-        label="Add money"
-        icon={{ ios: 'plus', android: 'add', web: 'add' }}
-        onPress={onAddMoney}
-      />
       <Action
         label="Gift cards"
         accessibilityLabel="Buy a gift card"

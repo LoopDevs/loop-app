@@ -237,42 +237,28 @@ function SavingsOverview({
 type NextStepProps = {
   view: HoldingsView | null;
   topMerchant: Merchant | null;
-  onAddMoney: () => void;
   onOpenMerchant: (merchant: Merchant) => void;
 };
 
-export function NextStep({ view, topMerchant, onAddMoney, onOpenMerchant }: NextStepProps) {
+export function NextStep({ view, topMerchant, onOpenMerchant }: NextStepProps) {
   const theme = useTheme();
   if (!view) {
     return null;
   }
-  const total = view.stable ? view.holdings.totalIn(view.stable) : null;
   const step =
-    total === 0n
+    topMerchant && topMerchant.cashbackBasisPoints() > 0
       ? {
           icon: {
-            ios: 'plus',
-            android: 'add',
-            web: 'add',
+            ios: 'gift',
+            android: 'redeem',
+            web: 'redeem',
           } as SymbolViewProps['name'],
-          label: 'Get started',
-          title: 'Add money to get started',
-          body: 'Then buy your first gift card and earn cashback on it.',
-          onPress: onAddMoney,
+          label: 'Top cashback',
+          title: `Earn ${topMerchant.rateFigure()} back at ${topMerchant.name}`,
+          body: 'The highest cashback rate in the shop right now.',
+          onPress: () => onOpenMerchant(topMerchant),
         }
-      : topMerchant && topMerchant.cashbackBasisPoints() > 0
-        ? {
-            icon: {
-              ios: 'gift',
-              android: 'redeem',
-              web: 'redeem',
-            } as SymbolViewProps['name'],
-            label: 'Top cashback',
-            title: `Earn ${topMerchant.rateFigure()} back at ${topMerchant.name}`,
-            body: 'The highest cashback rate in the shop right now.',
-            onPress: () => onOpenMerchant(topMerchant),
-          }
-        : null;
+      : null;
   if (!step) {
     return null;
   }
