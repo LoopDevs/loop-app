@@ -243,7 +243,13 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const { scrollRef, onScroll, scrim } = useScrimScroll();
+  const { scrollRef, onScroll, offset, scrim } = useScrimScroll();
+  const raiseSearch = (windowY: number) => {
+    if (wide) {
+      return;
+    }
+    scrollRef.current?.scrollTo({ y: offset.get() + windowY - insets.top - Spacing.three, animated: true });
+  };
   const openShop = () => router.navigate('/shop');
   const searchShop = () => {
     const q = search.trim();
@@ -284,6 +290,7 @@ export default function HomeScreen() {
           onSearch={setSearch}
           onSubmitSearch={searchShop}
           onOpen={openMerchant}
+          onSearchFocus={raiseSearch}
           accessory={
             wide || !signedOut ? null : (
               <View style={styles.heroActions}>

@@ -1,6 +1,15 @@
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type MutableRefObject,
+  type ReactNode,
+} from 'react';
 import {
   Platform,
   Pressable,
@@ -182,10 +191,11 @@ type HeroProps = {
   onSearch: (text: string) => void;
   onSubmitSearch: () => void;
   onOpen: (merchant: Merchant) => void;
+  onSearchFocus?: (windowY: number) => void;
   accessory?: ReactNode;
 };
 
-export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSearch, onOpen, accessory }: HeroProps) {
+export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSearch, onOpen, onSearchFocus, accessory }: HeroProps) {
   const { wide } = usePageLayout();
   const reduceMotion = useReducedMotion();
   const theme = useTheme();
@@ -220,6 +230,7 @@ export function StorefrontHero({ catalog, country, search, onSearch, onSubmitSea
             onChangeText={onSearch}
             onSubmit={onSubmitSearch}
             onOpen={onOpen}
+            onFocusAt={onSearchFocus}
             large
           />
         </Animated.View>
@@ -292,12 +303,28 @@ type MerchantSearchProps = {
   onChangeText: (text: string) => void;
   onSubmit: () => void;
   onOpen: (merchant: Merchant) => void;
+  onFocusAt?: (windowY: number) => void;
   large?: boolean;
 };
 
-export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen, large = false }: MerchantSearchProps) {
+export function MerchantSearch({
+  country,
+  value,
+  onChangeText,
+  onSubmit,
+  onOpen,
+  onFocusAt,
+  large = false,
+}: MerchantSearchProps) {
   const found = useSearchResults(country, value);
+  const container = useRef<ComponentRef<typeof View>>(null);
   const [focused, setFocused] = useState(false);
+  const changeFocus = (next: boolean) => {
+    setFocused(next);
+    if (next && onFocusAt) {
+      container.current?.measureInWindow((_x, y) => onFocusAt(y));
+    }
+  };
   const [dismissed, setDismissed] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const query = value.trim();
@@ -345,13 +372,15 @@ export function MerchantSearch({ country, value, onChangeText, onSubmit, onOpen,
   };
 
   return (
-    <View style={[styles.merchantSearch, large && styles.merchantSearchLarge, open && styles.merchantSearchOpen]}>
+    <View
+      ref={container}
+      style={[styles.merchantSearch, large && styles.merchantSearchLarge, open && styles.merchantSearchOpen]}>
       <SearchBar
         value={value}
         onChangeText={change}
         onSubmit={submit}
         onKeyPress={moveHighlight}
-        onFocusChange={setFocused}
+        onFocusChange={changeFocus}
         expanded={open}
         activeOption={open && highlight >= 0 ? SearchOptions.optionId(highlight) : undefined}
         large={large}
@@ -420,7 +449,12 @@ function SearchSuggestions({ merchants, highlight, onHighlight, onPick }: Sugges
       entering={FadeIn.duration(Motion.feedback)}
       id={SearchOptions.listId}
       {...(Platform.OS === 'web' ? SearchOptions.listRole : {})}
-      style={[styles.suggestions, Elevation.raised, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      style={[
+        styles.suggestions,
+        Platform.OS === 'web' && styles.suggestionsOverlay,
+        Elevation.raised,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+      ]}>
       {merchants.map((merchant, index) => (
         <Pressable
           key={merchant.id}
@@ -1015,11 +1049,13 @@ const styles = StyleSheet.create({
   merchantSearchOpen: {
     zIndex: 20,
   },
-  suggestions: {
+  suggestionsOverlay: {
     position: 'absolute',
     top: '100%',
     left: 0,
     right: 0,
+  },
+  suggestions: {
     marginTop: Spacing.two,
     borderWidth: 1,
     borderRadius: Radius.large,
