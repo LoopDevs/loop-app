@@ -34,6 +34,18 @@ export const errorReporting = {
     }
   },
 
+  reportTiming(name: string, timings: Record<string, string>): void {
+    if (!dsn) {
+      return;
+    }
+    Sentry.withScope((scope) => {
+      scope.setLevel('info');
+      scope.setFingerprint([name]);
+      scope.setTags(timings);
+      Sentry.captureMessage(name);
+    });
+  },
+
   reportError(error: unknown, context: string): boolean {
     if (!dsn || !ReportableError.isAnomaly(error)) {
       return false;
