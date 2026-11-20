@@ -19,6 +19,8 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
+import { RedeemCapture, type RedeemCaptureStage } from '@/ops/redeem-capture';
+import { RedeemCaptureFolder } from '@/ops/redeem-capture-folder';
 import { RedeemTiming } from '@/ops/redeem-timing';
 
 const saveFailedMessage = "Couldn't save the card details. Copy them from the page instead.";
@@ -42,8 +44,36 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
   const [progress, setProgress] = useState(0);
   const pageBack = useRef<(() => void) | null>(null);
   const canGoBack = useRef(false);
-  const holdPage = (page: { goBack(): void } | null): void => {
+  const pageInject = useRef<((script: string) => void) | null>(null);
+  const captures = useRef(0);
+  const holdPage = (page: { goBack(): void; injectJavaScript(script: string): void } | null): void => {
     pageBack.current = page ? () => page.goBack() : null;
+    pageInject.current = page ? (script) => page.injectJavaScript(script) : null;
+  };
+  const capture = (stage: RedeemCaptureStage) => {
+    if (RedeemCapture.enabled) {
+      pageInject.current?.(RedeemCapture.script(stage));
+    }
+  };
+  const saveCapture = async (pageUrl: string, data: string): Promise<boolean> => {
+    const captured = RedeemCapture.enabled ? RedeemCapture.read(data) : null;
+    if (!captured) {
+      return false;
+    }
+    const host = RedeemTiming.hostOf(pageUrl);
+    captures.current += 1;
+    try {
+      await RedeemCaptureFolder.save(
+        RedeemCapture.fileName(host, captured, captures.current),
+        RedeemCapture.document(host, giftCard.merchantName, captured),
+      );
+      if (captured.stage === 'asked') {
+        toast('Page saved');
+      }
+    } catch {
+      toast("Couldn't save the page");
+    }
+    return true;
   };
   const goBackOrClose = () => {
     if (canGoBack.current) {
@@ -83,6 +113,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
     }
     saving.current = true;
     timing.mark('read');
+    capture('read');
     try {
       const saved = await ctx.saveGiftCardCode(giftCard.id, details.number, details.pin);
       haptics.success();
@@ -110,7 +141,11 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
       page.settle();
       return;
     }
-    void readMessage({ url: nativeEvent.url, data: nativeEvent.data });
+    void saveCapture(nativeEvent.url, nativeEvent.data).then((captured) => {
+      if (!captured) {
+        void readMessage({ url: nativeEvent.url, data: nativeEvent.data });
+      }
+    });
   };
 
   const land = (landedUrl: string) => {
@@ -144,7 +179,22 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
               </Text>
             )}
           </View>
-          <View style={styles.close} />
+          {RedeemCapture.enabled ? (
+            <Pressable
+              onPress={() => capture('asked')}
+              hitSlop={12}
+              style={styles.close}
+              accessibilityRole="button"
+              accessibilityLabel="Save page">
+              <SymbolView
+                name={{ ios: 'square.and.arrow.down', android: 'download', web: 'south' }}
+                size={20}
+                tintColor={theme.text}
+              />
+            </Pressable>
+          ) : (
+            <View style={styles.close} />
+          )}
         </View>
         <View style={[styles.track, { backgroundColor: theme.border }]}>
           {progress < 1 && <View style={[styles.bar, { backgroundColor: theme.accent, width: `${progress * 100}%` }]} />}
@@ -163,6 +213,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
           onMessage={onMessage}
           onLoadEnd={({ nativeEvent }) => {
             timing.mark('loaded');
+            capture('loaded');
             land(nativeEvent.url);
           }}
           onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent.progress)}

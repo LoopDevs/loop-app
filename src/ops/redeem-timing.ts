@@ -20,7 +20,7 @@ export class RedeemTiming {
     this.host = RedeemTiming.hostOf(url);
   }
 
-  private static hostOf(url: string): string {
+  static hostOf(url: string): string {
     try {
       return new URL(url).host;
     } catch {
