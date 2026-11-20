@@ -30,6 +30,7 @@ import {
 import { BankPayment } from '@/ctx/bank-payment';
 import { ctx, type GiftCard } from '@/ctx/client';
 import {
+  awaitsCode,
   cashbackState,
   cashbackStateLabel,
   giftCardStatusLabel,
@@ -47,6 +48,8 @@ import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { dates, money } from '@/money';
 import { stablePeg, type PaymentCurrency } from '@/stellar/network';
+import { errorReporting } from '@/ops/error-reporting';
+import { PurchaseTiming } from '@/ops/purchase-timing';
 
 const signInMessage = 'Sign in to see this order.';
 
@@ -127,7 +130,14 @@ export default function GiftCardScreen() {
           }
           if (active && !charged && BankPayment.charged(loaded)) {
             charged = true;
+            PurchaseTiming.mark('charged', id);
             haptics.success();
+          }
+        }
+        if (active && loaded.status === 'fulfilled' && !awaitsCode(loaded)) {
+          const timings = PurchaseTiming.finish(id);
+          if (timings) {
+            errorReporting.reportTiming(PurchaseTiming.reportName, timings);
           }
         }
       } catch (error) {
