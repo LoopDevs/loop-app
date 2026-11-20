@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
@@ -19,6 +19,7 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
+import { RedeemTiming } from '@/ops/redeem-timing';
 
 const saveFailedMessage = "Couldn't save the card details. Copy them from the page instead.";
 const maxSaveAttempts = 3;
@@ -53,6 +54,17 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
   };
   const awaitingCode = !giftCard.number && !giftCard.pin;
   const [page] = useState(() => new RedeemPage(url));
+  const [timing] = useState(() => new RedeemTiming(url, giftCard.merchantName));
+  const finishTiming = useCallback(
+    (outcome: 'saved' | 'closed') => {
+      const timings = timing.finish(outcome);
+      if (timings) {
+        errorReporting.reportTiming(RedeemTiming.reportName, timings);
+      }
+    },
+    [timing],
+  );
+  useEffect(() => () => finishTiming('closed'), [finishTiming]);
 
   const heldMessage = useRef<PageMessage | null>(null);
 
@@ -70,14 +82,17 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
       return;
     }
     saving.current = true;
+    timing.mark('read');
     try {
       const saved = await ctx.saveGiftCardCode(giftCard.id, details.number, details.pin);
       haptics.success();
+      finishTiming('saved');
       onSaved(saved);
     } catch (error) {
       const stored = await ctx.giftCard(giftCard.id).catch(() => null);
       if (stored && (stored.number || stored.pin)) {
         haptics.success();
+        finishTiming('saved');
         onSaved(stored);
         return;
       }
@@ -146,7 +161,10 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
           injectedJavaScriptBeforeContentLoaded={typedFieldsScript}
           onTouchStart={() => page.settle()}
           onMessage={onMessage}
-          onLoadEnd={({ nativeEvent }) => land(nativeEvent.url)}
+          onLoadEnd={({ nativeEvent }) => {
+            timing.mark('loaded');
+            land(nativeEvent.url);
+          }}
           onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent.progress)}
           startInLoadingState
           renderLoading={() => (

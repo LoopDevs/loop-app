@@ -1,17 +1,19 @@
+import { StageTimer, type TimingReport } from './stage-timer.ts';
+
 export const purchaseStages = ['ordered', 'atBank', 'backFromBank', 'approved', 'charged', 'delivered'] as const;
 
 export type PurchaseStage = (typeof purchaseStages)[number];
-
-export type PurchaseTimingReport = Record<string, string>;
 
 export class PurchaseTiming {
   static readonly reportName = 'Bank purchase timing';
   private static current: PurchaseTiming | null = null;
 
   private orderId: string | null = null;
-  private readonly marks = new Map<PurchaseStage, number>();
+  private readonly timer: StageTimer<PurchaseStage>;
 
-  private constructor(private readonly startedAt: number) {}
+  private constructor(startedAt: number) {
+    this.timer = new StageTimer('purchase', purchaseStages, startedAt);
+  }
 
   static start(now = Date.now()): void {
     PurchaseTiming.current = new PurchaseTiming(now);
@@ -25,39 +27,24 @@ export class PurchaseTiming {
     const timing = PurchaseTiming.current;
     if (timing && timing.orderId === null) {
       timing.orderId = orderId;
-      timing.marks.set('ordered', now);
+      timing.timer.mark('ordered', now);
     }
   }
 
   static mark(stage: PurchaseStage, orderId: string, now = Date.now()): void {
     const timing = PurchaseTiming.current;
-    if (timing && timing.orderId === orderId && !timing.marks.has(stage)) {
-      timing.marks.set(stage, now);
+    if (timing && timing.orderId === orderId) {
+      timing.timer.mark(stage, now);
     }
   }
 
-  static finish(orderId: string, now = Date.now()): PurchaseTimingReport | null {
+  static finish(orderId: string, now = Date.now()): TimingReport | null {
     const timing = PurchaseTiming.current;
     if (!timing || timing.orderId !== orderId) {
       return null;
     }
-    timing.marks.set('delivered', timing.marks.get('delivered') ?? now);
+    timing.timer.mark('delivered', now);
     PurchaseTiming.current = null;
-    return timing.report();
-  }
-
-  private report(): PurchaseTimingReport {
-    const report: PurchaseTimingReport = {};
-    let previous = this.startedAt;
-    for (const stage of purchaseStages) {
-      const at = this.marks.get(stage);
-      if (at === undefined) {
-        continue;
-      }
-      report[`purchase.${stage}_ms`] = String(at - previous);
-      previous = at;
-    }
-    report['purchase.total_ms'] = String(previous - this.startedAt);
-    return report;
+    return timing.timer.report();
   }
 }
