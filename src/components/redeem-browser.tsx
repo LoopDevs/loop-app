@@ -187,7 +187,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
               accessibilityRole="button"
               accessibilityLabel="Save page">
               <SymbolView
-                name={{ ios: 'square.and.arrow.down', android: 'download', web: 'download' }}
+                name={{ ios: 'square.and.arrow.down', android: 'download', web: 'south' }}
                 size={20}
                 tintColor={theme.text}
               />
