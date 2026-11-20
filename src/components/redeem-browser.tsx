@@ -90,6 +90,7 @@ export function RedeemBrowser({ giftCard, url, onSaved, onClose }: RedeemBrowser
       const timings = timing.finish(outcome);
       if (timings) {
         errorReporting.reportTiming(RedeemTiming.reportName, timings);
+        void RedeemCaptureFolder.saveTiming(RedeemTiming.reportName, timings);
       }
     },
     [timing],

@@ -47,6 +47,13 @@ test('a capture message is read only with a page and a known stage', () => {
   assert.equal(RedeemCapture.read('not json'), null);
 });
 
+test('a timing file is named by time and report', () => {
+  assert.equal(
+    RedeemCapture.timingFileName('Bank purchase timing', Date.parse('2026-11-20T10:11:12.345Z')),
+    '2026-11-20T10-11-12-345Z-bank-purchase-timing.json',
+  );
+});
+
 test('a saved page is named by time, host, order and stage and carries a masked body', () => {
   const page = { stage: 'loaded' as const, html: '<p>PIN 4821</p>' };
   assert.equal(
