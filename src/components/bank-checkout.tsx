@@ -25,6 +25,7 @@ import { useNow } from '@/hooks/use-now';
 import { useTheme } from '@/hooks/use-theme';
 import { haptics } from '@/native/haptics';
 import { errorReporting } from '@/ops/error-reporting';
+import { PurchaseTiming } from '@/ops/purchase-timing';
 import { units } from '@/stellar/units';
 import { strings } from '@/strings';
 
@@ -123,6 +124,9 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
   const choosingBank = busy && phase?.viaPicker === true;
   const payingWithBank = busy && !choosingBank;
   const busyLabel = (opening: string) => {
+    if (process.env.EXPO_OS === 'android' && phase && phase.step !== 'ordering') {
+      return BankPayment.checkingLabel;
+    }
     switch (phase?.step) {
       case 'opening':
         return phase.bank && phase.viaPicker ? `Paying with ${phase.bank}…` : opening;
@@ -131,7 +135,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
       case 'atBank':
         return `Approve in ${phase.bank ?? bankName ?? 'your banking app'}…`;
       case 'confirming':
-        return 'Confirming payment…';
+        return BankPayment.checkingLabel;
       default:
         return 'Setting up…';
     }
@@ -229,7 +233,16 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
     const token = BankPayment.linkToken(giftCard);
     const link = token ? null : BankPayment.openLink(giftCard);
     if (token && process.env.EXPO_OS !== 'web') {
-      const outcome = await BankLink.present(token, advance).catch((error: unknown) => {
+      const follow = (progress: BankLinkProgress) => {
+        if (progress.step === 'atBank') {
+          PurchaseTiming.mark('atBank', giftCard.id);
+        }
+        if (progress.step === 'backFromBank' || progress.step === 'confirming') {
+          PurchaseTiming.mark('backFromBank', giftCard.id);
+        }
+        advance(progress);
+      };
+      const outcome = await BankLink.present(token, follow).catch((error: unknown) => {
         errorReporting.reportError(error, `Bank approval could not open for order ${giftCard.id}`);
         return null;
       });
@@ -237,11 +250,13 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
         return;
       }
       if (outcome?.kind === 'approved') {
+        PurchaseTiming.mark('approved', giftCard.id);
         rememberBank(outcome.institution);
         showCard(giftCard);
         return;
       }
       if (outcome?.kind === 'left') {
+        PurchaseTiming.drop();
         if (outcome.errorCode) {
           errorReporting.reportMessage(`Bank approval left with ${outcome.errorCode} for order ${giftCard.id}`);
         }
@@ -284,6 +299,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
       setAmountError(null);
       reachedBank.current = false;
       setPhase({ step: 'ordering', viaPicker: differentBank.current, bank: null });
+      PurchaseTiming.start();
       try {
         let created: GiftCard;
         try {
@@ -316,6 +332,7 @@ export function BankCheckout({ merchant, profile: loadedProfile, activeOrder, on
           return;
         }
         setOrder(created);
+        PurchaseTiming.ordered(created.id);
         haptics.tap();
         await approve(created, approvalWindow);
       } finally {

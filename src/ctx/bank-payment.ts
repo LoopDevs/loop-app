@@ -53,6 +53,8 @@ export class BankPayment {
     return BankPayment.rails.some((rail) => rail.methods.includes(order.paymentMethod));
   }
 
+  static readonly checkingLabel = 'Checking payment…';
+
   static charged(order: Pick<GiftCard, 'paymentStatus'>): boolean {
     return order.paymentStatus === 'paid';
   }
