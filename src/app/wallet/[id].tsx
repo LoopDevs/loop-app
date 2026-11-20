@@ -50,6 +50,7 @@ import { dates, money } from '@/money';
 import { stablePeg, type PaymentCurrency } from '@/stellar/network';
 import { errorReporting } from '@/ops/error-reporting';
 import { PurchaseTiming } from '@/ops/purchase-timing';
+import { RedeemCaptureFolder } from '@/ops/redeem-capture-folder';
 
 const signInMessage = 'Sign in to see this order.';
 
@@ -138,6 +139,7 @@ export default function GiftCardScreen() {
           const timings = PurchaseTiming.finish(id);
           if (timings) {
             errorReporting.reportTiming(PurchaseTiming.reportName, timings);
+            void RedeemCaptureFolder.saveTiming(PurchaseTiming.reportName, timings);
           }
         }
       } catch (error) {

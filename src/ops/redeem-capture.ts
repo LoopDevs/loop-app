@@ -111,6 +111,11 @@ true;
     return `${new Date(now).toISOString().replace(/[:.]/g, '-')}-${safeHost}-${order}-${page.stage}.html`;
   }
 
+  static timingFileName(name: string, now = Date.now()): string {
+    const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `${new Date(now).toISOString().replace(/[:.]/g, '-')}-${safeName}.json`;
+  }
+
   static document(host: string, merchantName: string, page: RedeemCapturePage): string {
     const note = `<!-- loop redeem capture: host=${host} merchant=${merchantName.replace(/--/g, '-')} stage=${page.stage} -->`;
     return `${note}\n${RedeemCapture.mask(page.html)}`;
