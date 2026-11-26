@@ -46,6 +46,7 @@ const searchDelayMs = 300;
 const stripSize = 10;
 const recentOrdersScanned = 50;
 const staggeredTiles = 8;
+const enteredMerchantIds = new Set<string>();
 
 async function loadRecentlyBought(country: string): Promise<Merchant[]> {
   const { result: giftCards } = await ctx.giftCards({
@@ -408,12 +409,13 @@ export default function ShopScreen() {
         renderItem={({ item, index }) => (
           <Animated.View
             entering={
-              reduceMotion
+              reduceMotion || enteredMerchantIds.has(item.id)
                 ? undefined
                 : FadeInDown.duration(Motion.state)
                     .delay((index % merchantsPerPage < staggeredTiles ? index % merchantsPerPage : 0) * Motion.stagger)
                     .easing(Motion.easeOut)
             }
+            onLayout={() => enteredMerchantIds.add(item.id)}
             style={[styles.cell, { maxWidth: `${100 / cardColumns}%` }]}>
             <MerchantCard merchant={item} onPress={() => openMerchant(item)} favourite={favouriteOf(item)} />
           </Animated.View>

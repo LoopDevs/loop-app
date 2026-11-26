@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+import { Image, type ImageStyle } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -59,6 +59,29 @@ export function MerchantCard({ merchant, onPress, favourite }: CardProps) {
   );
 }
 
+const shownImageUrls = new Set<string>();
+
+type MerchantImageProps = {
+  url: string;
+  style: ImageStyle;
+  onError?: () => void;
+};
+
+function MerchantImage({ url, style, onError }: MerchantImageProps) {
+  return (
+    <Image
+      source={{ uri: url }}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      transition={shownImageUrls.has(url) ? 0 : Motion.state}
+      style={style}
+      accessible={false}
+      onLoad={() => shownImageUrls.add(url)}
+      onError={onError}
+    />
+  );
+}
+
 type CoverProps = {
   merchant: Merchant;
   size: CoverSize;
@@ -78,13 +101,7 @@ export function MerchantCover({ merchant, size }: CoverProps) {
           { backgroundColor: merchant.cardImageUrl ? theme.backgroundSelected : tint },
         ]}>
         {merchant.cardImageUrl && (
-          <Image
-            source={{ uri: merchant.cardImageUrl }}
-            contentFit="cover"
-            transition={Motion.state}
-            style={StyleSheet.absoluteFill}
-            accessible={false}
-          />
+          <MerchantImage url={merchant.cardImageUrl} style={StyleSheet.absoluteFill} />
         )}
       </View>
       <CashbackPill merchant={merchant} />
@@ -102,12 +119,9 @@ export function MerchantCover({ merchant, size }: CoverProps) {
           },
         ]}>
         {merchant.logoUrl && merchant.logoUrl !== failedLogoUrl ? (
-          <Image
-            source={{ uri: merchant.logoUrl }}
-            contentFit="cover"
-            transition={Motion.state}
+          <MerchantImage
+            url={merchant.logoUrl}
             style={styles.badgeImage}
-            accessible={false}
             onError={() => setFailedLogoUrl(merchant.logoUrl ?? null)}
           />
         ) : (
