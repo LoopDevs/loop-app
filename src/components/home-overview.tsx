@@ -17,7 +17,6 @@ import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { dates, money } from '@/money';
 import { stablePeg, type PaymentCurrency } from '@/stellar/network';
-import { units } from '@/stellar/units';
 import { haptics } from '@/native/haptics';
 import type { SavingsHolding } from '@/wallet/holdings';
 
@@ -132,12 +131,11 @@ function IconDisc({ icon }: { icon: SymbolViewProps['name'] }) {
 
 type SavingsCardProps = {
   view: HoldingsView | null;
-  onWithdraw: () => void;
-  withdrawDisabled: boolean;
-  onCashback: () => void;
+  onCashOut: () => void;
+  onShop: () => void;
 };
 
-export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: SavingsCardProps) {
+export function SavingsCard({ view, onCashOut, onShop }: SavingsCardProps) {
   if (!view) {
     return (
       <OverviewCard title="Savings">
@@ -147,39 +145,21 @@ export function SavingsCard({ view, onWithdraw, withdrawDisabled, onCashback }: 
   }
   const { holdings, stable } = view;
   const savings = holdings.savingsHoldings();
-  const onTheWay = stable ? holdings.onTheWayIn(stable) : null;
   return (
     <>
-      <SavingsOverview
-        savings={savings}
-        onTheWay={onTheWay}
-        stable={stable}
-        onWithdraw={onWithdraw}
-        withdrawDisabled={withdrawDisabled}
-        onCashback={onCashback}
-      />
-      {savings.length === 0 && <SavingsPromo onPress={onCashback} />}
+      <SavingsOverview savings={savings} stable={stable} onCashOut={onCashOut} />
+      {savings.length === 0 && <SavingsPromo onPress={onShop} />}
     </>
   );
 }
 
 type SavingsOverviewProps = {
   savings: SavingsHolding[];
-  onTheWay: bigint | null;
   stable: HoldingsView['stable'];
-  onWithdraw: () => void;
-  withdrawDisabled: boolean;
-  onCashback: () => void;
+  onCashOut: () => void;
 };
 
-function SavingsOverview({
-  savings,
-  onTheWay,
-  stable,
-  onWithdraw,
-  withdrawDisabled,
-  onCashback,
-}: SavingsOverviewProps) {
+function SavingsOverview({ savings, stable, onCashOut }: SavingsOverviewProps) {
   const theme = useTheme();
   const leaf = (
     <Disc ground={theme.accent}>
@@ -192,13 +172,12 @@ function SavingsOverview({
       accessory={
         savings.length > 0 ? (
           <PressScale
-            onPress={onWithdraw}
-            disabled={withdrawDisabled}
+            onPress={onCashOut}
             accessibilityRole="button"
-            accessibilityLabel="Withdraw savings"
-            style={[styles.textButton, withdrawDisabled && styles.disabled]}>
+            accessibilityLabel="Cash out to bank"
+            style={styles.textButton}>
             <ThemedText type="smallBold" themeColor="accent">
-              Withdraw
+              Cash out
             </ThemedText>
           </PressScale>
         ) : null
@@ -220,16 +199,6 @@ function SavingsOverview({
           amount={money.token(amount, currency)}
         />
       ))}
-      {onTheWay !== null && onTheWay > 0n && stable && (
-        <MoneyRow
-          leading={<IconDisc icon={{ ios: 'clock', android: 'schedule', web: 'schedule' }} />}
-          label="Cashback on the way"
-          detail="Counted in your total balance"
-          amount={money.ctx(units.format(onTheWay, units.decimals), stable)}
-          onPress={onCashback}
-          accessibilityHint="Shows where your cashback goes"
-        />
-      )}
     </OverviewCard>
   );
 }
@@ -321,10 +290,10 @@ function SavingsPromo({ onPress }: { onPress: () => void }) {
             onPress();
           }}
           accessibilityRole="button"
-          accessibilityLabel="See how savings work"
+          accessibilityLabel="Shop gift cards"
           style={[styles.promoButton, { backgroundColor: theme.backgroundSelected }]}>
           <Text style={[styles.promoButtonLabel, { color: theme.text }]} maxFontSizeMultiplier={1.3}>
-            See how it works
+            Shop gift cards
           </Text>
         </PressScale>
       </View>

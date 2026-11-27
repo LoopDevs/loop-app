@@ -140,33 +140,22 @@ function destinationProfile(stableCurrency: string | undefined, cashbackDestinat
   return Profile.fromMe({ user: { id: 'u1', stableCurrency, cashbackDestination }, company });
 }
 
-test('a user whose cashback currency savings takes can choose either destination', () => {
-  assert.deepEqual(destinationProfile('XLM.USDC', 'account').cashbackDestinations(), ['account', 'savings']);
+test('a user whose cashback currency savings takes is switched to savings', () => {
+  assert.deepEqual(destinationProfile('XLM.USDC', 'account').savingsUpdate(), { cashbackDestination: 'savings' });
+  assert.deepEqual(destinationProfile('XLM.USDC').savingsUpdate(), { cashbackDestination: 'savings' });
 });
 
-test('a user whose cashback currency savings does not take sees account only', () => {
-  for (const stableCurrency of ['XLM.GBPLOOP', 'XLM.EURC', '', undefined]) {
-    const profile = destinationProfile(stableCurrency, 'account');
-    assert.deepEqual(profile.cashbackDestinations(), ['account'], String(stableCurrency));
-    assert.equal(profile.destinationUpdate('savings'), null);
+test('a user whose cashback currency savings does not take is switched to account', () => {
+  for (const stableCurrency of ['XLM.EURC', 'XLM', undefined]) {
+    const update = destinationProfile(stableCurrency, 'savings').savingsUpdate();
+    assert.deepEqual(update, { cashbackDestination: 'account' }, String(stableCurrency));
   }
 });
 
-test('a saver in a currency savings does not take can still leave savings', () => {
-  const profile = destinationProfile('XLM.GBPLOOP', 'savings');
-  assert.deepEqual(profile.cashbackDestinations(), ['account', 'savings']);
-  assert.deepEqual(profile.destinationUpdate('account'), { cashbackDestination: 'account' });
-});
-
-test('choosing the other destination sends only the destination', () => {
-  assert.deepEqual(destinationProfile('XLM.USDC', 'account').destinationUpdate('savings'), {
-    cashbackDestination: 'savings',
-  });
-});
-
-test('choosing the active destination sends nothing', () => {
-  assert.equal(destinationProfile('XLM.USDC', 'savings').destinationUpdate('savings'), null);
-  assert.equal(destinationProfile('XLM.USDC', 'account').destinationUpdate('account'), null);
+test('a user already on the right destination is left as is', () => {
+  assert.equal(destinationProfile('XLM.USDC', 'savings').savingsUpdate(), null);
+  assert.equal(destinationProfile('XLM.EURC', 'account').savingsUpdate(), null);
+  assert.equal(destinationProfile(undefined).savingsUpdate(), null);
 });
 
 test('a missing destination reads as account', () => {
@@ -254,7 +243,6 @@ test('an update applies locally and keeps the rest of the user', () => {
   assert.equal(updated.email, 'a@b.co');
   assert.equal(updated.stableCurrency, 'XLM.USDC');
   assert.equal(updated.signInProviderLabel(), 'Signed in with Apple');
-  assert.deepEqual(updated.cashbackDestinations(), profile.cashbackDestinations());
   assert.equal(profile.savesCashback(), false);
 });
 

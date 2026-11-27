@@ -1,5 +1,4 @@
 import type { SmartWalletIntent } from '../ctx/client.ts';
-import { normalizeAmount } from '../ctx/amount-input.ts';
 import { landingClosed } from '../ctx/payment-state.ts';
 import { money } from '../money.ts';
 import { network, type PaymentCurrency } from '../stellar/network.ts';
@@ -129,6 +128,7 @@ export class Savings {
   }
   static readonly depositCurrency: PaymentCurrency = 'XLM.USDC';
   static readonly oneCent = units.parse('0.01');
+  static readonly moveMinimum = units.parse('1');
   static readonly maxYearlyRatePercent = 5;
   static readonly riskShort = 'Its value can go down as well as up';
   static readonly riskNote =
@@ -155,10 +155,6 @@ export class Savings {
     return vault;
   }
 
-  static depositCurrencyFor(stable: string): PaymentCurrency {
-    return Savings.takes(stable) ? stable : Savings.depositCurrency;
-  }
-
   static depositIntent(
     currency: PaymentCurrency,
     amount: bigint,
@@ -173,29 +169,9 @@ export class Savings {
     return { intent: 'vault_withdraw', currency, shares: units.format(shares, units.decimals) };
   }
 
-  static maxInput(inWallet: bigint): string {
-    return units.format(inWallet, 2);
-  }
-
-  static canMax(inWallet: bigint): boolean {
-    return inWallet >= Savings.oneCent;
-  }
-
-  static depositAmount(input: string, inWallet: bigint, max: bigint | null = null): bigint | null {
-    if (max !== null) {
-      return Savings.canMax(max) && max <= inWallet ? max : null;
-    }
-    const normalized = normalizeAmount(input);
-    if (normalized === null) {
-      return null;
-    }
-    let amount: bigint;
-    try {
-      amount = units.parse(normalized);
-    } catch {
-      return null;
-    }
-    return amount > 0n && amount <= inWallet ? amount : null;
+  static notSavedMessage(holdings: readonly { currency: PaymentCurrency; amount: bigint }[]): string {
+    const amounts = holdings.map(({ currency, amount }) => money.token(amount, currency)).join(' and ');
+    return `${amounts} of your money is not in savings yet.`;
   }
 
   static depositMessage(outcome: DepositOutcome, currency: PaymentCurrency, amount: bigint): string {

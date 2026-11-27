@@ -141,15 +141,9 @@ export class Profile {
     return this.cashbackDestination === 'savings';
   }
 
-  cashbackDestinations(): CashbackDestination[] {
-    return Savings.takes(this.stableCurrency) || this.savesCashback() ? ['account', 'savings'] : ['account'];
-  }
-
-  destinationUpdate(destination: CashbackDestination): UserUpdate | null {
-    if (destination === this.cashbackDestination || !this.cashbackDestinations().includes(destination)) {
-      return null;
-    }
-    return { cashbackDestination: destination };
+  savingsUpdate(): UserUpdate | null {
+    const destination: CashbackDestination = Savings.takes(this.stableCurrency) ? 'savings' : 'account';
+    return destination === this.cashbackDestination ? null : { cashbackDestination: destination };
   }
 
   bankUpdate(institution: BankInstitution | null): UserUpdate | null {

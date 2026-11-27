@@ -12,10 +12,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { BottomSheet } from '@/components/ui/bottom-sheet';
-import { Button, Field, Notice } from '@/components/ui/form';
+import { Button, Notice } from '@/components/ui/form';
 import { useScrimScroll } from '@/components/home-panel';
-import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { SavingsCard } from '@/components/home-overview';
 import { PageHeader } from '@/components/page-header';
 import { SavingsTicker } from '@/components/savings-ticker';
@@ -26,37 +24,23 @@ import { PageWidth } from '@/components/storefront';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ThemedText } from '@/components/ui/themed-text';
 import { ThemedView } from '@/components/ui/themed-view';
-import { useToast } from '@/components/ui/toast';
 import { FontFamily, Radius, ScrollEndInset, Spacing } from '@/constants/theme';
-import { normalizeAmount } from '@/ctx/amount-input';
 import { Rates } from '@/ctx/rates';
 import type { HoldingsView } from '@/hooks/use-holdings';
-import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
 import { usePageLayout } from '@/hooks/use-page-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useWallet } from '@/hooks/use-wallet';
 import { money } from '@/money';
-import { haptics } from '@/native/haptics';
-import { errorReporting } from '@/ops/error-reporting';
-import type { PaymentCurrency } from '@/stellar/network';
 import { units } from '@/stellar/units';
-import { Savings, SavingsRate, type DepositInput } from '@/wallet/savings';
-import { SavingsTopUp, type WithdrawAllOutcome } from '@/wallet/savings-top-up';
-import { WalletBlocked } from '@/wallet/smart-wallet';
-
-const quickAmounts = ['25', '50', '100'];
+import { Savings, SavingsRate } from '@/wallet/savings';
 
 export default function SavingsScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const toast = useToast();
   const { wide } = usePageLayout();
   const { openSignIn } = useSignIn();
-  const { state, wallet, view, refresh, reload, problem } = useWallet();
-  const { busy, message, setMessage, run } = useBusyAction();
+  const { state, view, refresh, reload, problem } = useWallet();
   const { scrollRef, onScroll, scrim } = useScrimScroll();
-  const [adding, setAdding] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const pullToRefresh = async () => {
@@ -67,117 +51,13 @@ export default function SavingsScreen() {
       setRefreshing(false);
     }
   };
-  const savings = view?.holdings.withdrawableSavings() ?? [];
-  const stable = view?.stable ?? Rates.usd;
-  const depositCurrency = Savings.depositCurrencyFor(stable);
-  const depositable = view?.holdings.inWallet(depositCurrency) ?? 0n;
-  const savingsHoldings = view?.holdings.savingsHoldings() ?? [];
-  const savingsBalance = savingsHoldings.length
-    ? savingsHoldings.map(({ amount, currency }) => money.token(amount, currency)).join(' and ')
-    : null;
-
-  const reloadIfBlocked = (error: unknown): never => {
-    if (error instanceof WalletBlocked) {
-      reload();
-    }
-    throw error;
-  };
-
-  const withdraw = () =>
-    run(async () => {
-      if (!wallet || savings.length === 0) {
-        return;
-      }
-      try {
-        let unfinished: WithdrawAllOutcome | null = null;
-        const moved: string[] = [];
-        const moving: string[] = [];
-        const stopped = () => SavingsTopUp.withdrawStoppedMessage(moved, moving);
-        for (const { currency, shares, value } of savings) {
-          let outcome: WithdrawAllOutcome;
-          try {
-            outcome = await SavingsTopUp.withdrawAll(
-              () => wallet.withdraw(currency, shares).catch(reloadIfBlocked),
-              wallet.vaultCall(),
-            );
-          } catch (error) {
-            if (moved.length === 0 && moving.length === 0) {
-              throw error;
-            }
-            errorReporting.reportError(error, 'Action');
-            haptics.error();
-            setMessage(stopped());
-            return;
-          }
-          if (outcome === 'failed') {
-            setMessage(moved.length || moving.length ? stopped() : SavingsTopUp.withdrawAllMessage(outcome));
-            return;
-          }
-          if (outcome === 'success') {
-            moved.push(money.token(value, currency));
-          } else {
-            moving.push(money.token(value, currency));
-            unfinished = outcome;
-          }
-        }
-        if (unfinished) {
-          setMessage(moved.length ? SavingsTopUp.withdrawMovingMessage(moved, moving) : SavingsTopUp.withdrawAllMessage(unfinished));
-          return;
-        }
-        haptics.success();
-        toast(SavingsTopUp.withdrawAllMessage('success'));
-      } finally {
-        await refresh().catch((error: unknown) => errorReporting.reportError(error, 'Savings refresh'));
-      }
-    });
-
-  const deposit = (amount: bigint, input: DepositInput) =>
-    run(async () => {
-      if (!wallet) {
-        return;
-      }
-      const currency = depositCurrency;
-      const outcome = await Savings.sendDeposit(
-        () => wallet.deposit(currency, amount).catch(reloadIfBlocked),
-        wallet.vaultCall(),
-        input,
-      );
-      const refreshError = await refresh().then(
-        () => '',
-        (error: unknown) => errorMessage(error),
-      );
-      const text = Savings.depositMessage(outcome, currency, amount);
-      if (outcome === 'success' && !refreshError) {
-        haptics.success();
-        toast(text);
-        setAdding(false);
-        return;
-      }
-      setMessage(refreshError ? `${text}\n${refreshError}` : text);
-    });
-
-  const confirmWithdraw = () => {
-    setWithdrawing(false);
-    withdraw();
-  };
-
-  const addToSavings = () => {
-    if (state === 'signed-out') {
-      openSignIn('Sign in to start saving.');
-      return;
-    }
-    setAdding(true);
-  };
-
   return (
     <ThemedView style={styles.container}>
       <StatusBar style="dark" />
-      <KeyboardAvoid>
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        keyboardShouldPersistTaps="handled"
         refreshControl={
           state === 'ready' ? (
             <RefreshControl
@@ -223,9 +103,6 @@ export default function SavingsScreen() {
                 </ThemedText>
               </>
             )}
-            <View style={wide && styles.heroAction}>
-              <Button label="Add to savings" variant="primary" onPress={addToSavings} />
-            </View>
           </View>
 
           {state === 'setup' && (
@@ -248,9 +125,8 @@ export default function SavingsScreen() {
           {state === 'ready' && (
             <SavingsCard
               view={view}
-              onWithdraw={() => setWithdrawing(true)}
-              withdrawDisabled={busy || savings.length === 0}
-              onCashback={() => router.push('/wallet/cashback')}
+              onCashOut={() => router.push('/wallet/cash-out')}
+              onShop={() => router.navigate('/shop')}
             />
           )}
 
@@ -264,32 +140,12 @@ export default function SavingsScreen() {
             </View>
           )}
 
-          {message !== '' && <Notice message={message} />}
-
           {!wide && <SavingsFacts />}
           </SplitLayout>
         </PageWidth>
         <SiteFooter />
       </Animated.ScrollView>
-      </KeyboardAvoid>
       <Animated.View pointerEvents="none" style={scrim} />
-      <BottomSheet
-        open={adding}
-        onClose={() => setAdding(false)}
-        title="How much do you want to save?"
-        notice={message}>
-        <AddToSavings
-          currency={depositCurrency}
-          depositable={depositable}
-          busy={busy}
-          ready={state === 'ready'}
-          onDeposit={deposit}
-          onClose={() => setAdding(false)}
-        />
-      </BottomSheet>
-      <BottomSheet open={withdrawing} onClose={() => setWithdrawing(false)} title="Move savings to your balance">
-        <WithdrawSavings balance={savingsBalance} onConfirm={confirmWithdraw} onClose={() => setWithdrawing(false)} />
-      </BottomSheet>
     </ThemedView>
   );
 }
@@ -307,8 +163,8 @@ const savingsFacts = [
   },
   {
     icon: { ios: 'arrow.uturn.backward', android: 'replay', web: 'replay' },
-    title: 'Take it out any time',
-    body: 'Move your savings back to your balance whenever you like.',
+    title: 'Spend it or cash out any time',
+    body: 'Pay for gift cards from your savings, or cash out to your bank.',
   },
 ] as const;
 
@@ -381,106 +237,6 @@ function SavingsFacts() {
       </ThemedText>
       <Button label="Read the FAQ" variant="quiet" onPress={() => router.navigate('/faq')} />
     </View>
-  );
-}
-
-type AddToSavingsProps = {
-  currency: PaymentCurrency;
-  depositable: bigint;
-  busy: boolean;
-  ready: boolean;
-  onDeposit: (amount: bigint, input: DepositInput) => void;
-  onClose: () => void;
-};
-
-function AddToSavings({ currency, depositable, busy, ready, onDeposit, onClose }: AddToSavingsProps) {
-  const [input, setInput] = useState('');
-  const [max, setMax] = useState<bigint | null>(null);
-  const amount = normalizeAmount(input);
-  const depositAmount = Savings.depositAmount(input, depositable, max);
-  const edit = (text: string) => {
-    setMax(null);
-    setInput(text);
-  };
-  const deposit = () => {
-    if (depositAmount === null) {
-      return;
-    }
-    const sentInput = input;
-    const sentMax = max;
-    onDeposit(depositAmount, {
-      clear: () => edit(''),
-      restore: () => {
-        setMax(sentMax);
-        setInput(sentInput);
-      },
-    });
-  };
-  return (
-    <>
-      <Field
-        label={money.amountLabel(currency)}
-        value={input}
-        onChangeText={edit}
-        keyboardType="decimal-pad"
-      />
-      <View style={styles.chips}>
-        {quickAmounts.map((quick) => (
-          <View key={quick} style={styles.chip}>
-            <Button
-              label={money.ctx(quick, currency)}
-              selected={max === null && amount === quick}
-              onPress={() => edit(quick)}
-            />
-          </View>
-        ))}
-        <View style={styles.chip}>
-          <Button
-            label="Max"
-            selected={max !== null}
-            onPress={() => {
-              setMax(depositable);
-              setInput(Savings.maxInput(depositable));
-            }}
-            disabled={!Savings.canMax(depositable)}
-          />
-        </View>
-      </View>
-      <ThemedText type="small" themeColor="textSecondary">
-        {ready
-          ? `You have ${money.token(depositable, currency)} in your balance to add.`
-          : 'Finish setting up Loop on Home to start saving.'}
-      </ThemedText>
-      <Button
-        label={busy ? 'Adding…' : 'Add to savings'}
-        variant="primary"
-        onPress={deposit}
-        disabled={busy || !ready || depositAmount === null}
-      />
-      <Button label="Close" variant="quiet" onPress={onClose} />
-    </>
-  );
-}
-
-function WithdrawSavings({
-  balance,
-  onConfirm,
-  onClose,
-}: {
-  balance: string | null;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <>
-      <ThemedText themeColor="textSecondary">
-        {balance
-          ? `${balance} goes back to your balance now and stops earning.`
-          : 'Your savings go back to your balance now and stop earning.'}
-      </ThemedText>
-      <Button label={balance ? `Move ${balance}` : 'Move savings'} variant="primary" onPress={onConfirm} />
-      <Button label="Cancel" variant="quiet" onPress={onClose} />
-    </>
   );
 }
 
@@ -600,21 +356,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: Spacing.one,
   },
-  heroAction: {
-    alignSelf: 'flex-start',
-    paddingTop: Spacing.two,
-  },
   card: {
     padding: Spacing.four,
     gap: Spacing.three,
     borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  chips: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  chip: {
-    flex: 1,
   },
 });

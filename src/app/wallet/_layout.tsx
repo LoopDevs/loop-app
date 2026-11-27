@@ -22,7 +22,6 @@ export default function WalletLayout() {
     <Stack>
       <Stack.Screen name="index" options={{ title: 'Wallet', headerShown: false }} />
       <Stack.Screen name="[id]" options={detailHeader} />
-      <Stack.Screen name="cashback" options={detailHeader} />
       <Stack.Screen name="cash-out" options={detailHeader} />
     </Stack>
   );

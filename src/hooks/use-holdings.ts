@@ -4,6 +4,7 @@ import type { Account } from '@/ctx/account';
 import { ctx } from '@/ctx/client';
 import { Rates } from '@/ctx/rates';
 import { errorMessage } from '@/hooks/use-busy-action';
+import { errorReporting } from '@/ops/error-reporting';
 import { network, offeredCurrencies } from '@/stellar/network';
 import { Holdings } from '@/wallet/holdings';
 import type { SmartWallet } from '@/wallet/smart-wallet';
@@ -14,6 +15,7 @@ const pricedCurrencies = new Set<string>([
 ]);
 
 const paidElsewhereProblem = 'Some of your cashback was paid somewhere other than this balance. Contact support.';
+const delayedCashbackProblem = 'Some of your cashback is delayed. Contact support.';
 
 export type HoldingsView = {
   holdings: Holdings;
@@ -26,6 +28,7 @@ type LoadedHoldings = { address: string; view: HoldingsView };
 
 let lastLoaded: LoadedHoldings | null = null;
 let sessionsEnded = 0;
+const destinationSent = new Set<string>();
 
 ctx.onSessionEnd(() => {
   sessionsEnded += 1;
@@ -48,18 +51,12 @@ export function useHoldings(wallet: SmartWallet | null) {
       setLoadedState(null);
       return;
     }
-    const [balances, fetchedAccount, profile, rates] = await Promise.all([
+    const [balances, account, profile, rates] = await Promise.all([
       wallet.balances(),
       ctx.account().catch((error: unknown) => new Error(errorMessage(error))),
       ctx.me().catch((error: unknown) => new Error(errorMessage(error))),
       Rates.fetch([...pricedCurrencies]),
     ]);
-    const account =
-      fetchedAccount instanceof Error
-        ? fetchedAccount
-        : await fetchedAccount
-            .withoutLandedPayouts(wallet.address, (txHash) => wallet.transactionLanded(txHash))
-            .catch((error: unknown) => new Error(errorMessage(error)));
     if (request !== latestRequest.current || session !== sessionsEnded) {
       return;
     }
@@ -67,23 +64,24 @@ export function useHoldings(wallet: SmartWallet | null) {
     const loadedAccount = account instanceof Error ? null : account;
     const loadedProfile = profile instanceof Error ? null : profile;
     const paidElsewhere = loadedAccount !== null && Holdings.paidElsewhere(loadedAccount, wallet.address);
+    const savingsUpdate = loadedProfile?.savingsUpdate();
+    if (loadedProfile && savingsUpdate && !destinationSent.has(loadedProfile.id)) {
+      destinationSent.add(loadedProfile.id);
+      ctx.updateUser(savingsUpdate).catch((error: unknown) => errorReporting.reportError(error, 'Cashback to savings'));
+    }
     setLoaded({
       address: wallet.address,
       view: {
-        holdings: new Holdings(
-          balances,
-          loadedAccount && loadedProfile
-            ? Holdings.onTheWayFrom(loadedAccount, wallet.address, loadedProfile)
-            : null,
-          rates,
-        ),
+        holdings: new Holdings(balances, rates),
         account: loadedAccount,
         stable: loadedProfile ? shownCurrency(loadedProfile.stableCurrency) : null,
         problem: failure
           ? `Couldn't load your cashback: ${failure.message}`
           : paidElsewhere
             ? paidElsewhereProblem
-            : '',
+            : loadedAccount?.hasDelayedCashback()
+              ? delayedCashbackProblem
+              : '',
       },
     });
   }, [wallet, setLoaded]);

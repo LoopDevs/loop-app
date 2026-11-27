@@ -18,6 +18,7 @@ import type { HoldingsView } from '@/hooks/use-holdings';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/money';
 import { units } from '@/stellar/units';
+import { Savings } from '@/wallet/savings';
 
 const scrimFadeDistance = 48;
 const nearEndDistance = 800;
@@ -111,7 +112,7 @@ function Balance({ view }: { view: HoldingsView | null }) {
   return (
     <View style={styles.balanceBlock}>
       <Text style={[styles.balanceLabel, { color: theme.textSecondary }]} maxFontSizeMultiplier={1.4}>
-        Total balance
+        {Savings.takes(stable) ? 'Savings' : 'Balance'}
       </Text>
       {formatted ? (
         <Odometer value={formatted} style={{ ...balanceType, color: theme.text }} />
@@ -145,14 +146,8 @@ function accountState(view: HoldingsView | null): string {
   if (problem !== '') {
     return problem;
   }
-  const format = (value: bigint) => (stable ? money.ctx(units.format(value, units.decimals), stable) : '');
-  const onTheWay = stable ? holdings.onTheWayIn(stable) : null;
-  if (onTheWay !== null && onTheWay > 0n) {
-    return `${format(onTheWay)} cashback on the way`;
-  }
-  const savings = holdings.savingsHoldings();
-  if (savings.length > 0) {
-    return `${savings.map(({ currency, amount }) => money.token(amount, currency)).join(' and ')} in savings`;
+  if (holdings.savingsHoldings().length > 0) {
+    return Savings.rateHeadline(stable);
   }
   return 'Pay with Loop and earn cashback on every gift card';
 }
