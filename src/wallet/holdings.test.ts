@@ -223,8 +223,8 @@ test('received cashback is grouped by currency', () => {
   ]);
 });
 
-test('money in the wallet that savings takes can move to savings from one cent', () => {
+test('money in the wallet that savings takes can move to savings from the move minimum', () => {
   const movable = holdings({ 'XLM.USDC': '2.5', 'XLM.EURC': '4', XLM: '10' }).movableToSavings();
   assert.deepEqual(movable, [{ currency: 'XLM.USDC', amount: units.parse('2.5') }]);
-  assert.deepEqual(holdings({ 'XLM.USDC': '0.0099999' }).movableToSavings(), []);
+  assert.deepEqual(holdings({ 'XLM.USDC': '0.9999999' }).movableToSavings(), []);
 });

@@ -28,6 +28,7 @@ type LoadedHoldings = { address: string; view: HoldingsView };
 
 let lastLoaded: LoadedHoldings | null = null;
 let sessionsEnded = 0;
+const destinationSent = new Set<string>();
 
 ctx.onSessionEnd(() => {
   sessionsEnded += 1;
@@ -64,7 +65,8 @@ export function useHoldings(wallet: SmartWallet | null) {
     const loadedProfile = profile instanceof Error ? null : profile;
     const paidElsewhere = loadedAccount !== null && Holdings.paidElsewhere(loadedAccount, wallet.address);
     const savingsUpdate = loadedProfile?.savingsUpdate();
-    if (savingsUpdate) {
+    if (loadedProfile && savingsUpdate && !destinationSent.has(loadedProfile.id)) {
+      destinationSent.add(loadedProfile.id);
       ctx.updateUser(savingsUpdate).catch((error: unknown) => errorReporting.reportError(error, 'Cashback to savings'));
     }
     setLoaded({

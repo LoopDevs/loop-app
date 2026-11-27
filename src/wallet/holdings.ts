@@ -60,7 +60,7 @@ export class Holdings {
 
   movableToSavings(): SavingsHolding[] {
     return this.balances.tokens
-      .filter(({ token, amount }) => Savings.takes(token.currency) && amount >= Savings.oneCent)
+      .filter(({ token, amount }) => Savings.takes(token.currency) && amount >= Savings.moveMinimum)
       .map(({ token, amount }) => ({ currency: token.currency, amount }));
   }
 

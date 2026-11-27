@@ -411,12 +411,21 @@ export function GiftCardPurchase({ merchant, wallet, profile, onClose }: Props) 
       if (recorded) {
         return { state: recorded, resumed: true };
       }
-      if (topUpPrice !== null && savingsCurrency !== null) {
+      let fromSavings = topUpPrice;
+      if (fromSavings === null && savingsCurrency !== null && coverage?.kind === 'wallet') {
+        const price = orderPrice(giftCard);
+        const { tokens } = await wallet.balances();
+        const inWallet = tokens.find(({ token }) => token.currency === savingsCurrency)?.amount ?? 0n;
+        if (price !== null && inWallet < price) {
+          fromSavings = price;
+        }
+      }
+      if (fromSavings !== null && savingsCurrency !== null) {
         const settled = OneTapBuy.beforeTopUp(await ctx.giftCard(giftCard.id));
         if (settled) {
           return settled;
         }
-        const stopped = await topUpFromSavings(giftCard, savingsCurrency, topUpPrice);
+        const stopped = await topUpFromSavings(giftCard, savingsCurrency, fromSavings);
         if (stopped) {
           return { state: stopped, resumed: false };
         }

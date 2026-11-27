@@ -128,6 +128,7 @@ export class Savings {
   }
   static readonly depositCurrency: PaymentCurrency = 'XLM.USDC';
   static readonly oneCent = units.parse('0.01');
+  static readonly moveMinimum = units.parse('1');
   static readonly maxYearlyRatePercent = 5;
   static readonly riskShort = 'Its value can go down as well as up';
   static readonly riskNote =

@@ -142,7 +142,8 @@ export class Profile {
   }
 
   savingsUpdate(): UserUpdate | null {
-    return Savings.takes(this.stableCurrency) && !this.savesCashback() ? { cashbackDestination: 'savings' } : null;
+    const destination: CashbackDestination = Savings.takes(this.stableCurrency) ? 'savings' : 'account';
+    return destination === this.cashbackDestination ? null : { cashbackDestination: destination };
   }
 
   bankUpdate(institution: BankInstitution | null): UserUpdate | null {

@@ -42,6 +42,7 @@ import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
+import { useToast } from '@/components/ui/toast';
 import { paymentLock } from '@/ctx/payment-lock';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
@@ -72,6 +73,7 @@ export default function HomeScreen() {
   const [profileUnread, setProfileUnread] = useState(false);
   const [sessionRead, setSessionRead] = useState(false);
   const { view, refresh } = useHoldings(wallet);
+  const toast = useToast();
   const { busy, message, run, load } = useBusyAction();
   const [loadError, setLoadError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -218,8 +220,16 @@ export default function HomeScreen() {
             if (outcome !== 'success') {
               throw new Error(Savings.depositMessage(outcome, currency, amount));
             }
+            toast(Savings.depositMessage(outcome, currency, amount));
           }
         });
+      } catch (error) {
+        if (error instanceof WalletBlocked) {
+          setBlockedWallet(error.wallet);
+          setScreen(error instanceof DeviceSetupNeeded ? 'unlinked-device' : 'confirm-identity');
+          return;
+        }
+        throw error;
       } finally {
         await refresh().catch((error: unknown) => errorReporting.reportError(error, 'Home refresh'));
       }

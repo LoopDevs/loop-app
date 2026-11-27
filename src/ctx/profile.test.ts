@@ -145,11 +145,17 @@ test('a user whose cashback currency savings takes is switched to savings', () =
   assert.deepEqual(destinationProfile('XLM.USDC').savingsUpdate(), { cashbackDestination: 'savings' });
 });
 
-test('a saver, or a user whose cashback currency savings does not take, is left as is', () => {
-  assert.equal(destinationProfile('XLM.USDC', 'savings').savingsUpdate(), null);
+test('a user whose cashback currency savings does not take is switched to account', () => {
   for (const stableCurrency of ['XLM.EURC', 'XLM', undefined]) {
-    assert.equal(destinationProfile(stableCurrency, 'account').savingsUpdate(), null, String(stableCurrency));
+    const update = destinationProfile(stableCurrency, 'savings').savingsUpdate();
+    assert.deepEqual(update, { cashbackDestination: 'account' }, String(stableCurrency));
   }
+});
+
+test('a user already on the right destination is left as is', () => {
+  assert.equal(destinationProfile('XLM.USDC', 'savings').savingsUpdate(), null);
+  assert.equal(destinationProfile('XLM.EURC', 'account').savingsUpdate(), null);
+  assert.equal(destinationProfile(undefined).savingsUpdate(), null);
 });
 
 test('a missing destination reads as account', () => {

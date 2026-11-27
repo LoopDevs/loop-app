@@ -79,7 +79,7 @@ export function WalletSummary() {
           </ThemedText>
         )}
         <ThemedText type="small" themeColor="textSecondary">
-          Ready to spend on gift cards
+          Spend it on gift cards or cash out
         </ThemedText>
         <Button label="Cash out to bank" onPress={() => router.push('/wallet/cash-out')} />
       </View>
