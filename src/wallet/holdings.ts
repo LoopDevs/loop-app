@@ -47,7 +47,7 @@ export class Holdings {
 
   savings(currency: string): bigint {
     const saved = this.balances.savings.find((balance) => balance.currency === currency);
-    return saved ? Holdings.floorOf(saved.value) : 0n;
+    return saved?.value ?? 0n;
   }
 
   withdrawableSavings(): SavingsBalance[] {

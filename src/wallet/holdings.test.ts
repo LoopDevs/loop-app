@@ -73,18 +73,17 @@ test('USD and USDC are priced at 1 with no fetched rates', () => {
   assert.equal(holdings({}).valueIn(units.parse('10'), 'XLM.EURC', 'USD'), units.parse('11.212'));
 });
 
-test('spendable USDC adds the savings withdrawal floor to the wallet balance', () => {
+test('spendable USDC adds the full savings value to the wallet balance', () => {
   const held = holdings({ 'XLM.USDC': '5', XLM: '20' }, { savings: { 'XLM.USDC': '10' } });
-  assert.equal(held.spendable('XLM.USDC'), units.parse('5') + Holdings.floorOf(units.parse('10')));
-  assert.equal(held.spendable('XLM.USDC'), units.parse('14.9'));
+  assert.equal(held.spendable('XLM.USDC'), units.parse('15'));
   assert.equal(held.spendable('XLM'), units.parse('20'));
   assert.equal(held.spendable('XLM.EURC'), 0n);
 });
 
-test('savings holdings list each vault at its full value while spending keeps the withdrawal floor', () => {
+test('savings holdings and spending both count each vault at its full value', () => {
   const held = holdings({}, { savings: { 'XLM.USDC': '10' } });
   assert.deepEqual(held.savingsHoldings(), [{ currency: 'XLM.USDC', amount: units.parse('10') }]);
-  assert.equal(held.savings('XLM.USDC'), Holdings.floorOf(units.parse('10')));
+  assert.equal(held.savings('XLM.USDC'), units.parse('10'));
   assert.deepEqual(holdings({}).savingsHoldings(), []);
   assert.equal(holdings({}).savings('XLM.USDC'), 0n);
 });
@@ -93,8 +92,8 @@ test('each savings currency counts only its own vault', () => {
   network.vaults['XLM.GBPLOOP'] = 'CGBPLOOPVAULT';
   try {
     const held = holdings({ 'XLM.USDC': '5', 'XLM.GBPLOOP': '1' }, { savings: { 'XLM.USDC': '10', 'XLM.GBPLOOP': '2' } });
-    assert.equal(held.spendable('XLM.USDC'), units.parse('5') + Holdings.floorOf(units.parse('10')));
-    assert.equal(held.spendable('XLM.GBPLOOP'), units.parse('1') + Holdings.floorOf(units.parse('2')));
+    assert.equal(held.spendable('XLM.USDC'), units.parse('15'));
+    assert.equal(held.spendable('XLM.GBPLOOP'), units.parse('3'));
     assert.deepEqual(held.coverage('XLM.GBPLOOP', units.parse('2.5')), {
       kind: 'savings',
       fromSavings: units.parse('1.5'),

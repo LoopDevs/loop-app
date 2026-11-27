@@ -210,13 +210,13 @@ export class SavingsTopUp {
     }
     for (const shares of [estimate, estimate + 1n]) {
       if (shares > saved.shares) {
-        return null;
+        break;
       }
       if (Holdings.floorOf(await this.chain.valueOf(shares)) >= shortfall) {
         return shares;
       }
     }
-    return null;
+    return (await this.chain.valueOf(saved.shares)) >= shortfall ? saved.shares : null;
   }
 
   private async withdrawShortfall(

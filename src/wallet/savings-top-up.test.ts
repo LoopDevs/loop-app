@@ -187,14 +187,29 @@ test('a short wallet withdraws one slippage floor covering the shortfall, then c
   assert.ok(chain.wallet >= price);
 });
 
-test('savings worth 10.05 cannot cover a 10.00 shortfall, 10.11 can', async () => {
-  assert.deepEqual(holdingsWith('10.05').coverage('XLM.USDC', price), { kind: 'short' });
-  assert.equal(holdingsWith('10.05').spendable('XLM.USDC'), units.parse('9.9495'));
-  assert.deepEqual(holdingsWith('10.11').coverage('XLM.USDC', price), { kind: 'savings', fromSavings: price });
+test('savings worth exactly the price cover it by withdrawing every share', async () => {
+  assert.deepEqual(holdingsWith('10').coverage('XLM.USDC', price), { kind: 'savings', fromSavings: price });
+  assert.equal(holdingsWith('10').spendable('XLM.USDC'), price);
+  assert.deepEqual(holdingsWith('9.99').coverage('XLM.USDC', price), { kind: 'short' });
 
+  const exact = new FakeChain({ wallet: '0', shares: '8', value: '10', landed: (_, value) => value });
+  assert.deepEqual(await new SavingsTopUp(exact, 'XLM.USDC').run(price, openWindow), { kind: 'covered' });
+  assert.deepEqual(exact.withdrawn, [units.parse('8')]);
+  assert.equal(exact.wallet, price);
+
+  const short = new FakeChain({ wallet: '0', shares: '9.99', value: '9.99' });
+  assert.deepEqual(await new SavingsTopUp(short, 'XLM.USDC').run(price, openWindow), { kind: 'notEnough' });
+  assert.deepEqual(short.withdrawn, []);
+});
+
+test('a full withdrawal that lands below the price reports the amount moved and pays nothing', async () => {
   const chain = new FakeChain({ wallet: '0', shares: '10.05', value: '10.05' });
-  assert.deepEqual(await new SavingsTopUp(chain, 'XLM.USDC').run(price, openWindow), { kind: 'notEnough' });
-  assert.deepEqual(chain.withdrawn, []);
+  assert.deepEqual(await new SavingsTopUp(chain, 'XLM.USDC').run(price, openWindow), {
+    kind: 'stillShort',
+    moved: units.parse('9.9495'),
+    currency: 'XLM.USDC',
+  });
+  assert.deepEqual(chain.withdrawn, [units.parse('10.05')]);
 
   const enough = new FakeChain({ wallet: '0', shares: '10.11', value: '10.11' });
   assert.deepEqual(await new SavingsTopUp(enough, 'XLM.USDC').run(price, openWindow), { kind: 'covered' });
