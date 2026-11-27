@@ -463,7 +463,6 @@ function holdingsWith(vaultValue: string): Holdings {
   const value = units.parse(vaultValue);
   return new Holdings(
     { tokens: [{ token: usdc, amount: 0n }], savings: [{ currency: 'XLM.USDC', shares: value, value }] },
-    [],
     Rates.fromPrices({}),
   );
 }

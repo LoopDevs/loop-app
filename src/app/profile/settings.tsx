@@ -250,11 +250,6 @@ export default function SettingsScreen() {
             value={Profile.currencyLabel(profile.stableCurrency)}
           />
         )}
-        <ListRow
-          label="Cashback"
-          detail="Where it goes and what's on the way"
-          onPress={() => router.push("/wallet/cashback")}
-        />
       </ListGroup>
     </>
   );

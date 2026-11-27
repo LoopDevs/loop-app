@@ -232,7 +232,7 @@ test('after signing in, account reads go to the user id inside the access token 
   await signIn('user-42');
   respond = () => json({ wallet: null, payouts: null });
   const account = await ctx.account();
-  assert.deepEqual(account.onTheWay({ stableCurrency: undefined, savesCashback: () => false }), []);
+  assert.deepEqual(account.payouts, []);
   assert.equal(sent[0].url, `${apiUrl}/users/user-42/account`);
   assert.equal(sent[0].headers.Authorization, `Bearer ${accessToken('user-42')}`);
   assert.equal(await ctx.userId(), 'user-42');

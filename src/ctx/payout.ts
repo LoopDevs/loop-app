@@ -85,19 +85,4 @@ export class Payout {
   netAmount(): string {
     return this.sentAmount ?? this.amount;
   }
-
-  statusLabel(): string {
-    switch (this.status) {
-      case 'queued':
-        return 'retrying';
-      case 'failed':
-        return 'delayed, contact support';
-      default:
-        return 'on the way';
-    }
-  }
-
-  destinationLabel(): string {
-    return this.kind === 'savings' ? 'to savings' : 'to wallet';
-  }
 }

@@ -27,22 +27,8 @@ test('deposits go into a currency that has a vault', () => {
   assert.equal(Savings.takes(Savings.depositCurrency), true);
 });
 
-test('deposits go into the vault pegged to the shown currency', () => {
-  assert.equal(Savings.depositCurrencyFor('XLM.USDC'), 'XLM.USDC');
-  assert.equal(Savings.depositCurrencyFor('USD'), Savings.depositCurrency);
-  assert.equal(Savings.depositCurrencyFor('XLM'), Savings.depositCurrency);
-  assert.equal(Savings.depositCurrencyFor('XLM.EURC'), Savings.depositCurrency);
-  network.vaults['XLM.GBPLOOP'] = 'CGBPLOOPVAULT';
-  try {
-    assert.equal(Savings.depositCurrencyFor('XLM.GBPLOOP'), 'XLM.GBPLOOP');
-  } finally {
-    delete network.vaults['XLM.GBPLOOP'];
-  }
-});
-
 test('the deposit intent carries the exact seven-decimal amount', () => {
   const max = units.parse('12.3456789');
-  assert.equal(Savings.depositAmount(units.format(max, units.decimals), max), max);
   assert.deepEqual(Savings.depositIntent('XLM.USDC', max), {
     intent: 'vault_deposit',
     currency: 'XLM.USDC',
@@ -58,36 +44,6 @@ test('withdraw shares go to CTX as a 7-decimal amount that parses back to the sa
     shares: '12.3456789',
   });
   assert.equal(units.parse(Savings.withdrawIntent('XLM.USDC', 1n).shares), 1n);
-});
-
-test('a deposit amount must be above zero and within the wallet balance', () => {
-  const inWallet = units.parse('5');
-  assert.equal(Savings.depositAmount('5', inWallet), inWallet);
-  assert.equal(Savings.depositAmount('2,5', inWallet), units.parse('2.5'));
-  assert.equal(Savings.depositAmount('0', inWallet), null);
-  assert.equal(Savings.depositAmount('', inWallet), null);
-  assert.equal(Savings.depositAmount('abc', inWallet), null);
-  assert.equal(Savings.depositAmount('-1', inWallet), null);
-  assert.equal(Savings.depositAmount('1.12345678', inWallet), null);
-  assert.equal(Savings.depositAmount('5.0000001', inWallet), null);
-});
-
-test('Max shows two decimals without rounding up and deposits the balance captured at the tap', () => {
-  const balance = units.parse('12.3456789');
-  assert.equal(Savings.maxInput(balance), '12.34');
-  assert.equal(Savings.depositAmount('12.34', balance, balance), balance);
-  assert.equal(Savings.depositAmount('12.34', balance), units.parse('12.34'));
-  assert.equal(Savings.depositAmount('12.34', balance + units.parse('50'), balance), balance);
-  assert.equal(Savings.depositAmount('12.34', balance - 1n, balance), null);
-});
-
-test('Max needs at least one cent, so the field never shows 0.00 for an amount that is signed', () => {
-  assert.equal(Savings.canMax(Savings.oneCent), true);
-  assert.equal(Savings.canMax(Savings.oneCent - 1n), false);
-  assert.equal(Savings.canMax(0n), false);
-  assert.equal(Savings.maxInput(Savings.oneCent - 1n), '0.00');
-  assert.equal(Savings.depositAmount('0.00', Savings.oneCent - 1n, Savings.oneCent - 1n), null);
-  assert.equal(Savings.depositAmount('', 0n, 0n), null);
 });
 
 test('each deposit outcome has its own message', () => {
@@ -221,4 +177,11 @@ test('an answered or refused deposit leaves no pending record', async () => {
     CtxError,
   );
   assert.equal(storage.items.size, 0);
+});
+
+test('money outside savings is named with its amounts', () => {
+  assert.equal(
+    Savings.notSavedMessage([{ currency: 'XLM.USDC', amount: units.parse('2.5') }]),
+    `${money.token(units.parse('2.5'), 'XLM.USDC')} of your money is not in savings yet.`,
+  );
 });

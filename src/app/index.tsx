@@ -42,6 +42,7 @@ import { dismissedOrders } from '@/ctx/dismissed-orders';
 import type { Merchant } from '@/ctx/merchant';
 import { useAppRefresh } from '@/hooks/use-app-refresh';
 import { errorMessage, useBusyAction } from '@/hooks/use-busy-action';
+import { paymentLock } from '@/ctx/payment-lock';
 import { useHoldings } from '@/hooks/use-holdings';
 import { useMarket } from '@/hooks/use-market';
 import { usePageLayout } from '@/hooks/use-page-layout';
@@ -49,6 +50,7 @@ import { useSessionOwner } from '@/hooks/use-session-owner';
 import { useTheme } from '@/hooks/use-theme';
 import { errorReporting } from '@/ops/error-reporting';
 import { Savings } from '@/wallet/savings';
+import { Holdings } from '@/wallet/holdings';
 import { DeviceSetupNeeded, SmartWallet, WalletBlocked } from '@/wallet/smart-wallet';
 
 type Screen = 'loading' | 'signed-out' | 'no-wallet' | 'unlinked-device' | 'confirm-identity' | 'wallet';
@@ -198,6 +200,30 @@ export default function HomeScreen() {
       setLoadError(errorMessage(error));
     }
   }, [wallet, refresh]);
+
+  const movable = view?.holdings.movableToSavings() ?? [];
+  const moveToSavings = () =>
+    run(async () => {
+      if (!wallet || !view) {
+        return;
+      }
+      try {
+        await paymentLock.exclusive(`spend:${wallet.address}`, async () => {
+          const current = new Holdings(await wallet.balances(), view.holdings.rates);
+          for (const { currency, amount } of current.movableToSavings()) {
+            const outcome = await Savings.sendDeposit(() => wallet.deposit(currency, amount), wallet.vaultCall(), {
+              clear: () => undefined,
+              restore: () => undefined,
+            });
+            if (outcome !== 'success') {
+              throw new Error(Savings.depositMessage(outcome, currency, amount));
+            }
+          }
+        });
+      } finally {
+        await refresh().catch((error: unknown) => errorReporting.reportError(error, 'Home refresh'));
+      }
+    });
 
   const retryWalletLoad = useCallback(async () => {
     if (!walletLoadFailed.current || walletLoadStarted.current) {
@@ -362,6 +388,15 @@ export default function HomeScreen() {
                       onCashOut={() => router.push('/wallet/cash-out')}
                     />
                   </BalanceCard>
+                  {movable.length > 0 && (
+                    <Notice
+                      tone="neutral"
+                      message={Savings.notSavedMessage(movable)}
+                      actionLabel="Move to savings"
+                      onAction={moveToSavings}
+                      disabled={busy}
+                    />
+                  )}
                   <SavingsNudge onPress={() => router.navigate('/savings')} />
                 </View>
                 <View style={[styles.column, wide && styles.columnWide]}>

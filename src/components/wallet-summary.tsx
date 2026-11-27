@@ -11,6 +11,7 @@ import { useWallet, type WalletState } from '@/hooks/use-wallet';
 import { money } from '@/money';
 import { offeredCurrencies } from '@/stellar/network';
 import { units } from '@/stellar/units';
+import { Savings } from '@/wallet/savings';
 
 type WalletPrompt = { heading: string; body: string };
 
@@ -54,10 +55,9 @@ export function WalletSummary() {
 
   const stable = view?.stable ?? null;
   const inStable = (amount: bigint) => (stable ? money.ctx(units.format(amount, units.decimals), stable) : null);
-  const inWallet = view && stable ? view.holdings.inWalletIn(stable) : null;
-  const balance = inWallet === null ? null : inStable(inWallet);
-  const balanceName = stable ? money.name(stable) : 'Balance';
-  const onTheWay = view?.stable ? view.holdings.onTheWayIn(view.stable) : null;
+  const total = view && stable ? view.holdings.totalIn(stable) : null;
+  const balance = total === null ? null : inStable(total);
+  const balanceName = Savings.takes(stable) ? 'Savings' : 'Balance';
   const received =
     view?.account && stable ? view.holdings.sumIn(view.account.receivedCashbackByCurrency(offeredCurrencies), stable) : null;
   const receivedText = received === null ? null : inStable(received);
@@ -90,14 +90,6 @@ export function WalletSummary() {
           value={receivedText ?? '…'}
           trailing="none"
         />
-        {onTheWay !== null && onTheWay > 0n && view?.stable && (
-          <ListRow
-            label="On the way"
-            value={money.ctx(units.format(onTheWay, units.decimals), view.stable)}
-            trailing="none"
-          />
-        )}
-        <ListRow label="Where your cashback goes" onPress={() => router.push('/wallet/cashback')} />
       </ListGroup>
     </View>
   );
